@@ -46,6 +46,11 @@ function sliceMarkdown(r) {
   }).join('\n');
 }
 
+// The grounding-terms string for a step: title + tools. One definition so the MCP
+// ground_step tool, the board's /ground route, and the handoff renderer all ground
+// on identical terms (node budgets stay at the call sites).
+export const stepTerms = (step) => `${step.title} ${(step.tools || []).join(' ')}`;
+
 // The code slice for a step: keyword-ground the plan's graph on the step's title+tools.
 export function groundSlice(store, planId, terms, budget = 8) {
   const r = store.queryGraph(planId, terms, budget);
@@ -160,7 +165,7 @@ export function buildPlanContext(store, planId) {
       for (const f of step.file_refs) out.push(`  - [${f.role}] \`${f.path}\`${f.note ? ` — ${f.note}` : ''}  (id ${f.id})`);
     }
     if (hasGraph) {
-      const slice = groundSlice(store, plan.id, `${step.title} ${(step.tools || []).join(' ')}`, 8);
+      const slice = groundSlice(store, plan.id, stepTerms(step), 8);
       if (slice) { out.push('- **Relevant code:**'); out.push(slice.split('\n').map((l) => '  ' + l).join('\n')); }
     }
     out.push('');

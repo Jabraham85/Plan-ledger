@@ -4,7 +4,7 @@
 // Bind callers to 127.0.0.1 — this now mutates (ref toggles).
 
 import { createServer } from 'node:http';
-import { buildPlanContext, buildProjectContext, buildRefsBlock, groundSlice } from '../src/context.mjs';
+import { buildPlanContext, buildProjectContext, buildRefsBlock, groundSlice, stepTerms } from '../src/context.mjs';
 
 const readBody = (req) => new Promise((resolve, reject) => {
   let data = '';
@@ -30,7 +30,7 @@ export function createBoardServer({ store, html }) {
     ['GET', /^\/api\/plans\/(\d+)$/,         (m) => store.openPlan(Number(m[1]))],
     ['GET', /^\/api\/steps\/(\d+)\/ground$/, (m) => {
       const s = store.getStep(Number(m[1]));
-      const terms = `${s.title} ${(s.tools || []).join(' ')}`;
+      const terms = stepTerms(s);
       return { terms, markdown: groundSlice(store, s.plan_id, terms, 10), subgraph: store.queryGraph(s.plan_id, terms, 10) };
     }],
     ['GET', /^\/api\/steps\/(\d+)\/lessons$/, (m) => store.getLessons({ step_id: Number(m[1]), limit: 5 })],

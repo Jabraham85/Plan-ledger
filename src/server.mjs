@@ -15,7 +15,7 @@ import { join } from 'node:path';
 import { readFileSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { Store, defaultDbPath } from './db.mjs';
-import { buildPlanContext, buildProjectContext, groundSlice } from './context.mjs';
+import { buildPlanContext, buildProjectContext, groundSlice, stepTerms } from './context.mjs';
 import { extractRepo } from './extract.mjs';
 
 const dbPath = defaultDbPath();
@@ -407,7 +407,7 @@ tool('ground_step', {
   inputSchema: { step_id: z.number().int(), budget: z.number().int().positive().optional() },
 }, ({ step_id, budget }) => {
   const s = store.getStep(step_id);
-  const terms = `${s.title} ${(s.tools || []).join(' ')}`;
+  const terms = stepTerms(s);
   return {
     step: { id: s.id, title: s.title },
     subgraph: store.queryGraph(s.plan_id, terms, budget ?? 8),
