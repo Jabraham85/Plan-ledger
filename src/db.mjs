@@ -309,6 +309,14 @@ export class Store {
     return this.db.prepare('SELECT * FROM projects ORDER BY id').all()
       .map((p) => ({ ...this._projectRow(p), current: p.id === cur }));
   }
+  // Owning project's NAME for a plan — the key into the role map's user-file
+  // `projects.<name>.roles` layer (src/roles.mjs). null when the plan or its
+  // project is missing (resolver then skips that layer).
+  projectNameForPlan(planId) {
+    const row = this.db.prepare(
+      'SELECT p.name FROM projects p JOIN plans l ON l.project_id = p.id WHERE l.id = ?').get(planId);
+    return row?.name ?? null;
+  }
   setProjectStatus(id, status) {
     if (!['active', 'archived'].includes(status)) throw new Error(`bad project status: ${status} (active|archived)`);
     const info = this.db.prepare('UPDATE projects SET status=?, updated_at=? WHERE id=?').run(status, now(), id);
