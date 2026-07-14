@@ -102,11 +102,32 @@ function roleLines(step) {
     : [];
 }
 
+// Compact inlines for the step payload the runner already holds (nextStep embeds
+// lessons + file_refs): one line per lesson (max 5), path+note per cited file.
+const oneLine = (s, n = 160) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
+function lessonLines(step) {
+  const ls = (step.lessons || []).slice(0, 5);
+  return ls.length
+    ? ['\nLessons from past failures elsewhere — do NOT repeat these:',
+       ...ls.map((l) => `- tried: ${oneLine(l.what_tried)} → ${oneLine(l.result || l.verdict)}`)]
+    : [];
+}
+function fileRefLines(step) {
+  const refs = step.file_refs || [];
+  return refs.length
+    ? ['\nCited files (read only what this step needs):',
+       ...refs.map((f) => `- [${f.role}] ${f.path}${f.note ? ` — ${oneLine(f.note, 120)}` : ''}`)]
+    : [];
+}
+
 function buildPrompt(step) {
   return [
     `You are executing exactly ONE step of a plan, using the plan-ledger MCP tools. Do only this step, then stop.`,
     `Plan #${step.plan_id}, step #${step.id} (position ${step.idx}): "${step.title}".`,
     ...roleLines(step),
+    ``,
+    ...lessonLines(step),
+    ...fileRefLines(step),
     ``,
     `1. Call get_step(${step.id}) for its full context, acceptance_criteria, carry_forward, attempts, and any lessons.`,
     `2. Read the attempts and lessons FIRST — do NOT repeat an approach already marked failed.`,
@@ -154,7 +175,11 @@ function buildDirectPrompt(step) {
     step.context,
     step.acceptance_criteria ? `\nAcceptance: ${step.acceptance_criteria}` : '',
     step.carry_forward ? `\nCarried context: ${step.carry_forward}` : '',
-    `\nWork in the current directory. Use Read/Write only. When done, state briefly what you did.`,
+    ...lessonLines(step),
+    ...fileRefLines(step),
+    // B2: state the REAL permission set — inject agents get whatever --allowed-tools
+    // the runner was passed (default Write,Read); never contradict it in the prompt.
+    `\nWork in the current directory. Available tools: ${allowedTools || 'Write, Read'}. When done, state briefly what you did.`,
     `The FINAL LINE of your output MUST be exactly:`,
     `VERDICT: pass|fail|partial — <one-line summary of what you tried>`,
     `(pick ONE verdict; e.g. "VERDICT: pass — wrote the parser and verified the sample round-trips").`,
@@ -301,8 +326,11 @@ if (!live) {
     pending.forEach((s, i) => console.log(`   ${i + 1}. step #${s.id} [${s.status}] ${s.title}`));
     if (pending.length) {
       const mk = inject ? buildDirectPrompt : buildPrompt;
-      console.log(`\n  --- ${inject ? 'LEAN (inject)' : 'MCP'} prompt for the first step (#${pending[0].id})${lean ? ' [--strict-mcp-config]' : ''} ---\n`);
-      console.log(mk(store.getStep(pending[0].id)).split('\n').map((l) => '  | ' + l).join('\n'));
+      const first = store.nextStep(plan.id); // the SAME payload a live agent gets (lessons + file_refs embedded)
+      if (first && !first.all_blocked) {
+        console.log(`\n  --- ${inject ? 'LEAN (inject)' : 'MCP'} prompt for the next workable step (#${first.id})${lean ? ' [--strict-mcp-config]' : ''} ---\n`);
+        console.log(mk(first).split('\n').map((l) => '  | ' + l).join('\n'));
+      }
     }
     console.log(`\n  DRY RUN — nothing spawned. Re-run with --live to execute (this costs money).`);
   }
