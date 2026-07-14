@@ -11,6 +11,8 @@ import { rmSync } from 'node:fs';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const dbPath = join(tmpdir(), `plan-ledger-e2e-${process.pid}.db`);
 const parse = (r) => JSON.parse(r.content[0].text);
+// Every probe both logs AND asserts — a false condition must exit non-zero.
+const check = (label, cond) => { console.log(`${label}:`, cond); assert.ok(cond, label); };
 
 const transport = new StdioClientTransport({
   command: process.execPath,
@@ -27,26 +29,25 @@ const plan = parse(await client.callTool({ name: 'create_plan', arguments: { tit
 console.log('created plan', plan.id);
 const step = parse(await client.callTool({ name: 'add_step', arguments: { plan_id: plan.id, title: 'do a thing', context: 'ctx' } }));
 const next = parse(await client.callTool({ name: 'next_step', arguments: { plan_id: plan.id } }));
-console.log('next_step id matches added step:', next.id === step.id);
+check('next_step id matches added step', next.id === step.id);
 await client.callTool({ name: 'record_attempt', arguments: { step_id: step.id, what_tried: 'approach A', result: 'boom', verdict: 'fail' } });
 const afterFail = parse(await client.callTool({ name: 'get_step', arguments: { step_id: step.id } }));
-console.log('failure logged over MCP:', afterFail.attempts.length === 1 && afterFail.status === 'failed');
+check('failure logged over MCP', afterFail.attempts.length === 1 && afterFail.status === 'failed');
 const passRes = parse(await client.callTool({ name: 'record_attempt', arguments: { step_id: step.id, what_tried: 'approach B', verdict: 'pass' } }));
-console.log('record_attempt carries continuation directive:', typeof passRes.directive === 'string' && /plan complete/i.test(passRes.directive));
+check('record_attempt carries continuation directive', typeof passRes.directive === 'string' && /plan complete/i.test(passRes.directive));
 const done = parse(await client.callTool({ name: 'next_step', arguments: { plan_id: plan.id } }));
-console.log('plan complete (next_step {complete}):', done.complete === true && typeof done.directive === 'string');
+check('plan complete (next_step {complete})', done.complete === true && typeof done.directive === 'string');
 
 // surface index must not leak step bodies
 const idx = parse(await client.callTool({ name: 'list_plans', arguments: {} }));
-console.log('surface index clean (no context):', idx[0].context === undefined && idx[0].keywords.includes('e2e'));
+check('surface index clean (no context)', idx[0].context === undefined && idx[0].keywords.includes('e2e'));
 
 // templates over MCP: a role'd inline step must survive the zod schema round-trip
 await client.callTool({ name: 'create_template', arguments: { name: 'e2e-tpl', steps: [
   { title: 'roled step', context: 'ctx', role: 'implementer', acceptance_criteria: 'done', idx: 1 },
 ] } });
 const tpl = parse(await client.callTool({ name: 'get_template', arguments: { template: 'e2e-tpl' } }));
-console.log('create_template keeps role on inline steps:', tpl.steps[0].role === 'implementer' && tpl.steps[0].idx === 1);
-assert.ok(tpl.steps[0].role === 'implementer' && tpl.steps[0].idx === 1, 'create_template keeps role/idx on inline steps');
+check('create_template keeps role on inline steps', tpl.steps[0].role === 'implementer' && tpl.steps[0].idx === 1);
 
 await client.close();
 rmSync(dbPath, { force: true });
