@@ -59,11 +59,19 @@ check('recall rejects limit 0', badLimit.isError === true);
 const badBudget = await client.callTool({ name: 'query_graph', arguments: { plan_id: plan.id, terms: 'x', budget: -3 } });
 check('query_graph rejects negative budget', badBudget.isError === true);
 
+// mutation acks are SLIM: id/plan_id/idx/title/status/updated_at (+ directive fields),
+// never the full level-2 step — the caller just wrote that payload.
+check('add_step ack is slim (no context/attempts echoed)', step.id > 0 && step.plan_id === plan.id && step.title === 'do a thing'
+  && step.context === undefined && step.attempts === undefined && step.file_refs === undefined && typeof step.updated_at === 'string');
+check('record_attempt ack is slim but keeps plan_progress', passRes.context === undefined && passRes.attempts === undefined && /steps done/.test(passRes.plan_progress));
+
 // role charter check: unknown role is ACCEPTED but warned about, known role is silent
 const bogus = parse(await client.callTool({ name: 'add_step', arguments: { plan_id: plan.id, title: 'bogus-role step', role: 'no-such-role-xyz' } }));
-check('unknown role accepted with role_warning', bogus.role === 'no-such-role-xyz' && typeof bogus.role_warning === 'string' && /no charter file/.test(bogus.role_warning));
+check('unknown role accepted with role_warning', typeof bogus.role_warning === 'string' && /no charter file/.test(bogus.role_warning));
 const known = parse(await client.callTool({ name: 'update_step', arguments: { step_id: bogus.id, role: 'implementer' } }));
-check('known role carries no role_warning', known.role === 'implementer' && known.role_warning === undefined);
+check('known role carries no role_warning', known.role_warning === undefined);
+const bogusFull = parse(await client.callTool({ name: 'get_step', arguments: { step_id: bogus.id } }));
+check('role persisted despite slim ack', bogusFull.role === 'implementer');
 
 // templates over MCP: a role'd inline step must survive the zod schema round-trip
 await client.callTool({ name: 'create_template', arguments: { name: 'e2e-tpl', steps: [

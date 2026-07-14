@@ -37,6 +37,15 @@ const roleWarning = (step) => {
     : { ...step, role_warning: `no charter file for role "${step.role}" at ${charter} — dispatch will fall back to a generic agent (check for a typo)` };
 };
 
+// Mutation acks are SLIM: the caller just wrote the payload, so echoing the full
+// level-2 step back (context + attempts + links + file_refs) only burns context.
+// Directive/warning fields ride on top; read-paths (get_step/next_step) stay full.
+const slimStep = (step) => {
+  const out = { id: step.id, plan_id: step.plan_id, idx: step.idx, title: step.title, status: step.status, updated_at: step.updated_at };
+  if (step.role_warning) out.role_warning = step.role_warning;
+  return out;
+};
+
 // Every tool returns JSON text; throwing turns into an MCP isError result.
 const ok = (data) => ({ content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] });
 const tool = (name, cfg, fn) =>
@@ -199,7 +208,7 @@ tool('add_step', {
     carry_forward: z.string().optional().describe('seed note carried in from a prior step'),
     idx: z.number().int().optional().describe('1-based position; appends to end if omitted'),
   },
-}, ({ plan_id, ...rest }) => roleWarning(store.addStep(plan_id, rest)));
+}, ({ plan_id, ...rest }) => slimStep(roleWarning(store.addStep(plan_id, rest))));
 
 tool('update_step', {
   title: 'Update a step',
@@ -214,7 +223,7 @@ tool('update_step', {
     carry_forward: z.string().optional(),
     idx: z.number().int().optional(),
   },
-}, ({ step_id, ...fields }) => roleWarning(store.updateStep(step_id, fields)));
+}, ({ step_id, ...fields }) => slimStep(roleWarning(store.updateStep(step_id, fields))));
 
 // ---- the working loop -----------------------------------------------------
 
@@ -256,7 +265,7 @@ tool('record_attempt', {
       `never repeat one marked fail). If it genuinely needs the user, set_step_status(${step.id}, "blocked") + ` +
       `write_carry_forward the unblock note, then call next_step(${step.plan_id}) to advance past it. Do not stop.`;
   }
-  return { ...step, plan_progress: progress, directive };
+  return { ...slimStep(step), plan_progress: progress, directive };
 });
 
 tool('write_carry_forward', {
@@ -272,7 +281,7 @@ tool('write_carry_forward', {
 }, ({ step_id, note, append }) => {
   const step = store.writeCarryForward(step_id, note, { append });
   return {
-    ...step,
+    ...slimStep(step),
     directive:
       `Carry-forward saved on step #${step_id}. Keep the loop going: call next_step(${step.plan_id}) — or ` +
       'next_plan() if this plan is finished — do not stop.',
@@ -599,12 +608,12 @@ tool('set_step_status', {
 }, ({ step_id, status }) => {
   const step = store.setStepStatus(step_id, status);
   if (status === 'blocked') return {
-    ...step,
+    ...slimStep(step),
     directive:
       `Blocked recorded. write_carry_forward the unblock note if you haven't, then call next_step(${step.plan_id}) ` +
       '— blocked steps are skipped — and continue with the next workable step or plan. Do not stop here.',
   };
-  return step;
+  return slimStep(step);
 });
 
 // ---- boot -----------------------------------------------------------------
