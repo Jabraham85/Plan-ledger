@@ -12,9 +12,10 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { join } from 'node:path';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { Store, defaultDbPath } from './db.mjs';
+import { resolveRole } from './roles.mjs';
 import { buildPlanContext, buildProjectContext, groundSlice, stepTerms } from './context.mjs';
 import { extractRepo } from './extract.mjs';
 
@@ -26,13 +27,17 @@ process.on('exit', () => store.close());
 
 const server = new McpServer({ name: 'plan-ledger', version: '0.1.0' });
 
-// Roles dispatch to charter files in ~/.claude/agents/<role>.md. An unknown role is
-// allowed (charters come and go) but flagged, so typos surface at authoring time.
+// Roles resolve through the role map (src/roles.mjs; docs/ROLE_MAP_DESIGN.md). An
+// unknown role is allowed (charters and map entries come and go) but flagged, so
+// typos surface at authoring time. cwd:null — an MCP server's cwd is not reliably
+// the working repo, so only the user-file layers + default charter chain apply here.
 const roleWarning = (step) => {
   if (!step?.role) return step;
-  const charter = join(homedir(), '.claude', 'agents', `${step.role}.md`);
-  return existsSync(charter) ? step
-    : { ...step, role_warning: `no charter file for role "${step.role}" at ${charter} — dispatch will fall back to a generic agent (check for a typo)` };
+  const r = resolveRole(step.role, { cwd: null, projectName: store.projectNameForPlan(step.plan_id) });
+  if (r.mode === 'dispatch') return step;
+  return { ...step, role_warning: r.reason === 'disabled'
+    ? `role "${step.role}" is disabled in the role map — dispatch will fall back to orchestrator-decides`
+    : `no charter file for role "${step.role}" at ${join(homedir(), '.claude', 'agents', `${step.role}.md`)} and no role-map entry — dispatch will fall back to a generic agent (check for a typo)` };
 };
 
 // Mutation acks are SLIM: the caller just wrote the payload, so echoing the full
@@ -141,14 +146,28 @@ tool('next_step', {
       `Every remaining step in plan #${plan_id} waits on the user. set_plan_status(${plan_id}, "blocked"), then ` +
       'call next_plan() and continue with the plan it returns — do not stop here.',
   };
-  const dispatch = step.role
-    ? `DISPATCH to the "${step.role}" agent (Claude Code: Agent tool subagent_type "${step.role}"; Cursor: invoke ` +
-      `the /${step.role} subagent or Task tool; no subagents available: read ~/.claude/agents/${step.role}.md and ` +
-      `adopt it yourself, then self-review against its Definition of done before recording) with a brief composed ` +
-      `from this step's context + acceptance_criteria + carry_forward + lessons; when it reports, REVIEW the ` +
-      `deliverable against the acceptance_criteria and the role's Definition of done (evidence required — claims ` +
-      `don't count), send corrections back to the same agent if it falls short (max 3 rounds), `
-    : 'work it (or dispatch to the best-fit role agent), ';
+  // Resolve the role through the role map (user-file layers only: an MCP server's
+  // cwd is not reliably the working repo, so the directive tells the client that a
+  // repo-local .plan-roles.json — which the client CAN see — still overrides).
+  const r = resolveRole(step.role, { cwd: null, projectName: store.projectNameForPlan(plan_id) });
+  const dispatch = r.mode === 'dispatch'
+    ? `DISPATCH to the "${r.agent}" agent (Claude Code: Agent tool subagent_type "${r.agent}"` +
+      (r.model ? `, model "${r.model}"` : '') + `; Cursor: invoke the /${r.agent} subagent or Task tool; ` +
+      (r.charter
+        ? `no subagents available: read ${r.charter} and adopt it yourself, then self-review against its ` +
+          `Definition of done before recording`
+        : `no subagents available: work it yourself and self-review against the acceptance_criteria before recording`) +
+      `) with a brief composed from this step's context + acceptance_criteria + carry_forward + lessons` +
+      (r.agent !== r.role && r.charter
+        ? `; the brief MUST open with: read + adopt the "${r.role}" charter at ${r.charter}` : '') +
+      `; if ./.plan-roles.json in the repo maps "${r.role}" differently, prefer that resolution; ` +
+      `when it reports, REVIEW the deliverable against the acceptance_criteria and the role's Definition of done ` +
+      `(from ${r.charter ?? 'the acceptance_criteria alone'}; evidence required — claims don't count), ` +
+      `send corrections back to the same agent if it falls short (max 3 rounds), `
+    : r.reason === 'untagged'
+      ? 'work it (or dispatch to the best-fit role agent), '
+      : `work it (role "${step.role}" is ${r.reason === 'disabled' ? 'disabled in the role map' : 'not in the roster or role map'} — ` +
+        `pick the best-fit role from docs/ROLES.md yourself, or update_step(${step.id}, role: "<name>")), `;
   return {
     ...step,
     directive:
