@@ -136,6 +136,17 @@ check('suggest: dependency (a imports b)', sug.suggestions.some((x) => x.path ==
 check('suggest: dependent (c imports a)', sug.suggestions.some((x) => x.path === '/root/c.mjs' && x.role === 'related'));
 check('suggest: paths use the primary\'s absolute root', sug.matched === 'a.mjs');
 
+// importGraph atomicity: a failed re-import must not wipe the existing graph
+const ag = s.createPlan({ title: 'atomic graph plan' });
+s.importGraph(ag.id, { nodes: [{ id: 'n1' }, { id: 'n2' }], links: [{ source: 'n1', target: 'n2' }] });
+check('graph imported (2 nodes, 1 edge)', s.graphStats(ag.id).nodes === 2 && s.graphStats(ag.id).edges === 1);
+assert.throws(() => s.importGraph(ag.id, {
+  nodes: [{ id: 'x1' }, { id: 'x2' }],
+  links: [{ source: 'x1', target: 'x2', relation: { bad: 'object' } }], // unbindable → INSERT throws mid-import
+}));
+const agAfter = s.graphStats(ag.id);
+check('failed re-import rolls back — old graph intact', agAfter.nodes === 2 && agAfter.edges === 1);
+
 // blocked steps: next_step skips them instead of wedging; all-blocked ≠ complete
 const planZ = s.createPlan({ title: 'Blocked handling', keywords: ['blocked'] });
 const z1 = s.addStep(planZ.id, { title: 'Needs a human decision' });

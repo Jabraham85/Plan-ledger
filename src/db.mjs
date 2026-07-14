@@ -688,10 +688,12 @@ export class Store {
     const nodes = graph?.nodes || [];
     const edges = graph?.links || graph?.edges || [];
     if (!Array.isArray(nodes) || !Array.isArray(edges)) throw new Error('graph must have nodes[] and links[]/edges[]');
-    this.db.prepare('DELETE FROM graph_nodes WHERE plan_id=?').run(planId);
-    this.db.prepare('DELETE FROM graph_edges WHERE plan_id=?').run(planId);
     this.db.exec('BEGIN');
     try {
+      // DELETE + re-INSERT must be one atomic unit: a failed import rolls back
+      // to the previous graph instead of leaving the plan graphless.
+      this.db.prepare('DELETE FROM graph_nodes WHERE plan_id=?').run(planId);
+      this.db.prepare('DELETE FROM graph_edges WHERE plan_id=?').run(planId);
       const ni = this.db.prepare('INSERT OR REPLACE INTO graph_nodes (plan_id,node_id,label,file_type,source_file,source_location,community,kind,degree) VALUES (?,?,?,?,?,?,?,?,0)');
       for (const n of nodes) {
         const id = String(n.id ?? n.node_id ?? '');
