@@ -280,8 +280,13 @@ export class Store {
   // The next plan to work in a project: the oldest non-done/abandoned plan that still
   // has an uncompleted step. null when the project is fully worked. Drives continuous runs.
   nextPlan(projectId) {
+    // Default to the CURRENT project. (Bug fixed here: a null projectId used to bind NULL
+    // into "project_id IS NULL OR project_id=?", which matched only legacy NULL-project
+    // rows — none exist post-migration — so callers without a project saw "fully worked".
+    // _migrate() backfills project_id on every boot, so plain equality is correct.)
+    const pid = projectId ?? this.currentProjectId();
     // 'blocked' plans are waiting on a human — skip them so the autopilot advances to the next workable plan.
-    const rows = this.db.prepare("SELECT id FROM plans WHERE (project_id IS NULL OR project_id=?) AND status NOT IN ('done','abandoned','blocked') ORDER BY id").all(projectId);
+    const rows = this.db.prepare("SELECT id FROM plans WHERE project_id=? AND status NOT IN ('done','abandoned','blocked') ORDER BY id").all(pid);
     for (const r of rows) {
       const n = this.nextStep(r.id);
       if (n && !n.all_blocked) return this.openPlan(r.id); // all_blocked = nothing workable in it either

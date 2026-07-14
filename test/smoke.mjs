@@ -183,6 +183,12 @@ const zb = s.nextStep(planZ.id);
 check('all remaining blocked → all_blocked (not null/complete)', zb.all_blocked === true && zb.blocked_steps.length === 2);
 check('plan status accepts blocked', s.setPlanStatus(planZ.id, 'blocked').status === 'blocked');
 
+// nextPlan: no project_id defaults to the CURRENT project (regression: NULL used to
+// bind into "project_id IS NULL OR project_id=?" and match nothing → "fully worked")
+const np = s.nextPlan();
+check('nextPlan() defaults to the current project', np != null && np.id === planX.id && np.project_id === 1);
+check('nextPlan(project) scopes to that project only', s.nextPlan(projB.id) === null); // B's only plan has no workable step
+
 // migration: a pre-provenance DB (attempts without role/review_rounds/executor) gains the columns
 {
   const { DatabaseSync } = await import('node:sqlite');

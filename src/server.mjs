@@ -124,17 +124,19 @@ tool('next_step', {
   if (step === null) return {
     complete: true,
     directive:
-      `Plan #${plan_id} is complete. set_plan_status(${plan_id}, "done"), then list_plans and continue with the ` +
-      'next workable plan. Only stop if nothing is workable or the user scoped this run.',
+      `Plan #${plan_id} is complete. set_plan_status(${plan_id}, "done"), then call next_plan() and keep working ` +
+      'the plan it returns — do not stop unless nothing is workable or the user scoped this run.',
   };
   if (step.all_blocked) return {
     ...step,
     directive:
       `Every remaining step in plan #${plan_id} waits on the user. set_plan_status(${plan_id}, "blocked"), then ` +
-      'list_plans and continue with the next workable plan — do not stop here.',
+      'call next_plan() and continue with the plan it returns — do not stop here.',
   };
   const dispatch = step.role
-    ? `DISPATCH it to the "${step.role}" agent (Agent tool, subagent_type: "${step.role}") with a brief composed ` +
+    ? `DISPATCH to the "${step.role}" agent (Claude Code: Agent tool subagent_type "${step.role}"; Cursor: invoke ` +
+      `the /${step.role} subagent or Task tool; no subagents available: read ~/.claude/agents/${step.role}.md and ` +
+      `adopt it yourself, then self-review against its Definition of done before recording) with a brief composed ` +
       `from this step's context + acceptance_criteria + carry_forward + lessons; when it reports, REVIEW the ` +
       `deliverable against the acceptance_criteria and the role's Definition of done (evidence required — claims ` +
       `don't count), send corrections back to the same agent if it falls short (max 3 rounds), `
@@ -145,6 +147,27 @@ tool('next_step', {
       `Work this step now: set_step_status(${step.id}, "in_progress"), read attempts + lessons FIRST (never repeat ` +
       `a failed approach), ${dispatch}then record_attempt(${step.id}, ...) noting the role + review rounds. After ` +
       `that, call next_step(${plan_id}) again — do not end your turn while workable steps remain.`,
+  };
+});
+
+tool('next_plan', {
+  title: 'Get the next workable plan',
+  description:
+    'Driver primitive for continuous runs: the oldest non-done/abandoned/blocked plan in a project (default: ' +
+    'current) that still has a workable step. Returns the opened plan (level-1 detail) → call next_step on it; ' +
+    '{complete} → nothing workable remains. Call this whenever a plan finishes or blocks, instead of stopping.',
+  inputSchema: { project_id: z.number().int().optional().describe('default: current project') },
+}, ({ project_id }) => {
+  const plan = store.nextPlan(project_id);
+  if (!plan) return {
+    complete: true,
+    directive:
+      `No workable plans remain in project #${project_id ?? store.currentProjectId()}. Report the run's outcomes ` +
+      'and stop — or ask the user for the next objective.',
+  };
+  return {
+    ...plan,
+    directive: `Work plan #${plan.id} ("${plan.title}") now: call next_step(${plan.id}) and keep going — do not stop.`,
   };
 });
 
@@ -246,7 +269,15 @@ tool('write_carry_forward', {
     note: z.string(),
     append: z.boolean().optional().describe('append to existing carry_forward (default true) or replace (false)'),
   },
-}, ({ step_id, note, append }) => store.writeCarryForward(step_id, note, { append }));
+}, ({ step_id, note, append }) => {
+  const step = store.writeCarryForward(step_id, note, { append });
+  return {
+    ...step,
+    directive:
+      `Carry-forward saved on step #${step_id}. Keep the loop going: call next_step(${step.plan_id}) — or ` +
+      'next_plan() if this plan is finished — do not stop.',
+  };
+});
 
 tool('link_items', {
   title: 'Link a step to a related plan/step',
@@ -547,7 +578,16 @@ tool('set_plan_status', {
   title: 'Set plan status',
   description: 'draft | active | done | abandoned | blocked (blocked = every remaining step waits on the user; skipped by autonomous runs).',
   inputSchema: { plan_id: z.number().int(), status: z.enum(['draft', 'active', 'done', 'abandoned', 'blocked']) },
-}, ({ plan_id, status }) => store.setPlanStatus(plan_id, status));
+}, ({ plan_id, status }) => {
+  const plan = store.setPlanStatus(plan_id, status);
+  if (status === 'done' || status === 'blocked') return {
+    ...plan,
+    directive:
+      `Plan #${plan_id} marked ${status}. Call next_plan() and continue with the plan it returns — do not stop ` +
+      'unless it reports nothing workable or the user scoped this run.',
+  };
+  return plan;
+});
 
 tool('set_step_status', {
   title: 'Set step status',

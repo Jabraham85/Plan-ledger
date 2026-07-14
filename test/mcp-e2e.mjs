@@ -36,7 +36,18 @@ check('failure logged over MCP', afterFail.attempts.length === 1 && afterFail.st
 const passRes = parse(await client.callTool({ name: 'record_attempt', arguments: { step_id: step.id, what_tried: 'approach B', verdict: 'pass' } }));
 check('record_attempt carries continuation directive', typeof passRes.directive === 'string' && /plan complete/i.test(passRes.directive));
 const done = parse(await client.callTool({ name: 'next_step', arguments: { plan_id: plan.id } }));
-check('plan complete (next_step {complete})', done.complete === true && typeof done.directive === 'string');
+check('plan complete (next_step {complete})', done.complete === true && /next_plan\(\)/.test(done.directive));
+
+// next_plan: drives the continuous loop; set_plan_status(done|blocked) points at it
+const npDone = parse(await client.callTool({ name: 'next_plan', arguments: {} }));
+check('next_plan {complete} when nothing workable', npDone.complete === true && typeof npDone.directive === 'string');
+const step2 = parse(await client.callTool({ name: 'add_step', arguments: { plan_id: plan.id, title: 'follow-up thing', context: 'ctx2' } }));
+const npRes = parse(await client.callTool({ name: 'next_plan', arguments: {} }));
+check('next_plan returns the workable plan + directive', npRes.id === plan.id && new RegExp(`next_step\\(${plan.id}\\)`).test(npRes.directive));
+const spd = parse(await client.callTool({ name: 'set_plan_status', arguments: { plan_id: plan.id, status: 'done' } }));
+check('set_plan_status(done) directs to next_plan', /next_plan\(\)/.test(spd.directive));
+await client.callTool({ name: 'set_plan_status', arguments: { plan_id: plan.id, status: 'active' } }); // restore for the probes below
+await client.callTool({ name: 'set_step_status', arguments: { step_id: step2.id, status: 'skipped' } }); // park the probe step
 
 // surface index must not leak step bodies
 const idx = parse(await client.callTool({ name: 'list_plans', arguments: {} }));
