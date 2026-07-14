@@ -1,5 +1,6 @@
 // mcp-e2e.mjs — boots the real server over stdio and drives it as an MCP client.
 // Uses a temp DB so it doesn't touch real data. Run: node test/mcp-e2e.mjs
+import assert from 'node:assert/strict';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { fileURLToPath } from 'node:url';
@@ -38,6 +39,14 @@ console.log('plan complete (next_step {complete}):', done.complete === true && t
 // surface index must not leak step bodies
 const idx = parse(await client.callTool({ name: 'list_plans', arguments: {} }));
 console.log('surface index clean (no context):', idx[0].context === undefined && idx[0].keywords.includes('e2e'));
+
+// templates over MCP: a role'd inline step must survive the zod schema round-trip
+await client.callTool({ name: 'create_template', arguments: { name: 'e2e-tpl', steps: [
+  { title: 'roled step', context: 'ctx', role: 'implementer', acceptance_criteria: 'done', idx: 1 },
+] } });
+const tpl = parse(await client.callTool({ name: 'get_template', arguments: { template: 'e2e-tpl' } }));
+console.log('create_template keeps role on inline steps:', tpl.steps[0].role === 'implementer' && tpl.steps[0].idx === 1);
+assert.ok(tpl.steps[0].role === 'implementer' && tpl.steps[0].idx === 1, 'create_template keeps role/idx on inline steps');
 
 await client.close();
 rmSync(dbPath, { force: true });

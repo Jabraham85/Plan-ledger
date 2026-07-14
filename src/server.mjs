@@ -440,7 +440,9 @@ tool('create_template', {
       title: z.string(),
       context: z.string().optional(),
       tools: z.array(z.string()).optional(),
+      role: z.string().optional().describe('subagent role that executes this step when instantiated'),
       acceptance_criteria: z.string().optional(),
+      idx: z.number().int().optional().describe('1-based position; defaults to array order'),
     })).optional(),
   },
 }, (args) => store.createTemplate(args));
