@@ -12,7 +12,7 @@ import { join, relative, extname, basename, sep } from 'node:path';
 const DEFAULT_EXCLUDES = new Set([
   'node_modules', '.git', 'dist', 'build', 'out', 'coverage', '.venv', '__pycache__',
 ]);
-const EXCLUDE_FILE_RE = /(\.min\.[^.]+$|\.lock$|^package-lock\.json$)/;
+export const EXCLUDE_FILE_RE = /(\.min\.[^.]+$|\.lock$|^package-lock\.json$)/;
 
 const CODE_EXT = new Set([
   '.mjs', '.cjs', '.js', '.ts', '.jsx', '.tsx', '.py', '.c', '.h', '.cpp', '.hpp', '.cc',
@@ -31,7 +31,9 @@ export function kindForPath(p) {
 const toPosix = (p) => p.split(sep).join('/');
 
 // Decode a file, deciding skip reasons per the fs matrix. Returns {text} or {skip}.
-function readDoc(absPath, maxFileKb) {
+// Exported so the git ingester reuses the exact same text/binary/size/encoding
+// filters over its `git ls-files` set (§6 git: "the full fs matrix above applies").
+export function readDoc(absPath, maxFileKb) {
   let st;
   try { st = statSync(absPath); } catch (e) { return { skip: `unreadable: ${e.code || e.message}` }; }
   if (st.size > maxFileKb * 1024) return { skip: 'too-large' };
