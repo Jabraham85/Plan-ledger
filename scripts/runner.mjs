@@ -27,6 +27,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { Store, defaultDbPath } from '../src/db.mjs';
+import { resolveRole } from '../src/roles.mjs';
 
 // Resolve a directly-spawnable claude binary. On Windows the PATH `claude` is a
 // .cmd shim that Node's spawn can't launch without a shell — but it wraps a real
@@ -93,11 +94,18 @@ function sweepOrphans() {
 sweepOrphans(); // startup: nothing tracked yet (a fresh run never resets other runs' steps)
 process.on('SIGINT', () => { try { sweepOrphans(); } catch {} store.close(); process.exit(130); });
 
-// Role-tagged steps: the role's full charter lives in ~/.claude/agents/<role>.md. A headless
-// -p agent can't be spawned AS a subagent type, so the prompt tells it to read + inhabit the file.
-function roleLines(step) {
-  return step.role
-    ? [`Adopt the "${step.role}" role: read ~/.claude/agents/${step.role}.md FIRST and follow its operating ` +
+// Role-tagged steps: resolve through the role map (src/roles.mjs — repo
+// .plan-roles.json / ~/.claude/plan-roles.json / default charter chain). A headless
+// -p agent can't be spawned AS a subagent type, so the prompt tells it to read +
+// inhabit the RESOLVED charter file (absolute path — the agent expands nothing).
+// The map's `agent` field is intentionally unused here; adopt-by-reading is the
+// whole mechanism. Disabled/unknown/charterless roles → today's untagged prompt.
+function resolveStepRole(step) {
+  return resolveRole(step.role, { cwd: process.cwd(), projectName: store.projectNameForPlan(step.plan_id) });
+}
+function roleLines(r) {
+  return r.mode === 'dispatch' && r.charter
+    ? [`Adopt the "${r.role}" role: read ${r.charter} FIRST and follow its operating ` +
        `principles, evidence rules, and Definition of done as your own. Your report must use its Report format.`]
     : [];
 }
@@ -120,11 +128,11 @@ function fileRefLines(step) {
     : [];
 }
 
-function buildPrompt(step) {
+function buildPrompt(step, r = resolveStepRole(step)) {
   return [
     `You are executing exactly ONE step of a plan, using the plan-ledger MCP tools. Do only this step, then stop.`,
     `Plan #${step.plan_id}, step #${step.id} (position ${step.idx}): "${step.title}".`,
-    ...roleLines(step),
+    ...roleLines(r),
     ``,
     ...lessonLines(step),
     ...fileRefLines(step),
@@ -166,21 +174,23 @@ function spawnClaude(args, fallback = null) {
 // mode burned max-attempts on limit errors and "paused for a human" instead of
 // sleeping and retrying.
 function runAgent(step) {
-  const args = ['-p', buildPrompt(step), '--output-format', 'json', '--permission-mode', permissionMode];
+  const r = resolveStepRole(step); // once per step: prompt line + model override share it
+  const args = ['-p', buildPrompt(step, r), '--output-format', 'json', '--permission-mode', permissionMode];
   if (lean) args.push('--strict-mcp-config'); // note: non-inject mode needs plan-ledger MCP, so --lean suits --inject
   if (allowedTools) args.push('--allowedTools', allowedTools);
   if (budgetUsd) args.push('--max-budget-usd', budgetUsd);
-  if (model) args.push('--model', model);
+  const m = model ?? (r.mode === 'dispatch' ? r.model : null); // CLI --model beats the map's per-role model
+  if (m) args.push('--model', m);
   return spawnClaude(args, null); // unparseable/empty → judge by DB state only, as before
 }
 
 // INJECTION MODE — give the agent its task DIRECTLY (no MCP, no get_step/record_attempt
 // plumbing) and let the RUNNER record the outcome from the agent's JSON. Removes the
 // per-agent MCP tool-schema overhead and the indirection that makes cold agents fumble.
-function buildDirectPrompt(step) {
+function buildDirectPrompt(step, r = resolveStepRole(step)) {
   return [
     step.title, '',
-    ...roleLines(step),
+    ...roleLines(r),
     step.context,
     step.acceptance_criteria ? `\nAcceptance: ${step.acceptance_criteria}` : '',
     step.carry_forward ? `\nCarried context: ${step.carry_forward}` : '',
@@ -207,11 +217,13 @@ function parseVerdict(text) {
   return { verdict: 'fail', what_tried: null };
 }
 function runInjected(step) {
-  const args = ['-p', buildDirectPrompt(step), '--output-format', 'json',
+  const r = resolveStepRole(step); // once per step: prompt line + model override share it
+  const args = ['-p', buildDirectPrompt(step, r), '--output-format', 'json',
     '--permission-mode', permissionMode, '--allowedTools', allowedTools || 'Write,Read'];
   if (lean) args.push('--strict-mcp-config'); // inject mode needs no MCP → truly lean per-step agent
   if (budgetUsd) args.push('--max-budget-usd', budgetUsd);
-  if (model) args.push('--model', model);
+  const m = model ?? (r.mode === 'dispatch' ? r.model : null); // CLI --model beats the map's per-role model
+  if (m) args.push('--model', m);
   return spawnClaude(args, { isError: true, apiErrorStatus: null, stopReason: '', result: '', cost: 0, turns: 0, tin: 0, tout: 0 });
 }
 
