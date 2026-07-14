@@ -75,7 +75,7 @@ tool('list_plans', {
     'Level-0 index. Returns ONLY title, keywords, status, and step counts for every plan — never step bodies. ' +
     'Start here to see what exists cheaply, then open_plan the one that matches before pulling any detail.',
   inputSchema: {
-    status: z.enum(['draft', 'active', 'done', 'abandoned']).optional().describe('filter by plan status'),
+    status: z.enum(['draft', 'active', 'done', 'abandoned', 'blocked']).optional().describe('filter by plan status'),
     query: z.string().optional().describe('case-insensitive match against title and keywords'),
     project_id: z.number().int().optional().describe('a specific project (default: current project)'),
     all: z.boolean().optional().describe('list plans across ALL projects'),

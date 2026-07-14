@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS plans (
   title       TEXT    NOT NULL,
   keywords    TEXT    NOT NULL DEFAULT '[]',   -- JSON array of strings
   summary     TEXT    NOT NULL DEFAULT '',      -- one-paragraph "what/why", shown on open
-  status      TEXT    NOT NULL DEFAULT 'draft', -- draft | active | done | abandoned
+  status      TEXT    NOT NULL DEFAULT 'draft', -- draft | active | done | abandoned | blocked
   created_at  TEXT    NOT NULL,
   updated_at  TEXT    NOT NULL
 );
