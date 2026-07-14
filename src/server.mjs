@@ -124,9 +124,10 @@ tool('get_step', {
 tool('next_step', {
   title: 'Get next actionable step',
   description:
-    'Driver primitive for auto-progression. Returns the lowest-idx WORKABLE step (blocked steps are skipped, like ' +
-    'blocked plans), WITH full context. Three shapes: a step → work it; {all_blocked} → everything left waits on ' +
-    'the user; {complete} → plan done. After finishing a step (record_attempt) call this to advance.',
+    'Driver primitive for auto-progression. Returns the lowest-idx WORKABLE step, WITH full context — blocked ' +
+    'steps AND steps whose builds_on/blocks-linked dependency steps are not yet done are skipped (reported in ' +
+    'skipped_blocked_steps with a reason). Three shapes: a step → work it; {all_blocked} → everything left waits ' +
+    'on the user or a dependency; {complete} → plan done. After finishing a step (record_attempt) call this to advance.',
   inputSchema: { plan_id: z.number().int() },
 }, ({ plan_id }) => {
   const step = store.nextStep(plan_id);
@@ -292,7 +293,8 @@ tool('link_items', {
   title: 'Link a step to a related plan/step',
   description:
     'Create a pathway from a step to a related plan or step (relation: references | builds_on | blocks | supersedes). ' +
-    'Use builds_on when a step depends on something built earlier, so the chain back is explicit.',
+    'Use builds_on when a step depends on something built earlier, so the chain back is explicit. NOTE: a ' +
+    'builds_on/blocks link to a STEP is a real dependency — next_step defers the linking step until that step is done.',
   inputSchema: {
     from_step_id: z.number().int(),
     to_plan_id: z.number().int().optional(),

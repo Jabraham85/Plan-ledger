@@ -183,6 +183,22 @@ const zb = s.nextStep(planZ.id);
 check('all remaining blocked → all_blocked (not null/complete)', zb.all_blocked === true && zb.blocked_steps.length === 2);
 check('plan status accepts blocked', s.setPlanStatus(planZ.id, 'blocked').status === 'blocked');
 
+// dependency-aware nextStep: builds_on/blocks to a not-done step defers the candidate
+const dp = s.createPlan({ title: 'dependency plan' });
+const d1 = s.addStep(dp.id, { title: 'needs the signature work first' });
+const d2 = s.addStep(dp.id, { title: 'independent dep-plan work' });
+s.link(d1.id, { to_step_id: sy.id, relation: 'builds_on' }); // sy (other plan) is still pending
+const dn = s.nextStep(dp.id);
+check('nextStep defers a step whose builds_on dep is not done', dn.id === d2.id);
+check('deferred step reported with reason dependency', dn.skipped_blocked_steps.some((b) => b.id === d1.id && b.reason === 'dependency' && b.waiting_on_step_ids.includes(sy.id)));
+s.link(d2.id, { to_step_id: sy.id, relation: 'references' }); // references is NOT a dependency
+check('references link does not defer', s.nextStep(dp.id).id === d2.id);
+s.setStepStatus(d2.id, 'done');
+const dAll = s.nextStep(dp.id);
+check('all remaining dependency-waiting → all_blocked with reason', dAll.all_blocked === true && dAll.blocked_steps.some((b) => b.id === d1.id && b.reason === 'dependency'));
+s.recordAttempt(sy.id, { what_tried: 'finished the dependency', verdict: 'pass' });
+check('dep done → deferred step becomes workable', s.nextStep(dp.id).id === d1.id);
+
 // attempts cap: getStep returns only the LAST 10 attempts + attempts_total
 const capPlan = s.createPlan({ title: 'attempt cap plan' });
 const capStep = s.addStep(capPlan.id, { title: 'noisy step' });

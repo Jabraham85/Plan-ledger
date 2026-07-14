@@ -487,7 +487,8 @@ export class Store {
   }
 
   // The driver primitive for auto-progression: hand back the next WORKABLE step
-  // (lowest idx not done/skipped/blocked) WITH full context. Embeds cross-plan
+  // (lowest idx not done/skipped/blocked, with every builds_on/blocks dependency
+  // already done) WITH full context. Embeds cross-plan
   // `lessons` — relevant past failures from ANY plan — so pitfalls hit elsewhere
   // surface before you repeat them. 'blocked' steps wait on a human, so they are
   // skipped (like nextPlan skips blocked plans) rather than wedging the steps
@@ -502,19 +503,38 @@ export class Store {
       .prepare("SELECT id, idx, title, status FROM steps WHERE plan_id=? AND status NOT IN ('done','skipped') ORDER BY idx, id")
       .all(planId);
     if (!remaining.length) return null;
+    // Dependency gate: an outbound builds_on/blocks link to a step that is not yet
+    // done/skipped means this step's prerequisite hasn't landed — skip it like a
+    // blocked step (reason 'dependency') instead of handing it out to fail.
+    const unmetDeps = (stepId) => this.db.prepare(`
+      SELECT l.to_step_id FROM links l JOIN steps d ON l.to_step_id = d.id
+      WHERE l.from_step_id=? AND l.relation IN ('builds_on','blocks') AND d.status NOT IN ('done','skipped')`)
+      .all(stepId).map((r) => r.to_step_id);
     const blocked = remaining.filter((r) => r.status === 'blocked');
-    const workable = remaining.find((r) => r.status !== 'blocked');
+    const depWaiting = [];
+    let workable = null;
+    for (const r of remaining) {
+      if (r.status === 'blocked') continue;
+      const deps = unmetDeps(r.id);
+      if (deps.length) { depWaiting.push({ ...r, waiting_on_step_ids: deps }); continue; }
+      workable = r; break;
+    }
+    const describe = (rows) => rows.map(({ id, idx, title, waiting_on_step_ids }) => ({
+      id, idx, title,
+      reason: waiting_on_step_ids ? 'dependency' : 'blocked',
+      ...(waiting_on_step_ids ? { waiting_on_step_ids } : {}),
+    }));
     if (!workable) {
       return {
         plan_id: planId,
         all_blocked: true,
-        blocked_steps: blocked.map(({ id, idx, title }) => ({ id, idx, title })),
+        blocked_steps: describe([...blocked, ...depWaiting]),
       };
     }
     const step = this.getStep(workable.id);
     step.lessons = this.getLessons({ step_id: workable.id, limit: 5 });
-    const skipped = blocked.filter((b) => b.idx < workable.idx);
-    if (skipped.length) step.skipped_blocked_steps = skipped.map(({ id, idx, title }) => ({ id, idx, title }));
+    const skipped = describe([...blocked, ...depWaiting].filter((b) => b.idx < workable.idx));
+    if (skipped.length) step.skipped_blocked_steps = skipped;
     return step;
   }
 
