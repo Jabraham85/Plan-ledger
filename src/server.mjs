@@ -192,6 +192,9 @@ tool('record_attempt', {
     what_tried: z.string().describe('the approach taken — specific enough that "do not repeat" is actionable'),
     result: z.string().optional().describe('what actually happened (error text, output, observation)'),
     verdict: z.enum(['pass', 'fail', 'partial']).optional().describe('default fail'),
+    role: z.string().max(64).optional().describe('subagent role that executed the attempt (e.g. implementer)'),
+    review_rounds: z.number().int().min(0).optional().describe('orchestrator send-back rounds before acceptance'),
+    executor: z.string().max(64).optional().describe('who drove the attempt (e.g. runner-mcp, runner-inject, orchestrator)'),
   },
 }, ({ step_id, ...rest }) => {
   const step = store.recordAttempt(step_id, rest);

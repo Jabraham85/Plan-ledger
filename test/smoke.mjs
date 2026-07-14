@@ -45,6 +45,13 @@ check('passed step marked done', s.getStep(a.id).status === 'done');
 check('nextStep advances to step 2', s.nextStep(plan.id).id === b.id);
 check('both attempts retained in log', s.getStep(a.id).attempts.length === 2);
 
+// attempt provenance: role / review_rounds / executor stored and returned
+s.recordAttempt(b.id, { what_tried: 'dispatched to implementer', result: 'accepted after review', verdict: 'fail',
+  role: 'implementer', review_rounds: 2, executor: 'runner-mcp' });
+const provAtt = s.getStep(b.id).attempts.at(-1);
+check('attempt stores role/review_rounds/executor', provAtt.role === 'implementer' && provAtt.review_rounds === 2 && provAtt.executor === 'runner-mcp');
+check('attempt provenance defaults are empty/zero', s.getStep(a.id).attempts[0].role === '' && s.getStep(a.id).attempts[0].review_rounds === 0 && s.getStep(a.id).attempts[0].executor === '');
+
 // carry-forward across the reset
 s.writeCarryForward(b.id, 'Dialogue asset path: /Game/NPC/DT_Dialogue');
 s.writeCarryForward(b.id, 'Row name to use: greet_01');
@@ -159,6 +166,26 @@ s.setStepStatus(z2.id, 'blocked');
 const zb = s.nextStep(planZ.id);
 check('all remaining blocked → all_blocked (not null/complete)', zb.all_blocked === true && zb.blocked_steps.length === 2);
 check('plan status accepts blocked', s.setPlanStatus(planZ.id, 'blocked').status === 'blocked');
+
+// migration: a pre-provenance DB (attempts without role/review_rounds/executor) gains the columns
+{
+  const { DatabaseSync } = await import('node:sqlite');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { rmSync } = await import('node:fs');
+  const migPath = join(tmpdir(), `plan-ledger-mig-${process.pid}.db`);
+  const raw = new DatabaseSync(migPath);
+  raw.exec(`CREATE TABLE attempts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, step_id INTEGER NOT NULL,
+    what_tried TEXT NOT NULL, result TEXT NOT NULL DEFAULT '',
+    verdict TEXT NOT NULL DEFAULT 'fail', created_at TEXT NOT NULL);`);
+  raw.close();
+  const ms = new Store(migPath); // ctor migrates
+  const cols = ms.db.prepare('PRAGMA table_info(attempts)').all().map((c) => c.name);
+  check('migration adds attempt provenance columns', cols.includes('role') && cols.includes('review_rounds') && cols.includes('executor'));
+  ms.close();
+  for (const suf of ['', '-wal', '-shm']) rmSync(migPath + suf, { force: true });
+}
 
 console.log(`\n${pass} checks passed.`);
 s.close();

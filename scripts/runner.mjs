@@ -88,6 +88,7 @@ function buildPrompt(step) {
     `2. Read the attempts and lessons FIRST — do NOT repeat an approach already marked failed.`,
     `3. Do the work to satisfy the acceptance criteria, using only this step's context and tools.`,
     `4. Call record_attempt(${step.id}, …): verdict "pass" on success, "fail"/"partial" otherwise, with a specific what_tried.`,
+    `   Always include executor: "runner-mcp"${step.role ? ` and role: "${step.role}"` : ''} in the record_attempt arguments.`,
     `5. If anything must reach the next step, call write_carry_forward.`,
     `Keep your context small — do not load other plans or steps.`,
   ].join('\n');
@@ -213,6 +214,8 @@ async function workPlan(pid) {
         what_tried: `[orchestrator:inject] ${(v.what_tried || res.result || '(no output)').replace(/\s+/g, ' ').slice(0, 200)}`,
         result: v.what_tried ? `agent verdict: ${v.verdict}` : (res.isError ? 'agent errored' : 'agent output had no VERDICT line'),
         verdict: v.verdict,
+        role: step.role || '',
+        executor: 'runner-inject',
       });
       if (budgetOrLimitStop(res)) return 'paused';
     } else {

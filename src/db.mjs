@@ -50,12 +50,15 @@ CREATE TABLE IF NOT EXISTS steps (
 CREATE INDEX IF NOT EXISTS idx_steps_plan ON steps(plan_id, idx);
 
 CREATE TABLE IF NOT EXISTS attempts (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  step_id     INTEGER NOT NULL REFERENCES steps(id) ON DELETE CASCADE,
-  what_tried  TEXT    NOT NULL,
-  result      TEXT    NOT NULL DEFAULT '',
-  verdict     TEXT    NOT NULL DEFAULT 'fail',  -- pass | fail | partial
-  created_at  TEXT    NOT NULL
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  step_id       INTEGER NOT NULL REFERENCES steps(id) ON DELETE CASCADE,
+  what_tried    TEXT    NOT NULL,
+  result        TEXT    NOT NULL DEFAULT '',
+  verdict       TEXT    NOT NULL DEFAULT 'fail',  -- pass | fail | partial
+  role          TEXT    NOT NULL DEFAULT '',      -- subagent role that executed the attempt
+  review_rounds INTEGER NOT NULL DEFAULT 0,       -- orchestrator send-back rounds before acceptance
+  executor      TEXT    NOT NULL DEFAULT '',      -- who drove it (e.g. runner-mcp | runner-inject | orchestrator)
+  created_at    TEXT    NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_attempts_step ON attempts(step_id);
 
@@ -201,6 +204,10 @@ export class Store {
     // Role-based dispatch: which subagent role executes a step (added 2026-07; '' = orchestrator decides).
     if (!hasCol('steps', 'role')) this.db.exec("ALTER TABLE steps ADD COLUMN role TEXT NOT NULL DEFAULT ''");
     if (!hasCol('template_steps', 'role')) this.db.exec("ALTER TABLE template_steps ADD COLUMN role TEXT NOT NULL DEFAULT ''");
+    // Attempt provenance: which role/executor produced an attempt + review rounds (added 2026-07).
+    if (!hasCol('attempts', 'role')) this.db.exec("ALTER TABLE attempts ADD COLUMN role TEXT NOT NULL DEFAULT ''");
+    if (!hasCol('attempts', 'review_rounds')) this.db.exec('ALTER TABLE attempts ADD COLUMN review_rounds INTEGER NOT NULL DEFAULT 0');
+    if (!hasCol('attempts', 'executor')) this.db.exec("ALTER TABLE attempts ADD COLUMN executor TEXT NOT NULL DEFAULT ''");
     this.db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('current_project', '1')").run();
   }
 
@@ -352,7 +359,7 @@ export class Store {
   getStep(id) {
     const s = this.db.prepare('SELECT * FROM steps WHERE id=?').get(id);
     if (!s) throw new Error(`no step with id ${id}`);
-    const attempts = this.db.prepare('SELECT id, what_tried, result, verdict, created_at FROM attempts WHERE step_id=? ORDER BY id').all(id);
+    const attempts = this.db.prepare('SELECT id, what_tried, result, verdict, role, review_rounds, executor, created_at FROM attempts WHERE step_id=? ORDER BY id').all(id);
     const links = this.db.prepare('SELECT id, to_plan_id, to_step_id, relation, note FROM links WHERE from_step_id=?').all(id);
     return {
       id: s.id,
@@ -416,14 +423,15 @@ export class Store {
   }
 
   // The whole "don't repeat past pitfalls" mechanism: log what was tried + how it went.
-  recordAttempt(stepId, { what_tried, result, verdict }) {
+  recordAttempt(stepId, { what_tried, result, verdict, role, review_rounds, executor }) {
     const s = this.db.prepare('SELECT plan_id FROM steps WHERE id=?').get(stepId);
     if (!s) throw new Error(`no step with id ${stepId}`);
     if (!what_tried || !String(what_tried).trim()) throw new Error('what_tried is required');
     const v = verdict ?? 'fail';
     if (!VERDICTS.has(v)) throw new Error(`bad verdict: ${v} (pass|fail|partial)`);
-    this.db.prepare('INSERT INTO attempts (step_id, what_tried, result, verdict, created_at) VALUES (?,?,?,?,?)')
-      .run(stepId, String(what_tried), String(result ?? ''), v, now());
+    this.db.prepare('INSERT INTO attempts (step_id, what_tried, result, verdict, role, review_rounds, executor, created_at) VALUES (?,?,?,?,?,?,?,?)')
+      .run(stepId, String(what_tried), String(result ?? ''), v,
+           String(role ?? '').trim(), Math.max(0, Number(review_rounds ?? 0) | 0), String(executor ?? '').trim(), now());
     // a passing attempt advances the step to done; a fail marks it failed (not blocked — still retryable)
     if (v === 'pass') this.setStepStatus(stepId, 'done');
     else this.setStepStatus(stepId, 'failed');
