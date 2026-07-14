@@ -174,8 +174,13 @@ function runInjected(step) {
 // limit hit (HTTP 429 / "usage limit reached") and stop cleanly rather than hammering.
 let stopAll = null, stopKind = null, warned95 = false;
 function budgetOrLimitStop(res) {
+  // Trust the structured signals (HTTP status / stop_reason). Only regex the free-text
+  // result when the run actually ERRORED — a successful agent merely *mentioning*
+  // "rate limit" or "quota" in its report must not stop the whole run.
+  const limitText = /usage limit|rate.?limit|limit reached|quota|insufficient.*credit|resets? at/i;
   if (res && (res.apiErrorStatus === 429 ||
-      /usage limit|rate.?limit|limit reached|quota|insufficient.*credit|resets? at/i.test(`${res.result || ''} ${res.stopReason || ''}`))) {
+      limitText.test(res.stopReason || '') ||
+      (res.isError && limitText.test(res.result || '')))) {
     stopAll = `usage/rate limit hit${res.apiErrorStatus ? ` (HTTP ${res.apiErrorStatus})` : ''}${res.result ? ' — ' + res.result.replace(/\s+/g, ' ').slice(0, 220) : ''}`;
     stopKind = 'limit';
     return true;
