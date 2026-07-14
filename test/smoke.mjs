@@ -8,6 +8,9 @@ const s = new Store(':memory:');
 let pass = 0;
 const check = (label, cond) => { assert.ok(cond, label); console.log('  ok  ' + label); pass++; };
 
+// schema versioning: a fresh DB is stamped at the current user_version
+check('fresh DB stamped at USER_VERSION', Store.USER_VERSION >= 1 && s.db.prepare('PRAGMA user_version').get().user_version === Store.USER_VERSION);
+
 // create + surface index
 const plan = s.createPlan({ title: 'Add dash dialogue to Unreal NPC', keywords: ['unreal', 'npc', 'dialogue'], summary: 'Wire a branching dialogue.' });
 check('createPlan returns step index', Array.isArray(plan.steps) && plan.steps.length === 0);
@@ -229,6 +232,7 @@ check('nextPlan(project) scopes to that project only', s.nextPlan(projB.id) === 
   const ms = new Store(migPath); // ctor migrates
   const cols = ms.db.prepare('PRAGMA table_info(attempts)').all().map((c) => c.name);
   check('migration adds attempt provenance columns', cols.includes('role') && cols.includes('review_rounds') && cols.includes('executor'));
+  check('migration stamps PRAGMA user_version', ms.db.prepare('PRAGMA user_version').get().user_version === Store.USER_VERSION);
   ms.close();
   for (const suf of ['', '-wal', '-shm']) rmSync(migPath + suf, { force: true });
 }

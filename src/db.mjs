@@ -221,8 +221,15 @@ export class Store {
     this.db.close();
   }
 
-  // Idempotent: backfill the project layer onto DBs created before projects existed.
+  // Numbered, PRAGMA user_version-gated migrations. Version 1 stamps the 2026-07
+  // state (project layer + step/template roles + attempt provenance). Add future
+  // migrations here gated on `v < N`, then bump USER_VERSION to N. The hasCol
+  // backfills in the version-1 block are belt-and-braces (safe on any DB shape),
+  // so they run unconditionally; NEW migrations should rely on the version gate.
+  static USER_VERSION = 1;
+
   _migrate() {
+    const v = this.db.prepare('PRAGMA user_version').get().user_version;
     const hasCol = (t, c) => this.db.prepare(`PRAGMA table_info(${t})`).all().some((x) => x.name === c);
     const ts = now();
     this.db.prepare("INSERT OR IGNORE INTO projects (id, name, description, status, created_at, updated_at) VALUES (1, 'General', 'Default project (plans created before the project layer existed).', 'active', ?, ?)").run(ts, ts);
@@ -237,6 +244,11 @@ export class Store {
     if (!hasCol('attempts', 'review_rounds')) this.db.exec('ALTER TABLE attempts ADD COLUMN review_rounds INTEGER NOT NULL DEFAULT 0');
     if (!hasCol('attempts', 'executor')) this.db.exec("ALTER TABLE attempts ADD COLUMN executor TEXT NOT NULL DEFAULT ''");
     this.db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('current_project', '1')").run();
+
+    // ---- numbered migrations (gate on v, wrap in _tx, bump the stamp) ----
+    // if (v < 2) this._tx(() => { this.db.exec('ALTER TABLE ...'); });
+
+    if (v < Store.USER_VERSION) this.db.exec(`PRAGMA user_version = ${Store.USER_VERSION}`);
   }
 
   // ---- projects (top level: project → plan → step) -----------------------
