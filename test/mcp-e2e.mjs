@@ -5,11 +5,15 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { tmpdir } from 'node:os';
-import { rmSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
+import { rmSync, writeFileSync } from 'node:fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const dbPath = join(tmpdir(), `plan-ledger-e2e-${process.pid}.db`);
+// Role-map fixture (PLAN_LEDGER_ROLES) so the server never reads the user's real
+// ~/.claude/plan-roles.json: implementer remapped to a built-in, off-role disabled.
+const rolesPath = join(tmpdir(), `plan-ledger-e2e-roles-${process.pid}.json`);
+writeFileSync(rolesPath, JSON.stringify({ roles: { implementer: { agent: 'general-purpose' }, 'off-role': false } }));
 const parse = (r) => JSON.parse(r.content[0].text);
 // Every probe both logs AND asserts — a false condition must exit non-zero.
 const check = (label, cond) => { console.log(`${label}:`, cond); assert.ok(cond, label); };
@@ -17,7 +21,7 @@ const check = (label, cond) => { console.log(`${label}:`, cond); assert.ok(cond,
 const transport = new StdioClientTransport({
   command: process.execPath,
   args: [join(__dirname, '..', 'src', 'server.mjs')],
-  env: { ...process.env, PLAN_LEDGER_DB: dbPath },
+  env: { ...process.env, PLAN_LEDGER_DB: dbPath, PLAN_LEDGER_ROLES: rolesPath },
 });
 const client = new Client({ name: 'e2e', version: '0.0.0' });
 await client.connect(transport);
@@ -76,6 +80,25 @@ check('known role carries no role_warning', known.role_warning === undefined);
 const bogusFull = parse(await client.callTool({ name: 'get_step', arguments: { step_id: bogus.id } }));
 check('role persisted despite slim ack', bogusFull.role === 'implementer');
 
+// role map → next_step directive: the fixture remaps implementer to a built-in agent
+const defaultCharter = (role) => join(homedir(), '.claude', 'agents', `${role}.md`);
+const remapped = parse(await client.callTool({ name: 'next_step', arguments: { plan_id: plan.id } }));
+check('directive names the RESOLVED agent for a remapped role',
+  remapped.id === bogus.id && remapped.directive.includes('subagent_type "general-purpose"'));
+check('remapped directive opens the brief with the role\'s charter',
+  remapped.directive.includes(`read + adopt the "implementer" charter at ${defaultCharter('implementer')}`));
+// a role NOT in the map resolves through the default chain — today's semantics, absolute charter path
+await client.callTool({ name: 'update_step', arguments: { step_id: bogus.id, role: 'debugger' } });
+const unmapped = parse(await client.callTool({ name: 'next_step', arguments: { plan_id: plan.id } }));
+check('unmapped roster role dispatches as itself with its default charter',
+  unmapped.directive.includes('subagent_type "debugger"') && unmapped.directive.includes(defaultCharter('debugger')));
+// a disabled role degrades to the orchestrator-decides branch
+await client.callTool({ name: 'update_step', arguments: { step_id: bogus.id, role: 'off-role' } });
+const disabled = parse(await client.callTool({ name: 'next_step', arguments: { plan_id: plan.id } }));
+check('disabled role → orchestrator-decides directive',
+  /disabled in the role map/.test(disabled.directive) && !/DISPATCH/.test(disabled.directive));
+await client.callTool({ name: 'update_step', arguments: { step_id: bogus.id, role: 'implementer' } }); // restore for probes below
+
 // templates over MCP: a role'd inline step must survive the zod schema round-trip
 await client.callTool({ name: 'create_template', arguments: { name: 'e2e-tpl', steps: [
   { title: 'roled step', context: 'ctx', role: 'implementer', acceptance_criteria: 'done', idx: 1 },
@@ -84,6 +107,7 @@ const tpl = parse(await client.callTool({ name: 'get_template', arguments: { tem
 check('create_template keeps role on inline steps', tpl.steps[0].role === 'implementer' && tpl.steps[0].idx === 1);
 
 await client.close();
+rmSync(rolesPath, { force: true });
 rmSync(dbPath, { force: true });
 rmSync(dbPath + '-wal', { force: true });
 rmSync(dbPath + '-shm', { force: true });

@@ -269,5 +269,82 @@ check('nextPlan(project) scopes to that project only', s.nextPlan(projB.id) === 
   if (saved === undefined) delete process.env.PLAN_LEDGER_DB; else process.env.PLAN_LEDGER_DB = saved;
 }
 
+// role map resolver: precedence, entry shorthands, charter chains, degradation
+// (docs/ROLE_MAP_DESIGN.md). All fixtures in a temp dir; PLAN_LEDGER_ROLES keeps
+// the user's real ~/.claude/plan-roles.json out of every case.
+{
+  const { resolveRole, loadRoleMap } = await import('../src/roles.mjs');
+  const { tmpdir, homedir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { mkdirSync, writeFileSync, rmSync } = await import('node:fs');
+  const root = join(tmpdir(), `plan-ledger-roles-${process.pid}`);
+  const repo = join(root, 'repo');
+  mkdirSync(join(repo, '.claude', 'agents'), { recursive: true });
+  mkdirSync(join(root, 'charters'), { recursive: true });
+  const savedRoles = process.env.PLAN_LEDGER_ROLES;
+
+  const userMap = join(root, 'user-roles.json');
+  writeFileSync(userMap, JSON.stringify({
+    roles: { probe: 'user-agent', researcher: 'general-purpose', 'off-role': false, modelled: { model: 'haiku' } },
+    projects: { Proj: { roles: { probe: 'user-project-agent' } } },
+  }));
+  writeFileSync(join(repo, '.plan-roles.json'), JSON.stringify({
+    roles: { probe: { agent: 'repo-agent', charter: '../charters/probe.md' } },
+  }));
+  writeFileSync(join(root, 'charters', 'probe.md'), '# probe charter (fixture)');
+  writeFileSync(join(repo, '.claude', 'agents', 'repolocal.md'), '# repo-local charter (fixture)');
+  process.env.PLAN_LEDGER_ROLES = userMap; // env override replaces the user file — itself under test here
+
+  // precedence: repo .plan-roles.json > user projects.<name>.roles > user roles
+  const r1 = resolveRole('probe', { cwd: repo, projectName: 'Proj' });
+  check('role map: repo layer beats user layers', r1.mode === 'dispatch' && r1.agent === 'repo-agent' && r1.source === 'project-file');
+  check('role map: relative charter resolves against the declaring file\'s dir', r1.charter === join(root, 'charters', 'probe.md'));
+  const r2 = resolveRole('probe', { cwd: null, projectName: 'Proj' });
+  check('role map: user-project layer beats user-global', r2.agent === 'user-project-agent' && r2.source === 'user-project');
+  const r3 = resolveRole('probe', { cwd: null, projectName: null });
+  check('role map: user-global layer + string shorthand → {agent}', r3.agent === 'user-agent' && r3.source === 'user');
+  check('role map: roster role remapped to a built-in agent', resolveRole('researcher', {}).agent === 'general-purpose');
+  check('role map: model field surfaces on the resolution', resolveRole('modelled', {}).model === 'haiku');
+
+  // degradation: disabled / unknown / untagged → orchestrator decides
+  check('role map: false shorthand disables → orchestrator', resolveRole('off-role', {}).mode === 'orchestrator' && resolveRole('off-role', {}).reason === 'disabled');
+  check('role map: unknown role (no entry, no charter) → orchestrator', resolveRole('zzz-nope-xyz', {}).reason === 'unknown');
+  check('role map: empty role → untagged', resolveRole('', {}).reason === 'untagged');
+
+  // default charter chain: repo .claude/agents/<role>.md shadows ~/.claude/agents/<role>.md
+  const rl = resolveRole('repolocal', { cwd: repo });
+  check('role map: repo .claude/agents charter makes an unmapped role dispatchable', rl.mode === 'dispatch' && rl.charter === join(repo, '.claude', 'agents', 'repolocal.md') && rl.source === 'default');
+
+  // tilde expansion + declared-but-missing charter falls back to the default chain
+  writeFileSync(userMap, JSON.stringify({ roles: {
+    tilded: { charter: '~/.claude/agents/implementer.md' },
+    implementer: { charter: join(root, 'no-such-charter.md') },
+  } }));
+  check('role map: ~ charter expands to the home dir', resolveRole('tilded', {}).charter === join(homedir(), '.claude', 'agents', 'implementer.md'));
+  check('role map: missing declared charter falls back to the default chain', resolveRole('implementer', {}).charter === join(homedir(), '.claude', 'agents', 'implementer.md'));
+
+  // zero config (env points at a nonexistent file) → today's behavior, bit for bit
+  process.env.PLAN_LEDGER_ROLES = join(root, 'no-such-map.json');
+  const rd = resolveRole('implementer', { cwd: null, projectName: null });
+  check('role map: zero config → default roster (agent = role, ~ charter)', rd.mode === 'dispatch' && rd.agent === 'implementer' && rd.charter === join(homedir(), '.claude', 'agents', 'implementer.md') && rd.source === 'default');
+
+  // malformed JSON: warn once (stderr), skip the layer, never crash dispatch
+  const badMap = join(root, 'bad.json');
+  writeFileSync(badMap, '{ this is not json !');
+  process.env.PLAN_LEDGER_ROLES = badMap;
+  let warned = 0; const origWarn = console.warn; console.warn = () => { warned++; };
+  const rb = resolveRole('implementer', {});
+  console.warn = origWarn;
+  check('role map: malformed JSON warns once + falls back to defaults', warned === 1 && rb.mode === 'dispatch' && rb.agent === 'implementer' && rb.source === 'default');
+  check('loadRoleMap: missing file → {} silently', Object.keys(loadRoleMap(join(root, 'nope.json'))).length === 0);
+
+  if (savedRoles === undefined) delete process.env.PLAN_LEDGER_ROLES; else process.env.PLAN_LEDGER_ROLES = savedRoles;
+  rmSync(root, { recursive: true, force: true });
+}
+
+// projectNameForPlan: the JOIN that keys the role map's user-file projects layer
+check('projectNameForPlan resolves the owning project\'s name', s.projectNameForPlan(plan.id) === 'General' && s.projectNameForPlan(planB.id) === 'Project B');
+check('projectNameForPlan → null for a missing plan', s.projectNameForPlan(999999) === null);
+
 console.log(`\n${pass} checks passed.`);
 s.close();
