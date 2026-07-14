@@ -42,6 +42,18 @@ check('plan complete (next_step {complete})', done.complete === true && typeof d
 const idx = parse(await client.callTool({ name: 'list_plans', arguments: {} }));
 check('surface index clean (no context)', idx[0].context === undefined && idx[0].keywords.includes('e2e'));
 
+// zod hardening: non-positive limits/budgets must be rejected at the schema
+const badLimit = await client.callTool({ name: 'recall', arguments: { query: 'anything', limit: 0 } });
+check('recall rejects limit 0', badLimit.isError === true);
+const badBudget = await client.callTool({ name: 'query_graph', arguments: { plan_id: plan.id, terms: 'x', budget: -3 } });
+check('query_graph rejects negative budget', badBudget.isError === true);
+
+// role charter check: unknown role is ACCEPTED but warned about, known role is silent
+const bogus = parse(await client.callTool({ name: 'add_step', arguments: { plan_id: plan.id, title: 'bogus-role step', role: 'no-such-role-xyz' } }));
+check('unknown role accepted with role_warning', bogus.role === 'no-such-role-xyz' && typeof bogus.role_warning === 'string' && /no charter file/.test(bogus.role_warning));
+const known = parse(await client.callTool({ name: 'update_step', arguments: { step_id: bogus.id, role: 'implementer' } }));
+check('known role carries no role_warning', known.role === 'implementer' && known.role_warning === undefined);
+
 // templates over MCP: a role'd inline step must survive the zod schema round-trip
 await client.callTool({ name: 'create_template', arguments: { name: 'e2e-tpl', steps: [
   { title: 'roled step', context: 'ctx', role: 'implementer', acceptance_criteria: 'done', idx: 1 },

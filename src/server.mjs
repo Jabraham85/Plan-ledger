@@ -13,7 +13,8 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { Store } from './db.mjs';
 import { buildPlanContext, buildProjectContext, groundSlice } from './context.mjs';
 import { extractRepo } from './extract.mjs';
@@ -26,6 +27,15 @@ process.on('SIGINT', () => { store.close(); process.exit(0); });
 process.on('exit', () => store.close());
 
 const server = new McpServer({ name: 'plan-ledger', version: '0.1.0' });
+
+// Roles dispatch to charter files in ~/.claude/agents/<role>.md. An unknown role is
+// allowed (charters come and go) but flagged, so typos surface at authoring time.
+const roleWarning = (step) => {
+  if (!step?.role) return step;
+  const charter = join(homedir(), '.claude', 'agents', `${step.role}.md`);
+  return existsSync(charter) ? step
+    : { ...step, role_warning: `no charter file for role "${step.role}" at ${charter} — dispatch will fall back to a generic agent (check for a typo)` };
+};
 
 // Every tool returns JSON text; throwing turns into an MCP isError result.
 const ok = (data) => ({ content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] });
@@ -161,12 +171,12 @@ tool('add_step', {
     title: z.string(),
     context: z.string().optional().describe('self-contained: what to do and what is needed to do it'),
     tools: z.array(z.string()).optional().describe('tool/MCP names this step uses'),
-    role: z.string().optional().describe('subagent role that executes this step (e.g. implementer, ui-designer, test-engineer); empty = orchestrator decides at dispatch'),
+    role: z.string().max(64).optional().describe('subagent role that executes this step (e.g. implementer, ui-designer, test-engineer); empty = orchestrator decides at dispatch'),
     acceptance_criteria: z.string().optional().describe('concrete pass condition'),
     carry_forward: z.string().optional().describe('seed note carried in from a prior step'),
     idx: z.number().int().optional().describe('1-based position; appends to end if omitted'),
   },
-}, ({ plan_id, ...rest }) => store.addStep(plan_id, rest));
+}, ({ plan_id, ...rest }) => roleWarning(store.addStep(plan_id, rest)));
 
 tool('update_step', {
   title: 'Update a step',
@@ -176,12 +186,12 @@ tool('update_step', {
     title: z.string().optional(),
     context: z.string().optional(),
     tools: z.array(z.string()).optional(),
-    role: z.string().optional().describe('subagent role that executes this step; empty string clears it'),
+    role: z.string().max(64).optional().describe('subagent role that executes this step; empty string clears it'),
     acceptance_criteria: z.string().optional(),
     carry_forward: z.string().optional(),
     idx: z.number().int().optional(),
   },
-}, ({ step_id, ...fields }) => store.updateStep(step_id, fields));
+}, ({ step_id, ...fields }) => roleWarning(store.updateStep(step_id, fields)));
 
 // ---- the working loop -----------------------------------------------------
 
@@ -345,7 +355,7 @@ tool('query_graph', {
   inputSchema: {
     plan_id: z.number().int(),
     terms: z.string().describe('keywords, e.g. "auth flow" or a step title'),
-    budget: z.number().int().optional().describe('max nodes in the slice (default 14)'),
+    budget: z.number().int().positive().optional().describe('max nodes in the slice (default 14)'),
   },
 }, ({ plan_id, terms, budget }) => store.queryGraph(plan_id, terms, budget ?? 14) ?? { error: 'no graph for this plan' });
 
@@ -354,7 +364,7 @@ tool('ground_step', {
   description:
     'Return the code slice relevant to a step (grounds the plan graph on the step\'s title + tools). Use before ' +
     'working a step to pull only the code it touches.',
-  inputSchema: { step_id: z.number().int(), budget: z.number().int().optional() },
+  inputSchema: { step_id: z.number().int(), budget: z.number().int().positive().optional() },
 }, ({ step_id, budget }) => {
   const s = store.getStep(step_id);
   const terms = `${s.title} ${(s.tools || []).join(' ')}`;
@@ -392,7 +402,7 @@ tool('get_lessons', {
   inputSchema: {
     step_id: z.number().int().optional().describe('match against this step\'s title + tools'),
     terms: z.string().optional().describe('free-text keywords to match instead/as well'),
-    limit: z.number().int().optional(),
+    limit: z.number().int().positive().optional(),
     all: z.boolean().optional().describe('search across ALL projects (default: the step\'s/current project only)'),
   },
 }, ({ step_id, terms, limit, all }) => store.getLessons({ step_id, terms, limit: limit ?? 5, all }));
@@ -416,7 +426,7 @@ tool('recall', {
     'about the project at large, on demand, without loading everything.',
   inputSchema: {
     query: z.string().describe('natural keywords, e.g. "token savings orchestrator" or "exe signature"'),
-    limit: z.number().int().optional(),
+    limit: z.number().int().positive().optional(),
     all: z.boolean().optional().describe('search across ALL projects (default: current project only)'),
   },
 }, ({ query, limit, all }) => store.recall(query, limit ?? 8, all));
