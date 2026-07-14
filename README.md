@@ -15,19 +15,29 @@ remember to do.
 
 ## Status
 
-- **Phase 1 — core (done):** SQLite store + MCP server, 12 tools, tests green.
-- **Phase 2 — orchestrator (next):** a runner that spawns a fresh headless agent
-  per step so plans walk themselves with no hand-holding. See the bottom.
+Both original phases have shipped:
+
+- **Core:** SQLite store + stdio MCP server, **47 tools**, tests green
+  (`npm test` runs the store, RAG, and MCP-protocol suites).
+- **Orchestrator:** `scripts/runner.mjs` makes plans walk themselves — a fresh
+  headless agent per step (true context reset), **role-based dispatch**, and
+  usage-limit auto-retry (`npm run orchestrate`; `--live`, `--inject` flags below).
+
+On top of that core: **projects** (plans group under a project), a **roles** system
+(each step names the specialist agent that executes it) with an overridable **role
+map**, the **RAG sidecar** (deterministic external-corpus retrieval), and a **Cursor**
+integration surface (on the `cursor` branch).
 
 ## Data model
 
 ```
-Plan   title, keywords[], summary, status            ← surface-exposed (level 0)
- └ Step  idx, title, status,
-         context, tools[], acceptance_criteria,
-         carry_forward,                               ← note written FOR this step
-         attempts[] { what_tried, result, verdict }   ← the failure log
- └ Link  from_step → (plan | step), relation          ← "builds_on" pathways back
+Project  name, status                                 ← plans group under a project
+ └ Plan   title, keywords[], summary, status          ← surface-exposed (level 0)
+    └ Step  idx, title, status, role,                 ← role = the agent that executes it
+            context, tools[], acceptance_criteria,
+            carry_forward,                             ← note written FOR this step
+            attempts[] { what_tried, result, verdict } ← the failure log
+    └ Link  from_step → (plan | step), relation        ← "builds_on" pathways back
 ```
 
 ## The three disclosure levels
@@ -38,12 +48,25 @@ Plan   title, keywords[], summary, status            ← surface-exposed (level 
 | 1 | `open_plan` | plan summary + an ordered **step index** (titles/status) |
 | 2 | `get_step` | one step's **full** context, attempts log, and links |
 
-## Tools (12)
+## Tools (47)
 
-**Navigate:** `list_plans` · `open_plan` · `get_step` · `next_step`
+41 ledger tools registered in `src/server.mjs` + 6 `rag_*` tools registered by
+`src/rag/tools.mjs`:
+
+**Projects:** `list_projects` · `create_project` · `set_current_project` ·
+`set_project_status` · `get_project_context`
+**Navigate:** `list_plans` · `open_plan` · `get_step` · `next_step` · `next_plan`
 **Author:** `create_plan` · `add_step` · `update_step`
 **Working loop:** `record_attempt` · `write_carry_forward` · `link_items`
 **Status:** `set_plan_status` · `set_step_status`
+**Knowledge:** `get_context` · `get_lessons` · `project_brief` · `recall`
+**Code graph:** `import_graph` · `build_graph` · `query_graph` · `graph_stats` · `ground_step`
+**Refs:** `list_refs` · `create_ref` · `update_ref` · `delete_ref`
+**File refs:** `add_file_ref` · `read_file_ref` · `remove_file_ref` · `suggest_file_refs`
+**Templates:** `list_templates` · `get_template` · `create_template` ·
+`instantiate_template` · `save_as_template` · `delete_template`
+**RAG sidecar:** `rag_ingest` · `rag_status` · `rag_query` · `rag_expand` · `rag_cite` ·
+`rag_forget` — deterministic retrieval over external corpora; see [docs/RAG.md](docs/RAG.md).
 
 ## The working loop (how Claude should use it)
 
@@ -63,11 +86,13 @@ review loop works is documented in [docs/ROLES.md](docs/ROLES.md).
 ```sh
 npm install
 npm start            # stdio MCP server
-node test/smoke.mjs  # store-level tests (20 checks)
-node test/mcp-e2e.mjs# full MCP protocol test
+npm test             # store + RAG + MCP-protocol suites
+npm run eval:rag     # RAG retrieval eval (variant table + ship gate)
 ```
 
-The DB lives at `./data/plan-ledger.db` (override with `PLAN_LEDGER_DB`).
+The ledger DB lives at `./data/plan-ledger.db` (override with `PLAN_LEDGER_DB`); the
+RAG index is a **separate, disposable** sidecar at `./data/rag.db` (override with
+`PLAN_LEDGER_RAG_DB`) — re-ingesting rebuilds it, so it never risks the ledger.
 
 ## Connect to Claude Code
 
@@ -89,19 +114,37 @@ Then in a session: *"Connect to plan-ledger and plan out X."* Claude calls
 `list_plans` to orient, `create_plan` + `add_step` to lay out the work, then runs
 the loop above.
 
-## Phase 2 — the orchestrator (planned)
+## The orchestrator (shipped)
 
-`runner.mjs` will use the Claude Agent SDK to make plans walk themselves:
+`scripts/runner.mjs` makes plans walk themselves — a fresh headless agent per step,
+so context truly resets between steps:
 
 ```
 for each step the plan exposes:
-  spawn a FRESH headless agent  (claude -p, clean context)
-    → it pulls just this step from plan-ledger over MCP
+  resolve the step's ROLE (role map → charter)
+  spawn a FRESH headless agent  (clean context; adopts the role's charter)
+    → it pulls just this step from plan-ledger over MCP (or --inject the
+      context straight into the prompt, no MCP in the agent)
     → does the work, record_attempt, write_carry_forward
     → exits
   read the outcome from the DB, then spawn the next step
 ```
 
-This gives **true context reset + zero hand-holding** at once: you kick off a
-plan once and the app drives every step. Phase 1's DB and tools are the shared
-substrate — nothing here gets thrown away.
+Run it (dry-run by default — `--live` actually spawns agents and costs money):
+
+```sh
+npm run orchestrate -- --project <id> --live --retry-on-limit
+npm run orchestrate -- --plan <id> --inject          # inject step context, no MCP in the agent
+```
+
+**True context reset + zero hand-holding** at once: kick off a plan once and the
+runner drives every step, dispatching each to the specialist agent its `role` names.
+How roles resolve and how the review loop works is documented in
+[docs/ROLES.md](docs/ROLES.md).
+
+## Cursor
+
+The same stdio server works in Cursor — anything that speaks MCP gets all 47 tools.
+The Cursor integration surface (`.cursor/mcp.json`, a mirror rule/skill, and
+`docs/CURSOR.md`) lives on the **`cursor` branch**; the research behind it is on `main`
+at [docs/research/cursor-surface-2026-07.md](docs/research/cursor-surface-2026-07.md).

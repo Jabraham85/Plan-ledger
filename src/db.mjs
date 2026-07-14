@@ -22,6 +22,10 @@ export function defaultDbPath() {
     || join(homedir(), 'Documents', 'plan-ledger', 'data', 'plan-ledger.db');
 }
 
+// SCHEMA conventions (audit-enforced): new columns must be added with a
+// NOT NULL DEFAULT so migrations backfill old rows without a rewrite; and never
+// return a raw `SELECT *` row to a tool caller — shape an explicit object (drop
+// internal columns, keep the payload stable) so schema growth can't leak fields.
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS projects (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -3,14 +3,16 @@ description: >-
   Use when planning or executing multi-step work that benefits from external memory —
   any task with several stages, anything in an existing plan-ledger plan, or when the
   user mentions plans/steps/context/"avoid past mistakes". Keeps working context small
-  by storing plans, per-step context, and a failure log in the plan-ledger MCP server.
+  by storing plans, per-step context, a role per step, and a failure log in the
+  plan-ledger MCP server.
 ---
 
 # plan-ledger working discipline
 
 plan-ledger is **external working memory**. The durable truth — plans, per-step context,
-carry-forward notes, and the failure log — lives in its database, not in your context
-window. Your job is to keep your *own* context small and let the store hold the rest.
+carry-forward notes, the role that executes each step, and the failure log — lives in its
+database, not in your context window. Your job is to keep your *own* context small and let
+the store hold the rest.
 
 Tools are `mcp__plan-ledger__*`. There are three disclosure levels — never pull a deeper
 level than the task needs:
@@ -21,14 +23,33 @@ level than the task needs:
 | 1 | `open_plan` | understand one plan + find the step to work (step index only) |
 | 2 | `get_step` / `next_step` | pull ONE step's full context to actually work it |
 
+**RAG sidecar.** To ground a step in an external corpus (a repo, docs tree, dependency git,
+or website you didn't write), the `rag_*` tools do slim, cited retrieval — the loop is
+`rag_query` → `rag_expand`/narrow → `rag_cite`. See plan-ledger `docs/RAG.md`.
+
 ## When to reach for it
 
 - A task has multiple stages, or will outlive one session → **make a plan** (`create_plan`
-  + `add_step` per stage). Each step's `context` must be self-contained and have a concrete
-  `acceptance_criteria`.
-- You're continuing work → `list_plans` to orient, `open_plan` the relevant one, then `work`.
+  + `add_step` per stage). Each step's `context` must be self-contained, have a concrete
+  `acceptance_criteria`, and carry a `role` (the specialist that executes it — see below).
+- You're continuing work → `list_plans` to orient, `open_plan` the relevant one, then work it.
 - Mid-task you learn something the *next* step needs → `write_carry_forward` into that step.
   This is how context survives a reset: write it forward, don't hold it in your head.
+
+**Declare the plan's knowledge up front (RAG).** When decomposing a plan, list every source
+the steps will need (repo folders, design docs, dependency gits, external sites/wikis). Check
+`rag_status`; `rag_ingest` anything missing under a stable codename. Give each step a first
+`context` line `RAG: <codename> — start: "<query>"[; "<query>"]` so its agent starts grounded
+instead of rediscovering sources mid-step (`docs/RAG.md`).
+
+## Roles — who executes a step
+
+Every step carries a `role`: the `~/.claude/agents/` specialist that executes it (architect,
+implementer, test-engineer, debugger, refactor-surgeon, build-devops, perf-engineer,
+researcher, tech-writer, ui-designer, ux-architect, game-designer). Assign at plan creation —
+pick the specialist whose discipline the step's core difficulty lives in. A role map
+(`.plan-roles.json` / `~/.claude/plan-roles.json`) may rename, re-charter, or disable a role;
+resolve through it before dispatch. Full schema: plan-ledger `docs/ROLES.md`.
 
 ## The execution loop (one step at a time)
 
@@ -37,16 +58,27 @@ level than the task needs:
 2. **Read `attempts` before doing anything.** Each is `{ what_tried, result, verdict }`. If an
    approach already has a `fail` verdict, do NOT repeat it — choose a different one and say
    why. This is the whole point of the failure log.
-3. Do the work using only this step's `context` + `tools`. Resist pulling unrelated plans
-   or steps into context.
-4. `record_attempt` — **always log failures too**, with `what_tried` specific enough that
-   "don't repeat this" is actionable. `pass` finishes the step; `fail`/`partial` keeps it
-   open and remembered.
-5. `write_carry_forward` anything the next step needs; `link_items` with relation `builds_on`
-   when a step depends on earlier work, so the chain back is explicit.
-6. Move to the next step (loop), or stop and report if the user wanted a single step.
-   Working-loop tool results include a `directive` — follow it; do not end your turn
-   while a workable step remains unless the user scoped the run.
+3. **Dispatch, don't do.** YOU are the orchestrator and reviewer; the step's role agent does
+   the work. Brief it (Agent tool, `subagent_type` = the resolved role) from the step's
+   `context` + `acceptance_criteria` + `carry_forward` + `lessons`. Self-execute only trivial
+   mechanical steps and ALL ledger bookkeeping — never delegate ledger calls.
+4. **Review gate (mandatory).** When the agent reports: evidence first (build/test output
+   verbatim, real paths, screenshots — no evidence = send-back); check the step's
+   `acceptance_criteria` then the role's `## Definition of done` box by box; unmet →
+   `SendMessage` the SAME agent a numbered correction list (max 3 rounds, then finish it
+   yourself or `record_attempt fail`).
+5. `record_attempt` — **always log failures too**, noting `role=<name>, review_rounds=<n>` and
+   a `what_tried` specific enough that "don't repeat this" is actionable. `pass` finishes the
+   step; `fail`/`partial` keeps it open and remembered.
+6. `write_carry_forward` anything the next step needs; `link_items` with relation `builds_on`
+   when a step depends on earlier work. Then loop to 1, or stop if the user wanted a single
+   step. Working-loop tool results carry a `directive` — follow it; don't end your turn while
+   a workable step remains unless the user scoped the run.
+
+A BLOCKED report (spec fork, missing decision, credential, external action) is not a failure:
+resolve the fork if it's yours, escalate via `set_step_status(blocked)` if it's the user's,
+then `next_step` again (it skips the blocked step). Mark the whole plan blocked only on
+`{all_blocked}`.
 
 ## Rules
 
