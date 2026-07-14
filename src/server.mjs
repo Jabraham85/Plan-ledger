@@ -18,12 +18,16 @@ import { Store, defaultDbPath } from './db.mjs';
 import { resolveRole } from './roles.mjs';
 import { buildPlanContext, buildProjectContext, groundSlice, stepTerms } from './context.mjs';
 import { extractRepo } from './extract.mjs';
+import { RagStore, defaultRagDbPath } from './rag/store.mjs';
+import { registerRagTools } from './rag/tools.mjs';
 
 const dbPath = defaultDbPath();
 const store = new Store(dbPath);
 store.checkpoint(); // trim any WAL left behind by a previous unclean exit
-process.on('SIGINT', () => { store.close(); process.exit(0); });
-process.on('exit', () => store.close());
+// RAG sidecar: own rag.db (never the precious ledger DB), same lifecycle discipline.
+const ragStore = new RagStore(defaultRagDbPath());
+process.on('SIGINT', () => { store.close(); ragStore.close(); process.exit(0); });
+process.on('exit', () => { store.close(); ragStore.close(); });
 
 const server = new McpServer({ name: 'plan-ledger', version: '0.1.0' });
 
@@ -622,6 +626,10 @@ tool('set_step_status', {
   };
   return slimStep(step);
 });
+
+// ---- RAG sidecar tools (§5) -----------------------------------------------
+
+registerRagTools(server, ragStore);
 
 // ---- boot -----------------------------------------------------------------
 

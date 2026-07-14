@@ -10,6 +10,8 @@ import { rmSync, writeFileSync } from 'node:fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const dbPath = join(tmpdir(), `plan-ledger-e2e-${process.pid}.db`);
+// The server's RAG sidecar must never open a real data/rag.db — pin it to a temp file.
+const ragDbPath = join(tmpdir(), `plan-ledger-e2e-rag-${process.pid}.db`);
 // Role-map fixture (PLAN_LEDGER_ROLES) so the server never reads the user's real
 // ~/.claude/plan-roles.json: implementer remapped to a built-in, off-role disabled.
 const rolesPath = join(tmpdir(), `plan-ledger-e2e-roles-${process.pid}.json`);
@@ -21,16 +23,19 @@ const check = (label, cond) => { console.log(`${label}:`, cond); assert.ok(cond,
 const transport = new StdioClientTransport({
   command: process.execPath,
   args: [join(__dirname, '..', 'src', 'server.mjs')],
-  env: { ...process.env, PLAN_LEDGER_DB: dbPath, PLAN_LEDGER_ROLES: rolesPath },
+  env: { ...process.env, PLAN_LEDGER_DB: dbPath, PLAN_LEDGER_ROLES: rolesPath, PLAN_LEDGER_RAG_DB: ragDbPath },
 });
 const client = new Client({ name: 'e2e', version: '0.0.0' });
 await client.connect(transport);
 
 const tools = (await client.listTools()).tools;
 console.log(`tools exposed: ${tools.length} -> ${tools.map((t) => t.name).join(', ')}`);
-check('tool count matches the registered surface', tools.length === 41);
+check('tool count matches the registered surface', tools.length === 47);
 check('retired tools are gone (set_ref_enabled, list_file_refs)',
   !tools.some((t) => t.name === 'set_ref_enabled' || t.name === 'list_file_refs'));
+// RAG sidecar surface (§5): all six tools registered on the same server.
+const ragTools = ['rag_ingest', 'rag_status', 'rag_query', 'rag_expand', 'rag_cite', 'rag_forget'];
+check('all six rag_* tools exposed', ragTools.every((n) => tools.some((t) => t.name === n)));
 
 const plan = parse(await client.callTool({ name: 'create_plan', arguments: { title: 'E2E plan', keywords: ['e2e'] } }));
 console.log('created plan', plan.id);
@@ -111,4 +116,7 @@ rmSync(rolesPath, { force: true });
 rmSync(dbPath, { force: true });
 rmSync(dbPath + '-wal', { force: true });
 rmSync(dbPath + '-shm', { force: true });
+rmSync(ragDbPath, { force: true });
+rmSync(ragDbPath + '-wal', { force: true });
+rmSync(ragDbPath + '-shm', { force: true });
 console.log('\nMCP e2e OK');
