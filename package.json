@@ -12,7 +12,8 @@
     "board": "node web/server.mjs",
     "orchestrate": "node scripts/runner.mjs",
     "build:exe": "node scripts/build-exe.mjs",
-    "test": "node test/smoke.mjs && node test/mcp-e2e.mjs",
+    "test": "node test/smoke.mjs && node test/rag.mjs && node test/mcp-e2e.mjs",
+    "test:rag": "node test/rag.mjs",
     "inspect": "npx @modelcontextprotocol/inspector node src/server.mjs"
   },
   "dependencies": {

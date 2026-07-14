@@ -1,0 +1,10 @@
+Field notes on the survey tool.
+
+The survey tool paints a heatmap of subsurface deposits before you commit to
+harvesting. A dense survey reading means a rich node is nearby; a faint reading
+means the deposit is thin or exhausted. Surveying costs a little energy but
+saves a lot of wasted swings on poor nodes.
+
+Deposit alignment matters. The survey heatmap and the actual harvest node must
+agree, or the whole gathering loop feels broken. Always trust a fresh survey
+over a stale one after the terrain has regenerated.
