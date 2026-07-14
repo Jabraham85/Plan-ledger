@@ -388,26 +388,31 @@ The tools ride the existing stdio server (`src/server.mjs`) — **zero new proce
 
 ## 9. Eval design (step 513 — proof gate for any "improvement")
 
-- **Fixture corpus** (`test/fixtures/rag/`, committed, no network at test time):
-  - `docs/` — 3 markdown files (~2k words each: one design-doc style, one runbook style, one FAQ style);
-  - `src/` — 3 `.mjs` source files (real code shapes: class, functions, comments);
-  - `site/` — 3 static HTML pages ingested from `file://`-style local fixture paths through the website extractor (extraction tested without network);
-  - `repo/` — built by the eval script into a temp dir: `git init` + 2 commits + 5 files (exercises the git ingester offline).
-- **Ground truth** (`test/fixtures/rag/golden.json`): ~15 entries `{query, relevant_chunks:["codename-N",…], relevant_span:{codename, first, last}}`, hand-marked after a pinned reference ingest (chunker params frozen in the file; changing chunker defaults requires re-marking — noted in the file header).
-- **Metrics:**
-  - `hit@3`, `hit@5` — fraction of queries with ≥ 1 relevant chunk in top k;
-  - **expansion precision** = |expanded ∩ relevant_span| / |expanded|;
-  - **expansion recall** = |expanded ∩ relevant_span| / |relevant_span|;
-  - payload tokens per query (the slimness budget, reported not gated).
-- **Variant table** (`npm run eval:rag` prints; numbers get committed back into this doc):
+- **Fixture corpus** (`test/fixtures/rag/`, committed, no network at test time; ingested as 4 codenames by `scripts/eval-rag.mjs`):
+  - `eval-corpus/docs/` — 3 markdown guides (gathering / crafting / combat), heading-sectioned → **15 chunks** (`eval-docs`);
+  - `eval-corpus/src/` — 3 `.mjs` source files (class + pure functions + comments) → **3 code chunks** (`eval-src`);
+  - `site/*.html` — 3 static HTML pages driven through the **real website extractor** with an injected fetch (no live network) → **3 chunks** (`eval-site`);
+  - a git repo the eval builds in a temp dir (`git init` + 2 commits + 5 tracked files + `include_log`) → **6 chunks** (`eval-repo`); removed in a `finally`.
+  - Total **27 chunks**. The corpus deliberately includes long, term-repetitive code chunks so a naive term-count ranker can be fooled where BM25 is not (see Q17/Q18).
+- **Ground truth** (`test/fixtures/rag/golden.json`): **18 entries** `{query, relevant:[anchor…], span:{first,last}, rationale}`. Labels are **content anchors** (distinctive substrings matched against whitespace-normalized chunk text), not raw `codename-N` — resilient to line-wrap and re-chunking; the eval asserts every anchor resolves to **exactly one** active chunk (a stale gold fails loudly). Hand-marked by reading the corpus, never by recording a ranker's output (non-circular); methodology is in the file's `_meta`.
+- **Metrics** (`npm run eval:rag`): `hit@1`/`hit@3`/`hit@5` (fraction of queries with ≥1 relevant chunk in top k); **expansion precision** = |expanded ∩ span| / |expanded| and **expansion recall** = |expanded ∩ span| / |span| (in the table these are END-TO-END: expansion seeded from each variant's own top hit, so they reward ranking + a well-bounded walk together); avg payload tokens per query (reported, not gated).
 
-| Variant | hit@3 | hit@5 | exp. precision | exp. recall | avg payload tok |
-|---|---|---|---|---|---|
-| term-count baseline | – | – | – | – | – |
-| JS BM25 | – | – | – | – | – |
-| FTS5 bm25 | – | – | – | – | – |
+### Measured results (step 513 — node v24.11.0, this machine, `npm run eval:rag`)
 
-- **Ship rule:** a variant ships only if it **beats or ties the baseline on hit@3** (tie → hit@5 → simpler implementation wins). Threshold/max_hops defaults are swept (`threshold ∈ {0.25, 0.35, 0.5}`, `max_hops ∈ {2,3,5}`) once, and the winning defaults are written into §4 and the code's exported const.
+| Variant | hit@1 | hit@3 | hit@5 | exp. precision | exp. recall | avg payload tok |
+|---|---|---|---|---|---|---|
+| term-count baseline | 88.9% | 100.0% | 100.0% | 0.69 | 0.83 | 256 |
+| JS BM25 | 94.4% | 100.0% | 100.0% | 0.75 | 0.94 | 226 |
+| **FTS5 bm25 (shipped default)** | **94.4%** | **100.0%** | **100.0%** | **0.75** | **0.94** | **226** |
+
+n = 18 golden queries — **indicative, not conclusive** (one query ≈ 5.6 pp).
+
+**What the numbers say.** hit@3/@5 **saturate at 100%** for all three variants — on a 27-chunk corpus every answer is within the top 5 regardless of ranker, so hit@3 (the gate metric) cannot separate them here. The separation shows at **hit@1** and in **expansion**: both BM25 rankers beat the term-count baseline on hit@1 (94.4% vs 88.9%), expansion precision (0.75 vs 0.69), expansion recall (0.94 vs 0.83), **and** payload economy (226 vs 256 est. tokens/query — slimmer *and* more accurate). The two baseline misses at hit@1 are the deliberate discriminators Q17/Q18, where a long, term-repetitive code chunk out-counts the correct prose; term-count (no IDF, no length normalization) ranks the code first, BM25 ranks the prose first. **FTS5 and JS BM25 are identical on every metric** — on this corpus their tokenizers (`unicode61` vs the house `tokenize`) never reorder a result; the quantified FTS5-vs-JS difference is **0** here.
+
+- **Ranker that ships: FTS5 BM25 default, JS BM25 as the mandatory fallback.** Justification from the numbers + the design: FTS5 ties JS exactly and both **beat-or-tie** the baseline on the gate metric (hit@3) while **winning** on hit@1 and expansion — so BM25 earns its place over naive counting. FTS5 is the default (native `bm25()` + `snippet()`, scales to large corpora, §3) and JS is kept as the required fallback because `node:sqlite` FTS5 is flagged experimental (§3 gotcha c). The eval selects the shipped ranker as `fts5` when the `CREATE VIRTUAL TABLE` probe succeeds at open, else `js`; both are exercised by `RAG_RANKER` in `test/rag.mjs`.
+- **Ship gate (enforced, exit-non-zero):** shipped hit@3 must be **≥ 0.60 floor** *and* **≥ the term-count baseline's hit@3**, else `npm run eval:rag` exits 1. Verified red: reversing the FTS ranker's sort drops shipped hit@3 to 16.7% and the gate fails with a named message; a stale gold anchor aborts on the exactly-one-chunk assertion.
+- **Expansion threshold/max_hops sweep** (`threshold ∈ {0.25,0.35,0.5}` × `max_hops ∈ {2,3,5}`, ranker-independent, seeded from the gold span): **recall is saturated at 1.00 at every setting** (the fixture spans are tight by construction), so the sweep sees only precision — 0.5 scores highest precision (0.91) but the sweep is **structurally blind** to the under-expansion (recall-loss) a higher threshold would cause on a real corpus. **Decision: keep the shipped defaults `threshold=0.35, max_hops=3` (§4) unchanged** — raising them to the fixture's precision-max would be over-fitting n=18. Revisit only when a larger golden set shows recall headroom (recall < 1.0 at the current default) that a tighter walk preserves.
+- **Honest limitations:** (1) n=18 and 27 chunks is small — a real corpus of thousands of chunks is where IDF and FTS5's native `bm25()` matter most, and this fixture undersamples that regime; treat all numbers as indicative. (2) hit@3 saturation means the gate has little headroom on this corpus — it will catch a gross ranking regression (proven) but not a subtle one; hit@1 and expansion precision are the sensitive metrics and are printed for exactly that reason. (3) No golden query is missed by all variants (no corpus/gold gap surfaced); the eval prints such gaps when they occur. (4) Expansion within a folder/git source walks by contiguous `seq`, which crosses `doc_path` boundaries inside one codename — visible as the sub-1.0 end-to-end precision on Q3/Q15/Q16 where a walk bled into an adjacent file; flagged as a design observation, not a gate failure.
 
 ---
 
