@@ -4,50 +4,83 @@
 // Every result carries a `directive` string suggesting the recursive next move,
 // mirroring the ledger's next_step/record_attempt directive pattern.
 //
-// STEP-511 SCOPE: rag_ingest handles source types 'file' and 'folder' only. The
-// git/website/wiki ingesters land in step 512 and return an explicit not-yet error.
+// rag_ingest dispatches by detected/declared source type across all four ingesters:
+//   file/folder (fs, sync) · git (spawnSync, sync) · website/wiki (fetch, async).
+// registerRagTools accepts optional deps ({ fetchImpl }) so tests drive the network
+// ingesters against local fixtures with zero live traffic; production uses global fetch.
 
 import { z } from 'zod';
-import { statSync } from 'node:fs';
+import { statSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { tokenize } from '../db.mjs';
 import { ingestFs } from './ingest/fs.mjs';
+import { ingestGit, isGitUrl } from './ingest/git.mjs';
+import { ingestWeb } from './ingest/web.mjs';
+import { ingestWiki } from './ingest/wiki.mjs';
 import { slug } from './store.mjs';
 import { makeRanker } from './rank.mjs';
 import { makeIdf, expandRun, EXPAND_DEFAULTS } from './expand.mjs';
 
-// Same ok/try-catch envelope as server.mjs's tool() helper, bound to the passed server.
+// Same ok/try-catch envelope as server.mjs's tool() helper, bound to the passed
+// server. Thenable-aware: sync tools return a plain envelope (unchanged); async
+// tools (website/wiki ingest) return a promise the SDK awaits.
 function makeTool(server) {
   const ok = (data) => ({ content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] });
+  const err = (e) => ({ content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true });
   return (name, cfg, fn) =>
     server.registerTool(name, cfg, (args) => {
-      try { return ok(fn(args ?? {})); }
-      catch (e) { return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true }; }
+      try {
+        const out = fn(args ?? {});
+        return out && typeof out.then === 'function' ? out.then(ok, err) : ok(out);
+      } catch (e) { return err(e); }
     });
 }
 
-// Auto-detect the source type from a locator. Only file/folder are handled this step.
+// Auto-detect the source type from a locator (§5 rag_ingest doc).
 function detectType(source, explicit) {
   if (explicit) return explicit;
-  if (/\.git$/i.test(source)) return 'git';                       // git URL or local *.git
+  if (/\.git$/i.test(source) || isGitUrl(source)) {
+    // A git URL always clones; an http(s) URL that isn't a git remote is a site/wiki.
+    if (isGitUrl(source) && !/^https?:\/\//i.test(source)) return 'git';
+    if (/\.git$/i.test(source)) return 'git';
+  }
   if (/^https?:\/\//i.test(source)) return /\/api\.php/i.test(source) ? 'wiki' : 'website';
   try {
     const st = statSync(source);
-    return st.isDirectory() ? 'folder' : 'file';
+    if (st.isDirectory()) return existsSync(join(source, '.git')) ? 'git' : 'folder'; // §5: a dir with .git → git
+    return 'file';
   } catch {
     throw new Error(`source not found and not a URL: ${source}`);
   }
 }
 
-export function registerRagTools(server, store) {
+// Best-effort codename from a URL or git remote/path when the caller passes none.
+// github.com/u/repo.git -> repo ; https://ex.org/docs/ -> ex-org-docs ; else last segment.
+function codenameFromRoot(root) {
+  const s = String(root ?? '');
+  const gm = s.match(/([^/\\:]+?)(?:\.git)?\/?$/);
+  const gitTail = gm && /\.git\/?$|^(https?|git|ssh):/i.test(s) ? gm[1] : null;
+  if (gitTail && /[.:@]/.test(s) && !/^https?:\/\//i.test(s)) return gitTail; // scp-like / git URL
+  try {
+    const u = new URL(s);
+    const segs = u.pathname.split('/').filter(Boolean);
+    const last = segs.length ? segs[segs.length - 1].replace(/\.git$/i, '') : u.hostname;
+    return segs.length ? last : u.hostname;
+  } catch { /* not a URL */ }
+  return gitTail || s.split(/[\\/]/).filter(Boolean).pop() || 'source';
+}
+
+export function registerRagTools(server, store, deps = {}) {
   const tool = makeTool(server);
 
   tool('rag_ingest', {
     title: 'Ingest a source into codename-N chunks',
     description:
       'Scrub a source into deterministic codename-N chunks with exact back-pointing locators. ' +
-      'Type auto-detected from `source` (existing file → file; existing dir → folder). ' +
-      'STEP 511: only file/folder are supported; git/website/wiki arrive in step 512. ' +
-      'Re-ingesting the same codename supersedes the old version but keeps its chunks resolvable for one generation.',
+      'Type auto-detected from `source`: existing file → file; existing dir → folder (or git if it ' +
+      'holds a .git); *.git or a git URL → git (shallow clone if remote); http(s) URL → website, or ' +
+      'wiki when its /api.php answers. Re-ingesting the same codename supersedes the old version but ' +
+      'keeps its chunks resolvable for one generation.',
     inputSchema: {
       source: z.string().describe('path or URL'),
       codename: z.string().regex(/^[a-z0-9][a-z0-9-]*$/).optional(),
@@ -66,18 +99,33 @@ export function registerRagTools(server, store) {
     },
   }, ({ source, codename, type, options = {} }) => {
     const t = detectType(source, type);
-    if (t === 'git' || t === 'website' || t === 'wiki') {
-      throw new Error(`source type '${t}' is not yet implemented — step 512 (file and folder are supported now)`);
-    }
-    const res = ingestFs(source, options);
-    const code = codename || slug(res.root.split(/[\\/]/).filter(Boolean).pop() || 'source');
-    if (!code) throw new Error('could not derive a codename from the source; pass an explicit codename');
-    const summary = store.ingestDocs({ codename: code, type: res.type, root: res.root, options, docs: res.docs, skipLog: res.skipLog });
-    return {
-      ...summary,
-      directive: `Ingested ${summary.chunks} chunks as '${code}' (v${summary.version}). ` +
-        `Query it: rag_query {query:"<2-5 terms>", codenames:["${code}"]}. Cite chunk ids in your output.`,
+
+    // Persist an ingester result (any type) into a new codename version and shape the
+    // tool payload. res carries docs + skipLog + (optionally) a source-specific
+    // makeLocator for the §1 non-file locator grammars.
+    const finish = (res) => {
+      const derived = (res.type === 'git' || res.type === 'website' || res.type === 'wiki')
+        ? codenameFromRoot(res.root)
+        : (res.root.split(/[\\/]/).filter(Boolean).pop() || 'source');
+      const code = codename || slug(derived);
+      if (!code) throw new Error('could not derive a codename from the source; pass an explicit codename');
+      const summary = store.ingestDocs({
+        codename: code, type: res.type, root: res.root, options,
+        docs: res.docs, skipLog: res.skipLog, makeLocator: res.makeLocator || null,
+      });
+      return {
+        ...summary,
+        directive: `Ingested ${summary.chunks} chunks as '${code}' (v${summary.version}). ` +
+          `Query it: rag_query {query:"<2-5 terms>", codenames:["${code}"]}. Cite chunk ids in your output.`,
+      };
     };
+
+    // Website/wiki are async (fetch); file/folder/git are synchronous. Returning the
+    // promise lets makeTool await it while the sync branches stay sync.
+    if (t === 'website') return ingestWeb(source, options, deps).then(finish);
+    if (t === 'wiki') return ingestWiki(source, options, deps).then(finish);
+    if (t === 'git') return finish(ingestGit(source, options, deps));
+    return finish(ingestFs(source, options));
   });
 
   tool('rag_status', {
