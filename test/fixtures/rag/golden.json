@@ -1,0 +1,163 @@
+{
+  "_meta": {
+    "purpose": "Ground-truth query -> relevant-chunk labels for the RAG eval (design §9). Consumed by scripts/eval-rag.mjs.",
+    "corpus": "test/fixtures/rag/eval-corpus/{docs,src} (folder ingest), test/fixtures/rag/site/*.html (website extractor, offline), plus a temp git repo the eval builds with pinned content. Ingested under codenames eval-docs, eval-src, eval-site, eval-repo.",
+    "labeling_method": [
+      "Labels were hand-marked by READING the corpus and identifying which chunk(s) actually contain the answer to a hand-written question — NOT by running any ranker and recording its output. This keeps the gold non-circular: it is derived from content, never from a system-under-test.",
+      "Each label is a CONTENT ANCHOR: a distinctive substring that must appear in exactly one chunk. The eval matches anchors against a whitespace-normalized copy of each chunk's text (collapsing newlines/indent), so an anchor survives source line-wrapping AND is resilient to re-chunking as long as the phrase stays within one chunk. The eval asserts every anchor resolves to EXACTLY ONE active chunk; a stale anchor fails the run loudly.",
+      "'relevant' lists every chunk that genuinely answers the query (often more than one, across sources) — hit@k counts a hit if ANY of them lands in the top k. This is deliberately lenient toward correct-but-alternative sources; it never inflates a single ranker.",
+      "'span' marks the contiguous run of chunks the neighbor-expansion rule should reconstruct for that query (first..last within ONE source). Single-chunk answers have first==last. Only Q5 spans two adjacent chunks (Damage Types + Armor Tiers) — used to measure expansion recall across a real section boundary.",
+      "Queries use natural question vocabulary a user would type; the terms naturally co-occur with the answer chunk. That is normal for retrieval eval and is not circular — circularity would be picking the label from a ranker's result, which was not done."
+    ],
+    "frozen_against": "Chunker defaults MIN=100/TARGET=400/MAX=600 (src/rag/chunker.mjs CHUNK_DEFAULTS). Changing those defaults can move chunk boundaries and requires re-checking anchors (the eval's exactly-one-chunk assertion catches breakage).",
+    "n": 18,
+    "discriminators": "Q17 and Q18 are deliberate ranking discriminators: their answer lives ONLY in prose, yet a repetitive long code chunk (quality.mjs / harvest.mjs) has a higher RAW query-term count. A term-count baseline (no IDF, no length normalization) ranks the code chunk first and misses hit@1; both BM25 rankers rank the prose first. They give the eval the power to separate the variants — without them every query saturates.",
+    "honesty": "n is small (18) — treat every metric as INDICATIVE, not conclusive. A single query moving is ~5.6 percentage points."
+  },
+  "queries": [
+    {
+      "id": "Q1",
+      "query": "how does the yield modifier scale with node richness",
+      "relevant": [
+        "yield modifier stacks additively from the tool tier and multiplicatively from the node richness",
+        "The yield modifier multiplies base resource output"
+      ],
+      "span": { "first": "yield modifier stacks additively from the tool tier and multiplicatively from the node richness", "last": "yield modifier stacks additively from the tool tier and multiplicatively from the node richness" },
+      "rationale": "The gathering guide's Yield Modifier section states the additive/multiplicative stacking rule; the site's Yield details page states the same relationship. Both are correct answers."
+    },
+    {
+      "id": "Q2",
+      "query": "what are the five resource quality tiers named",
+      "relevant": [
+        "crude, common, fine, pristine, and flawless",
+        "QUALITY_TIERS lists the five named tiers"
+      ],
+      "span": { "first": "crude, common, fine, pristine, and flawless", "last": "crude, common, fine, pristine, and flawless" },
+      "rationale": "The Resource Quality Tiers section enumerates the five tiers in prose; quality.mjs encodes the same list in code. IDF test: 'pristine'/'flawless' are rare discriminating terms."
+    },
+    {
+      "id": "Q3",
+      "query": "why do crafters pay a premium for high quality stock",
+      "relevant": ["crafters pay a steep premium for pristine and flawless"],
+      "span": { "first": "crafters pay a steep premium for pristine and flawless", "last": "crafters pay a steep premium for pristine and flawless" },
+      "rationale": "The Market Premium chunk is the only one that explains the premium mechanism and the gatherer-crafter loop it closes."
+    },
+    {
+      "id": "Q4",
+      "query": "parry timing window before a guard break",
+      "relevant": ["the parry window opens for a few frames"],
+      "span": { "first": "the parry window opens for a few frames", "last": "the parry window opens for a few frames" },
+      "rationale": "Parry And Guard Break is the only chunk defining the parry window and the riposte."
+    },
+    {
+      "id": "Q5",
+      "query": "which damage type does heavy plate armor resist and which defeats it",
+      "relevant": [
+        "Attacks deal one of three damage types: slash, pierce, and crush",
+        "heavy armor is rigid plate that stops slash and pierce cold but transmits crush"
+      ],
+      "span": { "first": "Attacks deal one of three damage types: slash, pierce, and crush", "last": "heavy armor is rigid plate that stops slash and pierce cold but transmits crush" },
+      "rationale": "The answer legitimately spans two consecutive sections: Damage Types defines the three types, Armor Tiers states heavy plate stops slash+pierce but takes crush. Multi-chunk span for expansion recall across a section boundary."
+    },
+    {
+      "id": "Q6",
+      "query": "dodge roll invincibility frames beat an unblockable grab",
+      "relevant": ["The dodge roll grants invincibility frames"],
+      "span": { "first": "The dodge roll grants invincibility frames", "last": "The dodge roll grants invincibility frames" },
+      "rationale": "Dodge And Invincibility Frames is the only chunk describing i-frames beating an unblockable grab."
+    },
+    {
+      "id": "Q7",
+      "query": "what happens when poise breaks during a stagger",
+      "relevant": ["once poise breaks the victim is locked in a stagger animation"],
+      "span": { "first": "once poise breaks the victim is locked in a stagger animation", "last": "once poise breaks the victim is locked in a stagger animation" },
+      "rationale": "Stamina And Poise is the only chunk defining the stagger-on-poise-break rule."
+    },
+    {
+      "id": "Q8",
+      "query": "how does input resource quality propagate into the crafted output",
+      "relevant": ["the resource quality of the inputs carries forward into the crafted output"],
+      "span": { "first": "the resource quality of the inputs carries forward into the crafted output", "last": "the resource quality of the inputs carries forward into the crafted output" },
+      "rationale": "Quality Propagation is the defining chunk for the input->output quality rule."
+    },
+    {
+      "id": "Q9",
+      "query": "does the player character level change gathering yield",
+      "relevant": ["Yield never depends on the player character level directly"],
+      "span": { "first": "Yield never depends on the player character level directly", "last": "Yield never depends on the player character level directly" },
+      "rationale": "Vocabulary/negation test: the Yield Modifier chunk explicitly answers (yield does NOT depend on level). Same chunk as Q1, different query intent — flagged as a likely hard case."
+    },
+    {
+      "id": "Q10",
+      "query": "upgrade cost in credits and refined ingots per tier",
+      "relevant": [
+        "Upgrading the harvester consumes credits and refined ingots at every tier",
+        "upgradeCost is the primary credit SINK"
+      ],
+      "span": { "first": "Upgrading the harvester consumes credits and refined ingots at every tier", "last": "Upgrading the harvester consumes credits and refined ingots at every tier" },
+      "rationale": "The Upgrade Path prose and the economy.mjs upgradeCost function both answer the cost question."
+    },
+    {
+      "id": "Q11",
+      "query": "function that clamps a computed yield between a minimum and maximum",
+      "relevant": ["clampYield constrains a computed yield to the sane"],
+      "span": { "first": "clampYield constrains a computed yield to the sane", "last": "clampYield constrains a computed yield to the sane" },
+      "rationale": "Code query: harvest.mjs defines clampYield. The whole file is one code chunk."
+    },
+    {
+      "id": "Q12",
+      "query": "map a random roll to one of the quality bands",
+      "relevant": ["bandForRoll maps a random roll"],
+      "span": { "first": "bandForRoll maps a random roll", "last": "bandForRoll maps a random roll" },
+      "rationale": "Code query: quality.mjs defines bandForRoll (roll -> tier)."
+    },
+    {
+      "id": "Q13",
+      "query": "primary credit sink that drains the economy on tool upgrades",
+      "relevant": ["upgradeCost is the primary credit SINK"],
+      "span": { "first": "upgradeCost is the primary credit SINK", "last": "upgradeCost is the primary credit SINK" },
+      "rationale": "Code query: economy.mjs upgradeCost is documented as the primary credit sink."
+    },
+    {
+      "id": "Q14",
+      "query": "install the survey tool from the release",
+      "relevant": ["Install the survey tool by downloading the release"],
+      "span": { "first": "Install the survey tool by downloading the release", "last": "Install the survey tool by downloading the release" },
+      "rationale": "Website ingest: the Installation page (page-a.html) carries the install steps and the survey --install command."
+    },
+    {
+      "id": "Q15",
+      "query": "refinery pipeline converts ore into ingots",
+      "relevant": [
+        "The refinery pipeline converts raw ore into refined ingots",
+        "The refinement pipeline runs three ordered stages"
+      ],
+      "span": { "first": "The refinery pipeline converts raw ore into refined ingots", "last": "The refinery pipeline converts raw ore into refined ingots" },
+      "rationale": "Git ingest: the repo README states the pipeline's purpose; docs/pipeline.md lists its stages. Both answer."
+    },
+    {
+      "id": "Q16",
+      "query": "what did the second commit add to the refinery",
+      "relevant": [
+        "Added the dedicated smelting stage module and this changelog",
+        "add smelting stage module and changelog"
+      ],
+      "span": { "first": "Added the dedicated smelting stage module and this changelog", "last": "Added the dedicated smelting stage module and this changelog" },
+      "rationale": "Git ingest with include_log: the CHANGELOG chunk and the synthetic _commits doc both record the second commit's additions."
+    },
+    {
+      "id": "Q17",
+      "query": "what does resource quality mean when rolling a harvest",
+      "relevant": ["Resource quality is rolled per harvest across five named tiers"],
+      "span": { "first": "Resource quality is rolled per harvest across five named tiers", "last": "Resource quality is rolled per harvest across five named tiers" },
+      "rationale": "DISCRIMINATOR. The prose (Resource Quality Tiers) explains the per-harvest roll against the node's quality band. quality.mjs merely lists the tier names but repeats 'quality'/'tiers'/'resource' enough that a term-count baseline ranks it #1 and misses the prose at hit@1; both BM25 rankers (IDF + length-normalized) rank the prose #1. The code chunk is NOT the meaning-answer, so it is deliberately not marked relevant."
+    },
+    {
+      "id": "Q18",
+      "query": "a tier-three harvester on a rich node returns more ore per swing",
+      "relevant": ["a tier-three harvester on a rich node returns far more ore per swing"],
+      "span": { "first": "a tier-three harvester on a rich node returns far more ore per swing", "last": "a tier-three harvester on a rich node returns far more ore per swing" },
+      "rationale": "DISCRIMINATOR. The exact scaling claim is stated in the Yield Modifier prose. harvest.mjs computes yield from tier and richness and repeats those tokens, so a term-count baseline ranks the code chunk #1 and misses the prose at hit@1; both BM25 rankers rank the prose #1. The code is not the stated-claim answer and is not marked relevant."
+    }
+  ]
+}
