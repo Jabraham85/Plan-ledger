@@ -1,0 +1,6 @@
+{
+  "name": "plan-ledger",
+  "description": "External working memory for Claude. Slash commands + a loop-discipline skill over the plan-ledger MCP server: surface-indexed plans, per-step context, carry-forward notes, and a failure log so past pitfalls aren't repeated.",
+  "version": "0.1.0",
+  "author": "chavocan"
+}

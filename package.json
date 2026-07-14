@@ -1,0 +1,28 @@
+{
+  "name": "plan-ledger",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "External working memory + plan graph for Claude, exposed over MCP. Plans are surface-indexed (title + keywords) and lazily opened; each step carries its own context, acceptance criteria, carry-forward notes, and a failure log.",
+  "bin": {
+    "plan-ledger": "src/server.mjs"
+  },
+  "scripts": {
+    "start": "node src/server.mjs",
+    "board": "node web/server.mjs",
+    "orchestrate": "node scripts/runner.mjs",
+    "build:exe": "node scripts/build-exe.mjs",
+    "test": "node test/smoke.mjs && node test/mcp-e2e.mjs",
+    "inspect": "npx @modelcontextprotocol/inspector node src/server.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.1",
+    "postject": "^1.0.0-alpha.6"
+  }
+}

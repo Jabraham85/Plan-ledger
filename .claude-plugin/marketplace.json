@@ -1,0 +1,14 @@
+{
+  "name": "plan-ledger-marketplace",
+  "owner": { "name": "chavocan" },
+  "metadata": {
+    "description": "Local marketplace hosting the plan-ledger plugin."
+  },
+  "plugins": [
+    {
+      "name": "plan-ledger",
+      "source": "./plugin",
+      "description": "External working memory for Claude: /plan commands + a loop-discipline skill over the plan-ledger MCP server."
+    }
+  ]
+}

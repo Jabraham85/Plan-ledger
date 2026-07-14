@@ -1,0 +1,751 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>plan-ledger</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel2: #1d212b; --line: #2a2f3a;
+    --txt: #e6e9ef; --muted: #8a93a6; --faint: #5b6474;
+    --accent: #6ea8fe; --accent-dim: #2b3a55;
+    --done: #4ade80; --prog: #6ea8fe; --pending: #6b7280; --fail: #f87171;
+    --blocked: #fbbf24; --skip: #545b6b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg); color: var(--txt);
+    font: 14px/1.5 ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+    display: flex; flex-direction: column; height: 100vh;
+  }
+  header {
+    display: flex; align-items: center; gap: 14px;
+    padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel);
+  }
+  header h1 { font-size: 15px; margin: 0; letter-spacing: .3px; font-weight: 650; }
+  header h1 span { color: var(--accent); }
+  header .sub { color: var(--faint); font-size: 12px; }
+  #projectSel { background: var(--panel2); color: var(--txt); border: 1px solid var(--line); border-radius: 7px; padding: 4px 8px; font: inherit; font-size: 12.5px; max-width: 220px; }
+  #projectSel:hover { border-color: var(--accent-dim); }
+  header .spacer { flex: 1; }
+  button {
+    background: var(--panel2); color: var(--txt); border: 1px solid var(--line);
+    border-radius: 7px; padding: 5px 11px; cursor: pointer; font-size: 12.5px;
+  }
+  button:hover { border-color: var(--accent-dim); color: #fff; }
+  label.auto { color: var(--muted); font-size: 12px; display: flex; gap: 6px; align-items: center; cursor: pointer; }
+
+  .cols { display: grid; grid-template-columns: 300px 360px 1fr; flex: 1; min-height: 0; }
+  .col { overflow-y: auto; border-right: 1px solid var(--line); padding: 12px; }
+  .col:last-child { border-right: 0; }
+  .col h2 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .12em;
+    color: var(--faint); margin: 2px 0 12px; font-weight: 600;
+  }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 9px;
+    padding: 11px 12px; margin-bottom: 9px; cursor: pointer; transition: border-color .12s;
+  }
+  .card:hover { border-color: var(--accent-dim); }
+  .card.sel { border-color: var(--accent); background: var(--panel2); }
+  .card.live { border-color: var(--prog); box-shadow: 0 0 0 1px var(--accent-dim); }
+  .livewrap { display: inline-flex; align-items: center; gap: 2px; }
+  .livedot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #f87171; margin-right: 6px; vertical-align: middle; animation: livepulse 1.3s ease-in-out infinite; }
+  .livedot.off { background: var(--faint); animation: none; }
+  @keyframes livepulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(248,113,113,.55); } 50% { box-shadow: 0 0 0 5px rgba(248,113,113,0); } }
+  .card .title { font-weight: 600; margin-bottom: 7px; }
+  .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+  .badge {
+    font-size: 10.5px; padding: 2px 8px; border-radius: 999px; font-weight: 600;
+    text-transform: capitalize; border: 1px solid transparent; white-space: nowrap;
+  }
+  .b-draft,.b-pending { background: #21262f; color: var(--pending); border-color: #2f3643; }
+  .b-active,.b-in_progress { background: #16273f; color: var(--prog); border-color: #244067; }
+  .b-done { background: #14301f; color: var(--done); border-color: #1f5236; }
+  .b-failed,.b-abandoned { background: #371a1a; color: var(--fail); border-color: #5a2727; }
+  .b-blocked { background: #352a10; color: var(--blocked); border-color: #5c4715; }
+  .b-skipped { background: #23262d; color: var(--skip); border-color: #333845; }
+
+  .chips { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px; }
+  .chip { font-size: 11px; color: var(--muted); background: var(--panel2);
+          border: 1px solid var(--line); border-radius: 6px; padding: 1px 7px; }
+
+  .prog { height: 5px; background: #20242e; border-radius: 99px; margin-top: 9px; overflow: hidden; }
+  .prog > i { display: block; height: 100%; background: var(--done); border-radius: 99px; }
+  .prog.big { height: 7px; }
+  .steplbl { font-size: 10.5px; text-transform: uppercase; letter-spacing: .11em; color: var(--accent); opacity: .85; font-weight: 700; margin-bottom: 9px; }
+  .meta { color: var(--faint); font-size: 11.5px; margin-top: 7px; }
+
+  /* step index */
+  .step {
+    display: flex; align-items: center; gap: 9px; padding: 9px 10px; border-radius: 8px;
+    cursor: pointer; border: 1px solid transparent;
+  }
+  .step:hover { background: var(--panel); }
+  .step.sel { background: var(--panel2); border-color: var(--accent); }
+  .step .ix { color: var(--faint); font-variant-numeric: tabular-nums; width: 18px; text-align: right; }
+  .step .nm { flex: 1; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .d-done { background: var(--done); } .d-in_progress { background: var(--prog); }
+  .d-pending { background: var(--pending); } .d-failed { background: var(--fail); }
+  .d-blocked { background: var(--blocked); } .d-skipped { background: var(--skip); }
+
+  .summary { color: #c2c9d6; margin-bottom: 6px; font-size: 13px; line-height: 1.58; }
+  .summary.clamp { max-height: 200px; overflow: hidden; position: relative; }
+  .summary.clamp.open { max-height: none; }
+  .summary.clamp:not(.open)::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 46px; background: linear-gradient(transparent, var(--bg)); pointer-events: none; }
+  .moreBtn { background: none; border: 0; color: var(--accent); font-size: 12px; padding: 2px 0; cursor: pointer; margin-bottom: 12px; }
+  .moreBtn:hover { text-decoration: underline; }
+
+  /* detail */
+  .detail h3 { margin: 0 0 4px; font-size: 17px; }
+  .section { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+  .section > .lbl {
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: .11em; color: var(--accent);
+    opacity: .85; margin-bottom: 8px; font-weight: 700;
+  }
+  .body {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 9px;
+    padding: 12px 14px; white-space: pre-wrap; color: #cfd5e1; font-size: 13px; line-height: 1.58;
+  }
+  /* structured (markdown-lite) body content */
+  .md { white-space: normal; }
+  .md p { margin: 0 0 9px; } .md p:last-child { margin-bottom: 0; }
+  .md ol, .md ul { margin: 6px 0 10px; padding-left: 20px; }
+  .md li { margin: 4px 0; padding-left: 2px; }
+  .md ol li::marker { color: var(--accent); font-weight: 700; }
+  .md code { background: #0d1017; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; font-size: 12px; color: #e6c07b; }
+  .md b { color: #eef1f6; }
+  .mdlabel { display: inline-block; color: var(--accent); font-weight: 700; font-size: 11px; letter-spacing: .06em; margin-bottom: 2px; }
+  .body.cf { border-color: #244067; background: #131c2b; }
+  .attempt {
+    border: 1px solid var(--line); border-left-width: 3px; border-radius: 8px;
+    padding: 9px 12px; margin-bottom: 8px; background: var(--panel);
+  }
+  .attempt.v-fail { border-left-color: var(--fail); }
+  .attempt.v-pass { border-left-color: var(--done); }
+  .attempt.v-partial { border-left-color: var(--blocked); }
+  .attempt .what { font-weight: 600; margin-bottom: 3px; }
+  .attempt .res { color: var(--muted); font-size: 12.5px; white-space: pre-wrap; }
+  .attempt .ts { color: var(--faint); font-size: 11px; margin-top: 4px; }
+  .link { font-size: 12.5px; color: var(--accent); }
+  .empty { color: var(--faint); padding: 28px 4px; text-align: center; font-size: 13px; }
+  .err { color: var(--fail); }
+
+  /* copy button */
+  .copybtn { font-size: 12px; padding: 4px 10px; }
+  .copybtn.ok { border-color: var(--done); color: var(--done); }
+
+  /* toast */
+  #toast {
+    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+    background: var(--panel2); border: 1px solid var(--accent-dim); color: var(--txt);
+    padding: 9px 16px; border-radius: 9px; font-size: 13px; opacity: 0;
+    transition: opacity .2s; pointer-events: none; z-index: 50;
+  }
+  #toast.show { opacity: 1; }
+
+  /* overlay / refs manager */
+  #overlay, #planOverlay, #fileModal {
+    position: fixed; inset: 0; background: rgba(0,0,0,.55); display: none;
+    align-items: flex-start; justify-content: center; z-index: 40; padding: 6vh 16px;
+  }
+  #overlay.show, #planOverlay.show, #fileModal.show { display: flex; }
+  .fileref { display: flex; align-items: center; gap: 8px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 5px; cursor: pointer; background: var(--panel); }
+  .fileref:hover { border-color: var(--accent-dim); }
+  .fileref .fpath { font-size: 12px; color: #cfd5e1; flex: 1; word-break: break-all; }
+  .fileref .fnote { font-size: 11.5px; color: var(--muted); }
+  .frole { font-size: 9.5px; text-transform: uppercase; letter-spacing: .06em; padding: 1px 6px; border-radius: 5px; font-weight: 700; flex: none; }
+  .r-primary { background: #16273f; color: var(--prog); } .r-dependency { background: #371a1a; color: var(--fail); }
+  .r-related { background: #14301f; color: var(--done); } .r-reference { background: #21262f; color: var(--muted); }
+  .ctl { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 6px; }
+  .ctl select.f, .ctl input.f { max-width: 150px; }
+  .miniform { display: grid; gap: 6px; margin-top: 8px; padding: 10px; border: 1px dashed var(--line); border-radius: 9px; }
+  .miniform.hidden { display: none; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    width: min(640px, 100%); max-height: 84vh; overflow-y: auto; padding: 18px 20px;
+  }
+  .panel .head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .panel .head h2 { font-size: 15px; margin: 0; }
+  .panel .head .spacer { flex: 1; }
+  .panel .hint { color: var(--muted); font-size: 12.5px; margin-bottom: 14px; }
+  .refgroup { margin-top: 14px; }
+  .refgroup > .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--faint); margin-bottom: 8px; }
+  .ref {
+    display: flex; align-items: flex-start; gap: 11px; padding: 9px 11px; border: 1px solid var(--line);
+    border-radius: 9px; margin-bottom: 7px; background: var(--panel2);
+  }
+  .ref .meta2 { flex: 1; min-width: 0; }
+  .ref .nm { font-weight: 600; }
+  .ref .bd { color: var(--muted); font-size: 12.5px; margin-top: 2px; white-space: pre-wrap; }
+  .ref.off { opacity: .5; }
+  .ref .del { color: var(--faint); cursor: pointer; border: 0; background: none; font-size: 15px; padding: 0 2px; }
+  .ref .del:hover { color: var(--fail); }
+  .ref .scope { font-size: 10.5px; color: var(--faint); }
+
+  /* toggle switch */
+  .switch { position: relative; width: 38px; height: 21px; flex: none; cursor: pointer; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider { position: absolute; inset: 0; background: #2c313c; border-radius: 999px; transition: .15s; }
+  .slider::before { content: ''; position: absolute; height: 15px; width: 15px; left: 3px; top: 3px; background: #8a93a6; border-radius: 50%; transition: .15s; }
+  .switch input:checked + .slider { background: var(--accent-dim); }
+  .switch input:checked + .slider::before { transform: translateX(17px); background: var(--accent); }
+
+  .form { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 14px; display: grid; gap: 8px; }
+  .form .row2 { display: flex; gap: 8px; }
+  input.f, textarea.f, select.f {
+    background: var(--panel2); border: 1px solid var(--line); color: var(--txt);
+    border-radius: 7px; padding: 7px 9px; font: inherit; font-size: 13px; width: 100%;
+  }
+  textarea.f { resize: vertical; min-height: 46px; }
+  button.primary { background: var(--accent-dim); border-color: var(--accent); color: #fff; }
+
+  /* recall search */
+  .searchwrap { position: relative; }
+  #search {
+    background: var(--panel2); border: 1px solid var(--line); color: var(--txt);
+    border-radius: 7px; padding: 5px 10px; font: inherit; font-size: 12.5px; width: 230px;
+  }
+  #search:focus { border-color: var(--accent-dim); outline: none; }
+  #searchResults {
+    position: absolute; top: 32px; right: 0; width: 460px; max-height: 60vh; overflow-y: auto;
+    background: var(--panel); border: 1px solid var(--accent-dim); border-radius: 10px;
+    z-index: 45; padding: 6px; display: none; box-shadow: 0 8px 28px rgba(0,0,0,.45);
+  }
+  #searchResults.show { display: block; }
+  .hit { padding: 8px 10px; border-radius: 7px; cursor: pointer; border: 1px solid transparent; }
+  .hit:hover { background: var(--panel2); border-color: var(--line); }
+  .hit .top { display: flex; gap: 7px; align-items: center; }
+  .hit .ty { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); font-weight: 700; }
+  .hit .tt { font-weight: 600; flex: 1; }
+  .hit .sc { color: var(--faint); font-size: 10.5px; }
+  .hit .sn { color: var(--muted); font-size: 12px; margin-top: 3px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>plan&nbsp;<span>·</span>&nbsp;ledger</h1>
+  <select id="projectSel" title="current project"></select>
+  <span class="sub" id="sub">loading…</span>
+  <span class="spacer"></span>
+  <div class="searchwrap">
+    <input id="search" placeholder="recall… (ask the project)" autocomplete="off" />
+    <div id="searchResults"></div>
+  </div>
+  <button id="copySetupBtn" title="Copy a paste-ready prompt that sets up any workspace for this project">⧉ Copy setup</button>
+  <button id="newPlanBtn" class="primary">+ New plan</button>
+  <button id="refsBtn">⚙ Rules &amp; Tools</button>
+  <label class="auto" title="poll for activity, auto-focus the plan/step being worked, refresh in real time"><input type="checkbox" id="live" /> <span class="livewrap"><span class="livedot off"></span> Live</span></label>
+  <button id="refresh">↻ Refresh</button>
+</header>
+
+<div class="cols">
+  <div class="col" id="plansCol"><h2>Plans</h2><div id="plans"></div></div>
+  <div class="col" id="planCol"><h2>Plan overview</h2><div id="plan"><div class="empty">Select a plan</div></div></div>
+  <div class="col" id="stepCol"><h2>Step detail</h2><div id="step"><div class="empty">Select a step</div></div></div>
+</div>
+
+<div id="overlay">
+  <div class="panel">
+    <div class="head">
+      <h2>Rules &amp; Tools</h2>
+      <span class="spacer"></span>
+      <button id="copyRefs" class="copybtn">⧉ Copy active</button>
+      <button id="closeOverlay">✕</button>
+    </div>
+    <div class="hint">Toggle references on/off. Enabled ones are folded into every plan's <b>Copy context</b> — so guidance never sticks too long in a chat.</div>
+    <div id="refList"></div>
+    <div class="form">
+      <div class="row2">
+        <select class="f" id="rKind" style="max-width:120px"><option value="rule">rule</option><option value="tool">tool</option></select>
+        <input class="f" id="rName" placeholder="name (e.g. 'zero AI at search time')" />
+      </div>
+      <textarea class="f" id="rBody" placeholder="body — the rule text, or what the tool is for"></textarea>
+      <div class="row2">
+        <select class="f" id="rScope" style="max-width:200px"><option value="">global</option></select>
+        <button class="primary" id="rAdd" style="white-space:nowrap">+ Add</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<div id="fileModal">
+  <div class="panel" style="width:min(840px,100%)">
+    <div class="head"><h2 id="fileModalTitle" style="font-size:13px;font-weight:600;word-break:break-all;margin:0"></h2><span class="spacer"></span><button id="closeFileModal">✕</button></div>
+    <pre id="fileModalBody" style="white-space:pre-wrap;overflow:auto;max-height:72vh;font-size:12px;color:#cfd5e1;margin:8px 0 0;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:10px"></pre>
+  </div>
+</div>
+
+<div id="planOverlay" class="ov">
+  <div class="panel">
+    <div class="head"><h2>New plan</h2><span class="spacer"></span><button id="closePlanOverlay">✕</button></div>
+    <div class="form" style="border-top:0;margin-top:6px">
+      <input class="f" id="npTitle" placeholder="title" />
+      <input class="f" id="npKeywords" placeholder="keywords (comma-separated)" />
+      <textarea class="f" id="npSummary" placeholder="summary — what + why"></textarea>
+      <div class="row2">
+        <select class="f" id="npTemplate" style="max-width:240px"><option value="">no template</option></select>
+        <button class="primary" id="npCreate" style="white-space:nowrap">Create</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// markdown-lite: structures the walls of text users write (LABEL:, 1) 2) 3), - bullets, **bold**, `code`).
+function mdLite(t) {
+  if (!t) return '';
+  let s = esc(String(t));
+  s = s.replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+  // break inline enumerations "… 1) … 2) … 3) …" onto their own lines (only when 2+ present)
+  if ((s.match(/\b\d+\)\s/g) || []).length >= 2) s = s.replace(/\s+(\d+\))\s+/g, '\n$1 ');
+  const blocks = s.split(/\n\s*\n/).map((block) => {
+    const lines = block.split('\n').filter((l) => l.trim() !== '');
+    if (!lines.length) return '';
+    if (lines.length > 1 && lines.filter((l) => /^\s*\d+[.)]\s/.test(l)).length >= lines.length - 1)
+      return '<ol>' + lines.map((l) => '<li>' + l.replace(/^\s*\d+[.)]\s/, '') + '</li>').join('') + '</ol>';
+    if (lines.every((l) => /^\s*[-*]\s/.test(l)))
+      return '<ul>' + lines.map((l) => '<li>' + l.replace(/^\s*[-*]\s/, '') + '</li>').join('') + '</ul>';
+    return '<p>' + lines.join('<br>') + '</p>';
+  });
+  // highlight a leading "LABEL:" (FUNCTIONS:, HOW IT WORKS TODAY:, IMPROVEMENTS:)
+  return blocks.join('').replace(/<p>([A-Z][A-Z0-9 /&-]{2,40}:)/g, '<p><span class="mdlabel">$1</span><br>');
+}
+function toggleClamp(btn) { const d = btn.previousElementSibling; d.classList.toggle('open'); btn.textContent = d.classList.contains('open') ? '▴ Show less' : '▾ Show more'; }
+window.toggleClamp = toggleClamp;
+const ICONS = { done:'✅', in_progress:'▶', pending:'⬚', failed:'✗', blocked:'⏸', skipped:'⤼' };
+let state = { planId: null, stepId: null };
+
+async function api(path) {
+  const r = await fetch(path);
+  if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || r.status);
+  return r.json();
+}
+const badge = (s) => `<span class="badge b-${s}">${esc(s)}</span>`;
+
+async function loadPlans() {
+  try {
+    const plans = await api('/api/plans');
+    $('sub').textContent = `${plans.length} plan${plans.length===1?'':'s'}`;
+    if (!plans.length) { $('plans').innerHTML = `<div class="empty">No plans yet.<br>Create one with <b>/plan new</b>.</div>`; return; }
+    $('plans').innerHTML = plans.map(p => {
+      const pct = p.steps ? Math.round(100 * p.done / p.steps) : 0;
+      return `<div class="card ${p.id===state.planId?'sel':''} ${livePlans.has(p.id)?'live':''}" onclick="openPlan(${p.id})">
+        <div class="title">${livePlans.has(p.id)?'<span class="livedot"></span>':''}${esc(p.title)}</div>
+        <div class="row">${badge(p.status)}<span class="meta">${p.done}/${p.steps} steps</span></div>
+        <div class="prog"><i style="width:${pct}%"></i></div>
+        <div class="chips">${(p.keywords||[]).slice(0,4).map(k=>`<span class="chip">${esc(k)}</span>`).join('')}${(p.keywords||[]).length>4?`<span class="chip" style="opacity:.5">+${(p.keywords||[]).length-4}</span>`:''}</div>
+      </div>`;
+    }).join('');
+  } catch (e) { $('plans').innerHTML = `<div class="empty err">${esc(e.message)}</div>`; }
+}
+
+async function openPlan(id) {
+  state.planId = id; state.stepId = null;
+  await loadPlans();
+  $('step').innerHTML = `<div class="empty">Select a step</div>`;
+  try {
+    const p = await api('/api/plans/'+id);
+    const total = p.steps.length, done = p.steps.filter(s => s.status === 'done').length;
+    const pct = total ? Math.round(100 * done / total) : 0;
+    $('plan').innerHTML = `
+      <div class="row" style="margin-bottom:6px">${badge(p.status)}<span class="meta">plan #${p.id}</span><span style="flex:1"></span><button class="copybtn" onclick="copyContext(${p.id})">⧉ Copy context</button></div>
+      <h3 style="margin:0 0 10px;font-size:18px">${esc(p.title)}</h3>
+      <div class="prog big"><i style="width:${pct}%"></i></div>
+      <div class="meta" style="margin:5px 0 12px">${done} of ${total} step${total===1?'':'s'} done${total?` · ${pct}%`:''}</div>
+      <div class="chips" style="margin-bottom:14px">${(p.keywords||[]).slice(0,8).map(k=>`<span class="chip">${esc(k)}</span>`).join('')}${(p.keywords||[]).length>8?`<span class="chip" style="opacity:.5">+${(p.keywords||[]).length-8}</span>`:''}</div>
+      <div class="steplbl">Steps · what this plan does</div>
+      ${p.steps.map(s => `<div class="step ${s.id===state.stepId?'sel':''}" onclick="openStep(${s.id})">
+        <span class="ix">${s.idx}</span><span class="dot d-${s.status}"></span>
+        <span class="nm">${esc(s.title)}</span>${badge(s.status)}</div>`).join('') || '<div class="empty">No steps yet</div>'}
+      <div class="steplbl" style="margin-top:18px">Summary · what it is</div>
+      <div class="summary md ${(p.summary||'').length>380?'clamp':''}">${mdLite(p.summary)||'<i>no summary</i>'}</div>
+      ${(p.summary||'').length>380?'<button class="moreBtn" onclick="toggleClamp(this)">▾ Show more</button>':''}`;
+    renderPlanControls(p);
+    renderPlanGraph(p.id);
+  } catch (e) { $('plan').innerHTML = `<div class="empty err">${esc(e.message)}</div>`; }
+}
+
+async function renderPlanGraph(id) {
+  try {
+    const g = await api('/api/plans/' + id + '/graph');
+    if (!g.nodes) return;
+    const chips = (g.god_nodes || []).map(n => `<span class="chip" title="${esc(n.source_file||'')}">${esc(n.label)} · ${n.degree}</span>`).join('');
+    $('plan').insertAdjacentHTML('beforeend',
+      `<div class="section"><div class="lbl">Code map · ${g.nodes} nodes · ${g.edges} edges · ${g.communities} communities</div><div class="chips">${chips}</div></div>`);
+  } catch {}
+}
+
+async function openStep(id) {
+  state.stepId = id;
+  document.querySelectorAll('#plan .step').forEach(el => el.classList.remove('sel'));
+  try {
+    const s = await api('/api/steps/'+id);
+    const sec = (lbl, html) => `<div class="section"><div class="lbl">${lbl}</div>${html}</div>`;
+    const attempts = s.attempts.length ? s.attempts.map(a => `
+        <div class="attempt v-${a.verdict}">
+          <div class="what">${badge(a.verdict==='pass'?'done':a.verdict==='partial'?'blocked':'failed')} ${esc(a.what_tried)}</div>
+          ${a.result?`<div class="res">${esc(a.result)}</div>`:''}
+          <div class="ts">${esc(a.created_at)}</div>
+        </div>`).join('') : `<div class="body" style="color:var(--faint)">No attempts logged yet.</div>`;
+    $('step').innerHTML = `
+      <div class="row" style="margin-bottom:8px">${badge(s.status)}<span class="meta">step #${s.id} · idx ${s.idx}</span></div>
+      <div class="detail"><h3>${esc(s.title)}</h3></div>
+      ${sec('Context', `<div class="body md">${mdLite(s.context)||'<i>—</i>'}</div>`)}
+      ${s.tools?.length ? sec('Tools', `<div class="chips">${s.tools.map(t=>`<span class="chip">${esc(t)}</span>`).join('')}</div>`) : ''}
+      ${sec('Acceptance criteria', `<div class="body md">${mdLite(s.acceptance_criteria)||'<i>—</i>'}</div>`)}
+      ${s.carry_forward ? sec('Carry-forward ↦', `<div class="body cf md">${mdLite(s.carry_forward)}</div>`) : ''}
+      ${sec(`Failure log (${s.attempts.length})`, attempts)}
+      ${s.links?.length ? sec('Links', s.links.map(l=>`<div class="link">${esc(l.relation)} → ${l.to_step_id?'step #'+l.to_step_id:'plan #'+l.to_plan_id}${l.note?' · '+esc(l.note):''}</div>`).join('')) : ''}`;
+    renderStepControls(s);
+    renderStepFiles(s);
+    renderStepLessons(s.id);
+    renderStepGround(s.id);
+  } catch (e) { $('step').innerHTML = `<div class="empty err">${esc(e.message)}</div>`; }
+}
+
+function renderStepFiles(s) {
+  const files = s.file_refs || [];
+  const list = files.map((f) => `
+    <div class="fileref" onclick="expandFile(${f.id})" title="click to read on demand">
+      <span class="frole r-${f.role}">${esc(f.role)}</span>
+      <span class="fpath">${esc(f.path)}</span>
+      ${f.note ? `<span class="fnote">${esc(f.note)}</span>` : ''}
+      <button class="del" onclick="event.stopPropagation();delFileRef(${f.id})" title="remove">🗑</button>
+    </div>`).join('') || '<div class="body" style="color:var(--faint)">No cited files. Add the file you\'re working on + its dependencies.</div>';
+  $('step').insertAdjacentHTML('beforeend', `<div class="section"><div class="lbl">Cited files (read on demand) <button onclick="suggestDeps(${s.id})" style="float:right;font-size:11px;padding:2px 8px" title="propose deps/related from the code graph">⊕ Suggest deps</button></div>${list}
+    <div class="miniform" style="margin-top:8px">
+      <div class="row2"><select class="f" id="frRole" style="max-width:130px"><option>primary</option><option>dependency</option><option>related</option><option selected>reference</option></select>
+      <input class="f" id="frPath" placeholder="file path (absolute)" /></div>
+      <div class="row2"><input class="f" id="frNote" placeholder="note (optional)" /><button class="primary" onclick="addFileRef(${s.id})" style="white-space:nowrap">+ Cite file</button></div>
+    </div></div>`);
+}
+async function expandFile(id) {
+  try {
+    const r = await api('/api/file-refs/' + id + '/content');
+    $('fileModalTitle').textContent = r.path + (r.bytes != null ? ` · ${r.bytes} bytes${r.truncated ? ' (truncated)' : ''}` : '');
+    $('fileModalBody').textContent = r.error ? `(${r.error})` : (r.content || '(empty)');
+    $('fileModal').classList.add('show');
+  } catch (e) { toast(e.message); }
+}
+async function addFileRef(stepId) {
+  const path = $('frPath').value.trim(); if (!path) { toast('path required'); return; }
+  try { await apiSend('POST', '/api/steps/' + stepId + '/file-refs', { path, role: $('frRole').value, note: $('frNote').value }); toast('file cited'); refresh(); }
+  catch (e) { toast(e.message); }
+}
+async function delFileRef(id) { try { await apiSend('DELETE', '/api/file-refs/' + id); toast('removed'); refresh(); } catch (e) { toast(e.message); } }
+async function suggestDeps(stepId) {
+  try {
+    const step = await api('/api/steps/' + stepId);
+    const refs = step.file_refs || [];
+    let path = (refs.find((f) => f.role === 'primary') || refs[0] || {}).path;
+    if (!path) path = prompt('Find dependencies/related for which file? (path)');
+    if (!path) return;
+    const res = await api('/api/steps/' + stepId + '/suggest-files?path=' + encodeURIComponent(path));
+    if (!res.suggestions || !res.suggestions.length) { toast(res.reason || 'no related files in the code graph'); return; }
+    for (const sug of res.suggestions) await apiSend('POST', '/api/steps/' + stepId + '/file-refs', { path: sug.path, role: sug.role, note: sug.reason });
+    toast('cited ' + res.suggestions.length + ' file(s) from the graph'); refresh();
+  } catch (e) { toast(e.message); }
+}
+window.expandFile = expandFile; window.addFileRef = addFileRef; window.delFileRef = delFileRef; window.suggestDeps = suggestDeps;
+$('closeFileModal').onclick = () => $('fileModal').classList.remove('show');
+$('fileModal').onclick = (e) => { if (e.target === $('fileModal')) $('fileModal').classList.remove('show'); };
+
+async function renderStepLessons(id) {
+  try {
+    const lessons = await api('/api/steps/' + id + '/lessons');
+    if (!lessons.length) return;
+    const items = lessons.map(l => `
+      <div class="attempt v-${l.verdict}">
+        <div class="what">${badge(l.verdict === 'partial' ? 'blocked' : 'failed')} ${esc(l.what_tried)}</div>
+        ${l.result ? `<div class="res">${esc(l.result)}</div>` : ''}
+        <div class="ts">from plan #${l.plan_id} “${esc(l.plan_title)}” · step “${esc(l.step_title)}”</div>
+      </div>`).join('');
+    $('step').insertAdjacentHTML('beforeend',
+      `<div class="section"><div class="lbl">Lessons from other plans (${lessons.length})</div>${items}</div>`);
+  } catch {}
+}
+
+async function renderStepGround(id) {
+  try {
+    const g = await api('/api/steps/' + id + '/ground');
+    if (!g.markdown) return;
+    const html = g.markdown.split('\n').map(l => esc(l.replace(/^- /, '')))
+      .map(l => l.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')).join('<br>');
+    $('step').insertAdjacentHTML('beforeend',
+      `<div class="section"><div class="lbl">Relevant code (grounded)</div><div class="body">${html}</div></div>`);
+  } catch {}
+}
+
+async function refresh() {
+  await loadPlans();
+  if (state.planId) await openPlan(state.planId);
+  if (state.stepId) await openStep(state.stepId);
+}
+$('refresh').onclick = refresh;
+
+// ---- Live mode: watch activity, auto-focus the plan/step being worked ----
+let livePlans = new Set();
+let liveTimer = null, lastRev = null, lastActive = null;
+$('live').onchange = (e) => {
+  clearInterval(liveTimer); lastRev = null; lastActive = null;
+  document.querySelector('.livewrap .livedot').classList.toggle('off', !e.target.checked);
+  if (e.target.checked) { pollActivity(); liveTimer = setInterval(pollActivity, 1500); }
+  else { livePlans = new Set(); loadPlans(); }
+};
+async function pollActivity() {
+  let a; try { a = await api('/api/activity'); } catch { return; }
+  const act = a.active_steps[0] || null;
+  const actId = act ? act.step_id : null;
+  livePlans = new Set(a.active_steps.map((s) => s.plan_id));
+  if (a.rev === lastRev && actId === lastActive) return; // nothing new
+  const revChanged = a.rev !== lastRev;
+  lastRev = a.rev;
+  if (act && actId !== lastActive) {            // a new step is being worked → focus it
+    lastActive = actId; state.planId = act.plan_id;
+    await loadPlans(); await openPlan(act.plan_id); await openStep(act.step_id);
+    toast('▶ now working: ' + act.step_title);
+  } else {                                       // same focus, data changed → refresh in place
+    lastActive = actId;
+    await loadPlans();
+    if (revChanged && state.planId) await openPlan(state.planId);
+    if (revChanged && state.stepId) await openStep(state.stepId);
+  }
+}
+
+// ---- clipboard + toast ----
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 1900);
+}
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; }
+  catch {
+    const ta = document.createElement('textarea'); ta.value = text;
+    document.body.appendChild(ta); ta.select();
+    let ok = false; try { ok = document.execCommand('copy'); } catch {}
+    ta.remove(); return ok;
+  }
+}
+async function copyContext(planId) {
+  try {
+    const r = await fetch('/api/plans/' + planId + '/context');
+    const text = await r.text();
+    toast(await copyText(text) ? `Copied plan #${planId} context — ${text.length} chars` : 'Copy failed');
+  } catch (e) { toast('Error: ' + e.message); }
+}
+window.copyContext = copyContext;
+
+// ---- rules & tools manager ----
+const overlay = $('overlay');
+async function loadRefs() {
+  try {
+    const plans = await api('/api/plans');
+    $('rScope').innerHTML = '<option value="">global</option>' +
+      plans.map(p => `<option value="${p.id}">plan #${p.id}: ${esc(p.title)}</option>`).join('');
+  } catch {}
+  try {
+    const refs = await api('/api/refs');
+    const group = (kind, label) => {
+      const items = refs.filter(r => r.kind === kind);
+      if (!items.length) return '';
+      return `<div class="refgroup"><div class="lbl">${label} (${items.filter(r=>r.enabled).length}/${items.length} on)</div>` +
+        items.map(r => `
+        <div class="ref ${r.enabled ? '' : 'off'}">
+          <label class="switch"><input type="checkbox" ${r.enabled ? 'checked' : ''} onchange="toggleRef(${r.id}, this.checked)"><span class="slider"></span></label>
+          <div class="meta2"><div class="nm">${esc(r.name)} ${r.plan_id ? `<span class="scope">· plan #${r.plan_id}</span>` : ''}</div>${r.body ? `<div class="bd">${esc(r.body)}</div>` : ''}</div>
+          <button class="del" title="delete" onclick="delRef(${r.id})">🗑</button>
+        </div>`).join('') + `</div>`;
+    };
+    $('refList').innerHTML = (group('rule', 'Rules') + group('tool', 'Tools')) ||
+      '<div class="empty">No rules or tools yet — add one below.</div>';
+  } catch (e) { $('refList').innerHTML = `<div class="empty err">${esc(e.message)}</div>`; }
+}
+async function toggleRef(id, enabled) {
+  await fetch('/api/refs/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled }) });
+  loadRefs();
+}
+async function delRef(id) {
+  await fetch('/api/refs/' + id, { method: 'DELETE' });
+  loadRefs();
+}
+window.toggleRef = toggleRef; window.delRef = delRef;
+$('rAdd').onclick = async () => {
+  const name = $('rName').value.trim();
+  if (!name) { toast('name required'); return; }
+  const payload = { kind: $('rKind').value, name, body: $('rBody').value, plan_id: $('rScope').value ? Number($('rScope').value) : null };
+  const r = await fetch('/api/refs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+  if (r.ok) { $('rName').value = ''; $('rBody').value = ''; loadRefs(); toast('added'); }
+  else { toast('add failed'); }
+};
+$('copyRefs').onclick = async () => {
+  const text = await (await fetch('/api/context')).text();
+  toast(await copyText(text) ? 'Copied active rules & tools' : 'Copy failed');
+};
+$('refsBtn').onclick = () => { overlay.classList.add('show'); loadRefs(); };
+$('closeOverlay').onclick = () => overlay.classList.remove('show');
+overlay.onclick = (e) => { if (e.target === overlay) overlay.classList.remove('show'); };
+
+// ---- write-capability: create/edit plans & steps from the board ----
+async function apiSend(method, path, body) {
+  const r = await fetch(path, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
+  if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || ('HTTP ' + r.status)); }
+  return r.json().catch(() => ({}));
+}
+const PSTAT = ['draft', 'active', 'done', 'abandoned'];
+const SSTAT = ['pending', 'in_progress', 'done', 'failed', 'blocked', 'skipped'];
+function statusSelect(kind, id, cur) {
+  return `<select class="f" onchange="setStatus('${kind}',${id},this.value)">${(kind === 'plan' ? PSTAT : SSTAT).map(s => `<option ${s === cur ? 'selected' : ''}>${s}</option>`).join('')}</select>`;
+}
+async function setStatus(kind, id, status) {
+  try { await apiSend('PATCH', `/api/${kind === 'plan' ? 'plans' : 'steps'}/${id}/status`, { status }); toast('status → ' + status); refresh(); }
+  catch (e) { toast(e.message); }
+}
+function toggleForm(id) { $(id).classList.toggle('hidden'); }
+window.setStatus = setStatus; window.toggleForm = toggleForm;
+
+function renderPlanControls(p) {
+  $('plan').insertAdjacentHTML('beforeend', `<div class="section"><div class="lbl">Plan actions</div>
+    <div class="ctl">Status: ${statusSelect('plan', p.id, p.status)} <button onclick="toggleForm('addStepForm')">+ Add step</button></div>
+    <div id="addStepForm" class="miniform hidden">
+      <input class="f" id="asTitle" placeholder="step title" />
+      <textarea class="f" id="asContext" placeholder="context — self-contained"></textarea>
+      <input class="f" id="asAccept" placeholder="acceptance criteria" />
+      <input class="f" id="asTools" placeholder="tools (comma-separated)" />
+      <button class="primary" onclick="addStep(${p.id})">Add step</button>
+    </div></div>`);
+}
+async function addStep(planId) {
+  const title = $('asTitle').value.trim(); if (!title) { toast('title required'); return; }
+  try {
+    await apiSend('POST', `/api/plans/${planId}/steps`, { title, context: $('asContext').value, acceptance_criteria: $('asAccept').value, tools: $('asTools').value.split(',').map(t => t.trim()).filter(Boolean) });
+    toast('step added'); refresh();
+  } catch (e) { toast(e.message); }
+}
+window.addStep = addStep;
+
+function renderStepControls(s) {
+  $('step').insertAdjacentHTML('beforeend', `<div class="section"><div class="lbl">Step actions</div>
+    <div class="ctl">Status: ${statusSelect('step', s.id, s.status)} <button onclick="toggleForm('editStepForm')">✎ Edit</button> <button onclick="toggleForm('logForm')">＋ Log attempt</button></div>
+    <div id="editStepForm" class="miniform hidden">
+      <input class="f" id="esTitle" value="${esc(s.title)}" />
+      <textarea class="f" id="esContext" placeholder="context">${esc(s.context)}</textarea>
+      <input class="f" id="esAccept" value="${esc(s.acceptance_criteria)}" placeholder="acceptance" />
+      <input class="f" id="esTools" value="${esc((s.tools || []).join(', '))}" placeholder="tools" />
+      <textarea class="f" id="esCarry" placeholder="carry-forward">${esc(s.carry_forward)}</textarea>
+      <button class="primary" onclick="saveStep(${s.id})">Save</button>
+    </div>
+    <div id="logForm" class="miniform hidden">
+      <input class="f" id="laTried" placeholder="what did you try?" />
+      <input class="f" id="laResult" placeholder="result / output" />
+      <div class="row2"><select class="f" id="laVerdict" style="max-width:130px"><option value="pass">pass</option><option value="fail">fail</option><option value="partial">partial</option></select>
+      <button class="primary" onclick="logAttempt(${s.id})" style="white-space:nowrap">Record</button></div>
+    </div></div>`);
+}
+async function saveStep(id) {
+  try {
+    await apiSend('PATCH', `/api/steps/${id}`, { title: $('esTitle').value, context: $('esContext').value, acceptance_criteria: $('esAccept').value, tools: $('esTools').value.split(',').map(t => t.trim()).filter(Boolean), carry_forward: $('esCarry').value });
+    toast('step saved'); refresh();
+  } catch (e) { toast(e.message); }
+}
+async function logAttempt(id) {
+  const what_tried = $('laTried').value.trim(); if (!what_tried) { toast('what_tried required'); return; }
+  try { await apiSend('POST', `/api/steps/${id}/attempts`, { what_tried, result: $('laResult').value, verdict: $('laVerdict').value }); toast('attempt recorded'); refresh(); }
+  catch (e) { toast(e.message); }
+}
+window.saveStep = saveStep; window.logAttempt = logAttempt;
+
+const planOverlay = $('planOverlay');
+$('newPlanBtn').onclick = async () => {
+  try { const t = await api('/api/templates'); $('npTemplate').innerHTML = '<option value="">no template</option>' + t.map(x => `<option value="${esc(x.name)}">${esc(x.name)} (${x.steps})</option>`).join(''); } catch {}
+  planOverlay.classList.add('show');
+};
+$('closePlanOverlay').onclick = () => planOverlay.classList.remove('show');
+planOverlay.onclick = (e) => { if (e.target === planOverlay) planOverlay.classList.remove('show'); };
+$('npCreate').onclick = async () => {
+  const title = $('npTitle').value.trim(); if (!title) { toast('title required'); return; }
+  try {
+    const plan = await apiSend('POST', '/api/plans', { title, keywords: $('npKeywords').value.split(',').map(k => k.trim()).filter(Boolean), summary: $('npSummary').value });
+    const tpl = $('npTemplate').value;
+    if (tpl) await apiSend('POST', `/api/plans/${plan.id}/instantiate`, { template: tpl });
+    planOverlay.classList.remove('show'); $('npTitle').value = ''; $('npKeywords').value = ''; $('npSummary').value = '';
+    state.planId = plan.id; await loadPlans(); openPlan(plan.id); toast('plan created');
+  } catch (e) { toast(e.message); }
+};
+
+// ---- recall: ask the project (header search) ----
+const searchEl = $('search'), resultsEl = $('searchResults');
+async function runRecall() {
+  const q = searchEl.value.trim();
+  if (!q) { resultsEl.classList.remove('show'); return; }
+  try {
+    const r = await api('/api/recall?q=' + encodeURIComponent(q) + '&limit=12');
+    resultsEl.innerHTML = r.hits.length ? r.hits.map((h, i) => `
+      <div class="hit" data-i="${i}">
+        <div class="top"><span class="ty">${esc(h.type)}</span><span class="tt">${esc(h.title)}</span><span class="sc">${h.score}</span></div>
+        <div class="sn">${esc(h.snippet)}</div>
+      </div>`).join('') : '<div class="hit"><div class="sn">no matches</div></div>';
+    resultsEl.classList.add('show');
+    [...resultsEl.querySelectorAll('.hit')].forEach((el, i) => { if (r.hits[i]) el.onclick = () => gotoHit(r.hits[i]); });
+  } catch (e) { resultsEl.innerHTML = `<div class="hit"><div class="sn err">${esc(e.message)}</div></div>`; resultsEl.classList.add('show'); }
+}
+async function gotoHit(h) {
+  resultsEl.classList.remove('show'); searchEl.blur();
+  const planId = h.plan_id || (h.type === 'plan' ? h.id : null);
+  if (planId) { state.planId = planId; await openPlan(planId); }
+  const stepId = h.type === 'step' ? h.id : h.step_id;
+  if (stepId) await openStep(stepId);
+}
+searchEl.onkeydown = (e) => {
+  if (e.key === 'Enter') runRecall();
+  else if (e.key === 'Escape') { resultsEl.classList.remove('show'); searchEl.blur(); }
+};
+document.addEventListener('click', (e) => { if (!e.target.closest('.searchwrap')) resultsEl.classList.remove('show'); });
+
+// ---- projects (top-level switcher) ----
+async function loadProjects() {
+  try {
+    const projs = await api('/api/projects');
+    $('projectSel').innerHTML = projs.map((p) => `<option value="${p.id}" ${p.current ? 'selected' : ''}>${esc(p.name)} · ${p.plans} plan${p.plans === 1 ? '' : 's'}</option>`).join('')
+      + '<option value="__new">+ New project…</option>';
+  } catch (e) { /* leave empty */ }
+}
+async function switchTo(planNull) {
+  state.planId = null; state.stepId = null;
+  await loadProjects(); await loadPlans();
+  $('plan').innerHTML = '<div class="empty">Select a plan</div>';
+  $('step').innerHTML = '<div class="empty">Select a step</div>';
+}
+$('projectSel').onchange = async (e) => {
+  const v = e.target.value;
+  if (v === '__new') {
+    const name = prompt('New project name:');
+    await loadProjects(); // reset selection
+    if (name && name.trim()) {
+      const p = await apiSend('POST', '/api/projects', { name: name.trim() });
+      await apiSend('PATCH', '/api/projects/current', { project_id: p.id });
+      await switchTo(); toast('created + switched to ' + name.trim());
+    }
+    return;
+  }
+  await apiSend('PATCH', '/api/projects/current', { project_id: Number(v) });
+  await switchTo(); toast('switched project');
+};
+
+$('copySetupBtn').onclick = async () => {
+  try { const text = await (await fetch('/api/projects/current/context')).text(); toast(await copyText(text) ? 'Copied project setup prompt — paste into any workspace' : 'Copy failed'); }
+  catch (e) { toast(e.message); }
+};
+
+loadProjects();
+loadPlans();
+</script>
+</body>
+</html>
