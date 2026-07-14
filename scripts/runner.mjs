@@ -69,6 +69,30 @@ if (!planId && !projectId) { console.error('usage: runner.mjs (--plan <id> | --p
 const dbPath = process.env.PLAN_LEDGER_DB || join(homedir(), 'Documents', 'plan-ledger', 'data', 'plan-ledger.db');
 const store = new Store(dbPath);
 
+// Orphan sweep: steps THIS RUN marked in_progress whose agent never recorded an
+// attempt get reset to pending on pause/stop, so a dead agent doesn't leave the
+// step wedged "running" on the board. Only ids we marked are touched — other
+// concurrent runs' in_progress steps are left alone.
+const markedInProgress = new Map(); // step_id -> attempts count at mark time (this run only)
+function markInProgress(step) {
+  markedInProgress.set(step.id, step.attempts?.length ?? 0);
+  store.setStepStatus(step.id, 'in_progress');
+}
+function sweepOrphans() {
+  for (const [id, n] of markedInProgress) {
+    try {
+      const st = store.getStep(id);
+      if (st.status === 'in_progress' && st.attempts.length === n) {
+        store.setStepStatus(id, 'pending');
+        console.log(`  ♻ step #${id} was left in_progress with no attempt recorded — reset to pending.`);
+      }
+    } catch {}
+  }
+  markedInProgress.clear();
+}
+sweepOrphans(); // startup: nothing tracked yet (a fresh run never resets other runs' steps)
+process.on('SIGINT', () => { try { sweepOrphans(); } catch {} store.close(); process.exit(130); });
+
 // Role-tagged steps: the role's full charter lives in ~/.claude/agents/<role>.md. A headless
 // -p agent can't be spawned AS a subagent type, so the prompt tells it to read + inhabit the file.
 function roleLines(step) {
@@ -209,7 +233,7 @@ async function workPlan(pid) {
     spawns.set(step.id, n);
     if (n > maxAttempts) { console.log(`  ⏸ step #${step.id} unresolved after ${maxAttempts} attempt(s) — pausing for a human.`); return 'paused'; }
     console.log(`\n  ▶ step ${step.idx} (#${step.id}) attempt ${n}: ${step.title}`);
-    store.setStepStatus(step.id, 'in_progress'); // so the board's Live mode focuses it while it runs
+    markInProgress(step); // so the board's Live mode focuses it while it runs (tracked for the orphan sweep)
     if (inject) {
       const res = await runInjected(step);
       usage.cost += res.cost; usage.in += res.tin; usage.out += res.tout; usage.turns += res.turns; usage.agents++;
@@ -323,6 +347,7 @@ async function runOnce() {
 let retries = 0;
 while (true) {
   await runOnce();
+  sweepOrphans(); // pause/stop path: un-wedge steps whose agent never reported
   if (!stopAll || stopKind !== 'limit' || !retryOnLimit) break; // done, or a non-retryable stop (budget/failure)
   if (retries >= maxRetries) { console.log(`\n  reached --max-retries (${maxRetries}); stopping. Re-run to continue later.`); break; }
   retries++;
