@@ -104,6 +104,10 @@ check('instantiateTemplate clones steps in order', inst.steps.length === 3 && in
 const saved = s.saveAsTemplate(tp.id, 'Saved from plan');
 check('saveAsTemplate captures a plan\'s steps', saved.steps.length === 3 && saved.steps[1].title === 'Implement');
 
+// createTemplate is atomic: a bad inline step must not leave a half-created template
+assert.throws(() => s.createTemplate({ name: 'Half template', steps: [{ title: 'ok' }, {}] }), /title is required/);
+check('failed createTemplate leaves no template behind', !s.listTemplates().some((t) => t.name === 'Half template'));
+
 // projects: isolation (the "don't mix across projects unless explicit" rule)
 check('default project exists (migration)', s.listProjects().some((p) => p.id === 1) && s.currentProjectId() === 1);
 const projB = s.createProject({ name: 'Project B' });

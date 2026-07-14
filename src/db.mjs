@@ -192,6 +192,25 @@ export class Store {
     this._migrate();
   }
 
+  // Run fn inside BEGIN/COMMIT with ROLLBACK on throw. Nest-safe: an inner _tx
+  // joins the outer transaction (SQLite has no nested BEGIN). Mirrors the
+  // importGraph atomicity pattern for every multi-statement write.
+  _tx(fn) {
+    if (this._inTx) return fn();
+    this._inTx = true;
+    this.db.exec('BEGIN');
+    try {
+      const r = fn();
+      this.db.exec('COMMIT');
+      return r;
+    } catch (e) {
+      try { this.db.exec('ROLLBACK'); } catch {}
+      throw e;
+    } finally {
+      this._inTx = false;
+    }
+  }
+
   // Fold the WAL back into the main file and truncate it (no-op on :memory:).
   checkpoint() { try { this.db.exec('PRAGMA wal_checkpoint(TRUNCATE);'); } catch {} }
 
@@ -438,13 +457,15 @@ export class Store {
     if (!what_tried || !String(what_tried).trim()) throw new Error('what_tried is required');
     const v = verdict ?? 'fail';
     if (!VERDICTS.has(v)) throw new Error(`bad verdict: ${v} (pass|fail|partial)`);
-    this.db.prepare('INSERT INTO attempts (step_id, what_tried, result, verdict, role, review_rounds, executor, created_at) VALUES (?,?,?,?,?,?,?,?)')
-      .run(stepId, String(what_tried), String(result ?? ''), v,
-           String(role ?? '').trim(), Math.max(0, Number(review_rounds ?? 0) | 0), String(executor ?? '').trim(), now());
-    // a passing attempt advances the step to done; a fail marks it failed (not blocked — still retryable)
-    if (v === 'pass') this.setStepStatus(stepId, 'done');
-    else this.setStepStatus(stepId, 'failed');
-    this.touchPlan(s.plan_id);
+    this._tx(() => {
+      this.db.prepare('INSERT INTO attempts (step_id, what_tried, result, verdict, role, review_rounds, executor, created_at) VALUES (?,?,?,?,?,?,?,?)')
+        .run(stepId, String(what_tried), String(result ?? ''), v,
+             String(role ?? '').trim(), Math.max(0, Number(review_rounds ?? 0) | 0), String(executor ?? '').trim(), now());
+      // a passing attempt advances the step to done; a fail marks it failed (not blocked — still retryable)
+      // (setStepStatus also touches the plan, so no extra touchPlan here)
+      if (v === 'pass') this.setStepStatus(stepId, 'done');
+      else this.setStepStatus(stepId, 'failed');
+    });
     return this.getStep(stepId);
   }
 
@@ -705,10 +726,9 @@ export class Store {
     const nodes = graph?.nodes || [];
     const edges = graph?.links || graph?.edges || [];
     if (!Array.isArray(nodes) || !Array.isArray(edges)) throw new Error('graph must have nodes[] and links[]/edges[]');
-    this.db.exec('BEGIN');
-    try {
-      // DELETE + re-INSERT must be one atomic unit: a failed import rolls back
-      // to the previous graph instead of leaving the plan graphless.
+    // DELETE + re-INSERT is one atomic unit: a failed import rolls back
+    // to the previous graph instead of leaving the plan graphless.
+    this._tx(() => {
       this.db.prepare('DELETE FROM graph_nodes WHERE plan_id=?').run(planId);
       this.db.prepare('DELETE FROM graph_edges WHERE plan_id=?').run(planId);
       const ni = this.db.prepare('INSERT OR REPLACE INTO graph_nodes (plan_id,node_id,label,file_type,source_file,source_location,community,kind,degree) VALUES (?,?,?,?,?,?,?,?,0)');
@@ -728,8 +748,7 @@ export class Store {
       }
       const du = this.db.prepare('UPDATE graph_nodes SET degree=? WHERE plan_id=? AND node_id=?');
       for (const [id, d] of deg) du.run(d, planId, id);
-      this.db.exec('COMMIT');
-    } catch (e) { this.db.exec('ROLLBACK'); throw e; }
+    });
     this.touchPlan(planId);
     return this.graphStats(planId);
   }
@@ -857,11 +876,14 @@ export class Store {
 
   createTemplate({ name, description, keywords, steps }) {
     if (!name || !String(name).trim()) throw new Error('template name is required');
-    const ts = now();
-    const info = this.db.prepare('INSERT INTO templates (name, description, keywords, created_at, updated_at) VALUES (?,?,?,?,?)')
-      .run(String(name).trim(), String(description ?? ''), jsonArr(keywords), ts, ts);
-    const id = Number(info.lastInsertRowid);
-    if (Array.isArray(steps)) steps.forEach((s, i) => this.addTemplateStep(id, { ...s, idx: s.idx ?? i + 1 }));
+    const id = this._tx(() => { // template + inline steps land atomically
+      const ts = now();
+      const info = this.db.prepare('INSERT INTO templates (name, description, keywords, created_at, updated_at) VALUES (?,?,?,?,?)')
+        .run(String(name).trim(), String(description ?? ''), jsonArr(keywords), ts, ts);
+      const tid = Number(info.lastInsertRowid);
+      if (Array.isArray(steps)) steps.forEach((s, i) => this.addTemplateStep(tid, { ...s, idx: s.idx ?? i + 1 }));
+      return tid;
+    });
     return this.getTemplate(id);
   }
 
@@ -893,19 +915,24 @@ export class Store {
   instantiateTemplate(idOrName, planId) {
     if (!this.db.prepare('SELECT id FROM plans WHERE id=?').get(planId)) throw new Error(`no plan with id ${planId}`);
     const tpl = this.getTemplate(idOrName);
-    for (const s of tpl.steps) this.addStep(planId, { title: s.title, context: s.context, tools: s.tools, role: s.role, acceptance_criteria: s.acceptance_criteria });
+    this._tx(() => { // all-or-nothing: a half-instantiated template is worse than none
+      for (const s of tpl.steps) this.addStep(planId, { title: s.title, context: s.context, tools: s.tools, role: s.role, acceptance_criteria: s.acceptance_criteria });
+    });
     return this.openPlan(planId);
   }
 
   // Capture a plan's current steps as a reusable template.
   saveAsTemplate(planId, name, description) {
     const plan = this.openPlan(planId);
-    const tpl = this.createTemplate({ name, description: description ?? plan.summary, keywords: plan.keywords });
-    plan.steps.forEach((s, i) => {
-      const full = this.getStep(s.id);
-      this.addTemplateStep(tpl.id, { title: full.title, context: full.context, tools: full.tools, role: full.role, acceptance_criteria: full.acceptance_criteria, idx: i + 1 });
+    const tplId = this._tx(() => { // template + captured steps land atomically
+      const tpl = this.createTemplate({ name, description: description ?? plan.summary, keywords: plan.keywords });
+      plan.steps.forEach((s, i) => {
+        const full = this.getStep(s.id);
+        this.addTemplateStep(tpl.id, { title: full.title, context: full.context, tools: full.tools, role: full.role, acceptance_criteria: full.acceptance_criteria, idx: i + 1 });
+      });
+      return tpl.id;
     });
-    return this.getTemplate(tpl.id);
+    return this.getTemplate(tplId);
   }
 
   deleteTemplate(idOrName) {
