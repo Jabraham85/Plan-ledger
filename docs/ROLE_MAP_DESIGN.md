@@ -394,10 +394,18 @@ Everything that reads the dispatch-role concept (grep evidence in the plan-95 st
 
 ## 11. Open risks
 
-1. **Does the interactive Agent tool accept every alias a user might put in `model`?** Falsifiable:
-   dispatch one step with `model:"haiku"` via the map and confirm the Agent tool accepts it
-   (step 5's doc should record the accepted set). Mitigated by the ignore-with-note rule (§7).
-2. **Is `process.cwd()` the working repo for runner invocations in practice?** Falsifiable: run
-   `npm run orchestrate -- --plan <id>` from the plan-ledger repo against a step whose work targets
-   another repo; if the repo-local layer is then wrong-rooted, promote the user-file `projects`
-   section as the canonical project layer for headless runs (already supported; zero schema change).
+1. **Does the interactive Agent tool accept every alias a user might put in `model`?**
+   **DEFERRED TO FIRST USE** (2026-07-14, plan #95 step 2): not empirically testable without
+   burning an interactive dispatch; the ignore-with-note rule (§7) already bounds the damage —
+   the first map entry that sets `model` should record the observed accepted set here.
+2. **Is `process.cwd()` the working repo for runner invocations in practice?**
+   **ANSWERED EMPIRICALLY** (2026-07-14, plan #95 step 2): `process.cwd()` is the runner's
+   *launch directory*, verified by launching `node <plan-ledger>/scripts/runner.mjs --plan 1`
+   (dry run, scratch DB) from a temp dir containing a `.plan-roles.json` that mapped an
+   otherwise-unknown role — the adopt line resolved through that file (tilde charter expansion
+   included). So the repo-local layer is correct **when the runner is launched from the working
+   repo**, and wrong-rooted when launched from elsewhere (e.g. `npm run orchestrate` from the
+   plan-ledger repo against work targeting another repo — cwd is then the plan-ledger repo).
+   Practical rule, now documented in ROLES.md: launch the runner from the repo whose
+   `.plan-roles.json` should apply, or use the user-file `projects.<name>.roles` layer, which is
+   cwd-independent (already supported; zero schema change).
