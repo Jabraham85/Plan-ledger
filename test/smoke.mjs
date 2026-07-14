@@ -187,5 +187,23 @@ check('plan status accepts blocked', s.setPlanStatus(planZ.id, 'blocked').status
   for (const suf of ['', '-wal', '-shm']) rmSync(migPath + suf, { force: true });
 }
 
+// WAL hygiene: after heavy writes + close, the -wal file must be truncated (or gone)
+{
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { rmSync, existsSync, statSync } = await import('node:fs');
+  const walPath = join(tmpdir(), `plan-ledger-wal-${process.pid}.db`);
+  const ws = new Store(walPath);
+  const wp = ws.createPlan({ title: 'wal stress plan' });
+  const wstep = ws.addStep(wp.id, { title: 'wal step' });
+  for (let i = 0; i < 1000; i++) ws.recordAttempt(wstep.id, { what_tried: `attempt ${i} ${'x'.repeat(200)}`, result: 'y'.repeat(200), verdict: 'fail' });
+  ws.close();
+  const walFile = walPath + '-wal';
+  const walSize = existsSync(walFile) ? statSync(walFile).size : 0;
+  check('close() truncates the WAL (<100KB or absent)', walSize < 100 * 1024);
+  check('close() is idempotent', (ws.close(), true));
+  for (const suf of ['', '-wal', '-shm']) rmSync(walPath + suf, { force: true });
+}
+
 console.log(`\n${pass} checks passed.`);
 s.close();

@@ -21,6 +21,9 @@ import { extractRepo } from './extract.mjs';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const dbPath = process.env.PLAN_LEDGER_DB || join(__dirname, '..', 'data', 'plan-ledger.db');
 const store = new Store(dbPath);
+store.checkpoint(); // trim any WAL left behind by a previous unclean exit
+process.on('SIGINT', () => { store.close(); process.exit(0); });
+process.on('exit', () => store.close());
 
 const server = new McpServer({ name: 'plan-ledger', version: '0.1.0' });
 

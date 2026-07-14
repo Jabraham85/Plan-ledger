@@ -187,11 +187,20 @@ export class Store {
     this.db.exec('PRAGMA journal_mode = WAL;');
     this.db.exec('PRAGMA foreign_keys = ON;');
     this.db.exec('PRAGMA busy_timeout = 3000;'); // board + MCP + CLI share the file
+    this.db.exec('PRAGMA journal_size_limit = 4194304;'); // cap the -wal file at ~4MB after checkpoints
     this.db.exec(SCHEMA);
     this._migrate();
   }
 
-  close() { this.db.close(); }
+  // Fold the WAL back into the main file and truncate it (no-op on :memory:).
+  checkpoint() { try { this.db.exec('PRAGMA wal_checkpoint(TRUNCATE);'); } catch {} }
+
+  close() {
+    if (this._closed) return;
+    this._closed = true;
+    this.checkpoint(); // don't leave a fat -wal behind
+    this.db.close();
+  }
 
   // Idempotent: backfill the project layer onto DBs created before projects existed.
   _migrate() {

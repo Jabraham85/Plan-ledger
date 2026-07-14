@@ -18,6 +18,8 @@ const dbPath = process.env.PLAN_LEDGER_DB || join(__dirname, '..', 'data', 'plan
 const port = Number(process.env.PLAN_LEDGER_WEB_PORT) || 4319;
 
 const store = new Store(dbPath);
+process.on('SIGINT', () => { store.close(); process.exit(0); });
+process.on('exit', () => store.close());
 const html = await readFile(join(__dirname, 'index.html'), 'utf8');
 
 createBoardServer({ store, html }).listen(port, '127.0.0.1', () => {
