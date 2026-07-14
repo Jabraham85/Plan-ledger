@@ -177,6 +177,20 @@ const STOP = new Set(['the', 'and', 'for', 'with', 'that', 'this', 'from', 'into
   'all', 'any', 'one', 'two', 'step', 'plan', 'steps', 'plans', 'node']);
 const tokenize = (s) => String(s ?? '').toLowerCase().split(/[^a-z0-9_]+/).filter((w) => w.length > 2 && !STOP.has(w));
 
+// Shared IDF-weighted lexical ranker for getLessons + recall. `entries` is
+// [{ doc, toks:Set }]; returns [{ doc, score }] for score > 0, best first,
+// capped at `limit`. `tieBreak(aDoc, bDoc)` orders equal scores (default: stable).
+function idfRank(entries, qToks, limit, tieBreak = () => 0) {
+  const N = entries.length, df = new Map();
+  for (const e of entries) for (const t of e.toks) df.set(t, (df.get(t) || 0) + 1);
+  const idf = (t) => Math.log(1 + N / (df.get(t) || 1));
+  return entries
+    .map((e) => ({ doc: e.doc, score: qToks.reduce((s, t) => s + (e.toks.has(t) ? idf(t) : 0), 0) }))
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score || tieBreak(a.doc, b.doc))
+    .slice(0, limit);
+}
+
 const now = () => new Date().toISOString();
 const jsonArr = (v) => {
   if (v == null) return '[]';
@@ -579,20 +593,12 @@ export class Store {
       WHERE a.verdict != 'pass'`).all()
       .filter((r) => r.step_id !== step_id && (all || (r.project_id ?? 1) === scopeProject));
     if (!rows.length) return [];
-    const docs = rows.map((r) => ({ r, toks: new Set(tokenize(`${r.step_title} ${r.what_tried} ${r.result}`)) }));
-    const N = docs.length;
-    const df = new Map();
-    for (const d of docs) for (const t of d.toks) df.set(t, (df.get(t) || 0) + 1);
-    const idf = (t) => Math.log(1 + N / (df.get(t) || 1));
-    return docs
-      .map((d) => ({ d, score: qToks.reduce((s, t) => s + (d.toks.has(t) ? idf(t) : 0), 0) }))
-      .filter((x) => x.score > 0)
-      .sort((a, b) => b.score - a.score || (a.d.r.created_at < b.d.r.created_at ? 1 : -1))
-      .slice(0, limit)
+    const entries = rows.map((r) => ({ doc: r, toks: new Set(tokenize(`${r.step_title} ${r.what_tried} ${r.result}`)) }));
+    return idfRank(entries, qToks, limit, (a, b) => (a.created_at < b.created_at ? 1 : -1))
       .map((x) => ({
-        plan_id: x.d.r.plan_id, plan_title: x.d.r.plan_title,
-        step_id: x.d.r.step_id, step_title: x.d.r.step_title,
-        what_tried: x.d.r.what_tried, result: x.d.r.result, verdict: x.d.r.verdict,
+        plan_id: x.doc.plan_id, plan_title: x.doc.plan_title,
+        step_id: x.doc.step_id, step_title: x.doc.step_title,
+        what_tried: x.doc.what_tried, result: x.doc.result, verdict: x.doc.verdict,
         score: Math.round(x.score * 100) / 100,
       }));
   }
@@ -887,19 +893,12 @@ export class Store {
       if (inScope(s.project_id)) docs.push({ type: 'step', id: s.id, plan_id: s.plan_id, title: s.title, status: s.status, text: `${s.title} ${s.context} ${s.acceptance_criteria} ${s.carry_forward}` });
     for (const a of this.db.prepare('SELECT a.id, a.what_tried, a.result, a.verdict, a.step_id, s.title AS st, s.plan_id, p.project_id FROM attempts a JOIN steps s ON a.step_id = s.id JOIN plans p ON s.plan_id = p.id').all())
       if (inScope(a.project_id)) docs.push({ type: 'attempt', id: a.id, step_id: a.step_id, plan_id: a.plan_id, title: a.st, status: a.verdict, text: `${a.what_tried} ${a.result}` });
-    const toks = docs.map((d) => ({ d, set: new Set(tokenize(d.text)) }));
-    const N = toks.length, df = new Map();
-    for (const t of toks) for (const w of t.set) df.set(w, (df.get(w) || 0) + 1);
-    const idf = (w) => Math.log(1 + N / (df.get(w) || 1));
+    const entries = docs.map((d) => ({ doc: d, toks: new Set(tokenize(d.text)) }));
     return {
       query,
-      hits: toks
-        .map((t) => ({ t, score: q.reduce((s, w) => s + (t.set.has(w) ? idf(w) : 0), 0) }))
-        .filter((x) => x.score > 0)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, limit)
+      hits: idfRank(entries, q, limit)
         .map((x) => {
-          const d = x.t.d;
+          const d = x.doc;
           return { type: d.type, id: d.id, plan_id: d.plan_id, step_id: d.step_id, title: d.title, status: d.status,
             snippet: d.text.replace(/\s+/g, ' ').trim().slice(0, 160), score: Math.round(x.score * 100) / 100 };
         }),
