@@ -9,8 +9,18 @@
 // what the current step needs and lets everything else stay on disk.
 
 import { DatabaseSync } from 'node:sqlite';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
+import { homedir } from 'node:os';
 import { mkdirSync, readFileSync, statSync } from 'node:fs';
+
+// The ONE default DB location, shared by every entry point (MCP server, board,
+// packaged exe, runner, scripts). $PLAN_LEDGER_DB overrides; otherwise the
+// homedir install convention — deliberately NOT import.meta-relative, which is
+// undefined inside the packaged SEA exe (see context.mjs REPO note).
+export function defaultDbPath() {
+  return process.env.PLAN_LEDGER_DB
+    || join(homedir(), 'Documents', 'plan-ledger', 'data', 'plan-ledger.db');
+}
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS projects (

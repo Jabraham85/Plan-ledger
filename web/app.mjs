@@ -5,17 +5,14 @@
 // index.html is INLINED at bundle time (esbuild --loader:.html=text), so the
 // exe is fully self-contained. DB defaults to the same file the MCP server uses.
 
-import { homedir } from 'node:os';
-import { join } from 'node:path';
 import { spawn } from 'node:child_process';
-import { Store } from '../src/db.mjs';
+import { Store, defaultDbPath } from '../src/db.mjs';
 import { createBoardServer } from './board.mjs';
 import html from './index.html';
 
 const port = Number(process.env.PLAN_LEDGER_WEB_PORT) || 4319;
 const url = `http://localhost:${port}`;
-const dbPath = process.env.PLAN_LEDGER_DB
-  || join(homedir(), 'Documents', 'plan-ledger', 'data', 'plan-ledger.db');
+const dbPath = defaultDbPath();
 
 // Open the default browser robustly: try several Windows methods in turn, fall
 // back to printing the URL. `start` is a cmd builtin (no error event on bad

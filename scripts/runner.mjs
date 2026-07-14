@@ -26,7 +26,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { Store } from '../src/db.mjs';
+import { Store, defaultDbPath } from '../src/db.mjs';
 
 // Resolve a directly-spawnable claude binary. On Windows the PATH `claude` is a
 // .cmd shim that Node's spawn can't launch without a shell — but it wraps a real
@@ -66,7 +66,7 @@ const usage = { cost: 0, in: 0, out: 0, turns: 0, agents: 0 };
 
 if (!planId && !projectId) { console.error('usage: runner.mjs (--plan <id> | --project <id>) [--live] [--inject] [--lean] [--max-plans N] [--max-steps N] [--budget USD] [--model NAME]'); process.exit(2); }
 
-const dbPath = process.env.PLAN_LEDGER_DB || join(homedir(), 'Documents', 'plan-ledger', 'data', 'plan-ledger.db');
+const dbPath = defaultDbPath();
 const store = new Store(dbPath);
 
 // Orphan sweep: steps THIS RUN marked in_progress whose agent never recorded an

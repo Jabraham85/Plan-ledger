@@ -10,11 +10,11 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { Store } from '../src/db.mjs';
+import { Store, defaultDbPath } from '../src/db.mjs';
 import { createBoardServer } from './board.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const dbPath = process.env.PLAN_LEDGER_DB || join(__dirname, '..', 'data', 'plan-ledger.db');
+const dbPath = defaultDbPath();
 const port = Number(process.env.PLAN_LEDGER_WEB_PORT) || 4319;
 
 const store = new Store(dbPath);

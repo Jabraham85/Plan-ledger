@@ -11,16 +11,14 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { readFileSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { Store } from './db.mjs';
+import { Store, defaultDbPath } from './db.mjs';
 import { buildPlanContext, buildProjectContext, groundSlice } from './context.mjs';
 import { extractRepo } from './extract.mjs';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const dbPath = process.env.PLAN_LEDGER_DB || join(__dirname, '..', 'data', 'plan-ledger.db');
+const dbPath = defaultDbPath();
 const store = new Store(dbPath);
 store.checkpoint(); // trim any WAL left behind by a previous unclean exit
 process.on('SIGINT', () => { store.close(); process.exit(0); });

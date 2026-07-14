@@ -1,6 +1,6 @@
 // smoke.mjs — exercises the Store loop end to end against an in-memory DB.
 // Run: node test/smoke.mjs
-import { Store } from '../src/db.mjs';
+import { Store, defaultDbPath } from '../src/db.mjs';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 
@@ -253,6 +253,20 @@ check('nextPlan(project) scopes to that project only', s.nextPlan(projB.id) === 
   check('close() truncates the WAL (<100KB or absent)', walSize < 100 * 1024);
   check('close() is idempotent', (ws.close(), true));
   for (const suf of ['', '-wal', '-shm']) rmSync(walPath + suf, { force: true });
+}
+
+// defaultDbPath characterization: homedir convention (SEA-safe, no import.meta),
+// $PLAN_LEDGER_DB overrides — the ONE path every entry point resolves.
+{
+  const { homedir } = await import('node:os');
+  const { join } = await import('node:path');
+  const saved = process.env.PLAN_LEDGER_DB;
+  delete process.env.PLAN_LEDGER_DB;
+  check('defaultDbPath follows the homedir install convention',
+    defaultDbPath() === join(homedir(), 'Documents', 'plan-ledger', 'data', 'plan-ledger.db'));
+  process.env.PLAN_LEDGER_DB = join('X:', 'custom', 'pl.db');
+  check('defaultDbPath honors $PLAN_LEDGER_DB', defaultDbPath() === join('X:', 'custom', 'pl.db'));
+  if (saved === undefined) delete process.env.PLAN_LEDGER_DB; else process.env.PLAN_LEDGER_DB = saved;
 }
 
 console.log(`\n${pass} checks passed.`);

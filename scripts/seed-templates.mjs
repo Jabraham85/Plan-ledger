@@ -1,11 +1,8 @@
 // seed-templates.mjs — install a few default plan templates (idempotent).
 // Usage: node scripts/seed-templates.mjs
-import { homedir } from 'node:os';
-import { join } from 'node:path';
-import { Store } from '../src/db.mjs';
+import { Store, defaultDbPath } from '../src/db.mjs';
 
-const dbPath = process.env.PLAN_LEDGER_DB || join(homedir(), 'Documents', 'plan-ledger', 'data', 'plan-ledger.db');
-const s = new Store(dbPath);
+const s = new Store(defaultDbPath());
 
 const TEMPLATES = [
   { name: 'Code feature', description: 'Standard flow for shipping a code feature.', keywords: ['feature', 'code'], steps: [
