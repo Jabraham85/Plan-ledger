@@ -376,8 +376,7 @@ export class Store {
 
   // level 1 — open a plan: its detail + an ordered step *index* (titles/status only).
   openPlan(id) {
-    const p = this.db.prepare('SELECT * FROM plans WHERE id=?').get(id);
-    if (!p) throw new Error(`no plan with id ${id}`);
+    const p = this._mustPlan(id, '*');
     const steps = this.db
       .prepare('SELECT id, idx, title, status FROM steps WHERE plan_id=? ORDER BY idx, id')
       .all(id);
@@ -405,8 +404,7 @@ export class Store {
   // ---- steps -------------------------------------------------------------
 
   addStep(planId, { title, context, tools, role, acceptance_criteria, carry_forward, idx }) {
-    const plan = this.db.prepare('SELECT id FROM plans WHERE id=?').get(planId);
-    if (!plan) throw new Error(`no plan with id ${planId}`);
+    this._mustPlan(planId);
     if (!title || !String(title).trim()) throw new Error('step title is required');
     const ts = now();
     const newId = this._tx(() => { // shift + insert must be one atomic unit
@@ -434,8 +432,7 @@ export class Store {
   // level 2 — the full step payload: context, tools, criteria, carry-forward,
   // every recorded attempt (the failure log), and outbound links.
   getStep(id) {
-    const s = this.db.prepare('SELECT * FROM steps WHERE id=?').get(id);
-    if (!s) throw new Error(`no step with id ${id}`);
+    const s = this._mustStep(id, '*');
     // Attempts are capped to the LAST 10 (oldest→newest) — a step that failed 50×
     // must not drown the payload; attempts_total says how many exist in all.
     const attempts_total = this.db.prepare('SELECT COUNT(*) c FROM attempts WHERE step_id=?').get(id).c;
@@ -462,8 +459,7 @@ export class Store {
   }
 
   updateStep(id, fields) {
-    const s = this.db.prepare('SELECT * FROM steps WHERE id=?').get(id);
-    if (!s) throw new Error(`no step with id ${id}`);
+    const s = this._mustStep(id, '*');
     const allowed = {};
     if (fields.title != null) allowed.title = String(fields.title);
     if (fields.context != null) allowed.context = String(fields.context);
@@ -483,8 +479,7 @@ export class Store {
 
   setStepStatus(id, status) {
     if (!STEP_STATUS.has(status)) throw new Error(`bad step status: ${status}`);
-    const s = this.db.prepare('SELECT plan_id FROM steps WHERE id=?').get(id);
-    if (!s) throw new Error(`no step with id ${id}`);
+    const s = this._mustStep(id, 'plan_id');
     this.db.prepare('UPDATE steps SET status=?, updated_at=? WHERE id=?').run(status, now(), id);
     this.touchPlan(s.plan_id);
     return this.getStep(id);
@@ -493,8 +488,7 @@ export class Store {
   // Write a note FORWARD to a step (typically the next one) — the explicit
   // "carry this context across the reset" channel.
   writeCarryForward(stepId, note, { append = true } = {}) {
-    const s = this.db.prepare('SELECT plan_id, carry_forward FROM steps WHERE id=?').get(stepId);
-    if (!s) throw new Error(`no step with id ${stepId}`);
+    const s = this._mustStep(stepId, 'plan_id, carry_forward');
     const next = append && s.carry_forward
       ? `${s.carry_forward}\n${String(note)}`
       : String(note);
@@ -505,8 +499,7 @@ export class Store {
 
   // The whole "don't repeat past pitfalls" mechanism: log what was tried + how it went.
   recordAttempt(stepId, { what_tried, result, verdict, role, review_rounds, executor }) {
-    const s = this.db.prepare('SELECT plan_id FROM steps WHERE id=?').get(stepId);
-    if (!s) throw new Error(`no step with id ${stepId}`);
+    this._mustStep(stepId);
     if (!what_tried || !String(what_tried).trim()) throw new Error('what_tried is required');
     const v = verdict ?? 'fail';
     if (!VERDICTS.has(v)) throw new Error(`bad verdict: ${v} (pass|fail|partial)`);
@@ -533,8 +526,7 @@ export class Store {
   //   { all_blocked: true }    → steps remain but every one waits on a human
   //   null                     → plan complete (nothing left to do)
   nextStep(planId) {
-    const plan = this.db.prepare('SELECT id FROM plans WHERE id=?').get(planId);
-    if (!plan) throw new Error(`no plan with id ${planId}`);
+    this._mustPlan(planId);
     const remaining = this.db
       .prepare("SELECT id, idx, title, status FROM steps WHERE plan_id=? AND status NOT IN ('done','skipped') ORDER BY idx, id")
       .all(planId);
@@ -606,15 +598,12 @@ export class Store {
   // ---- links -------------------------------------------------------------
 
   link(fromStepId, { to_plan_id, to_step_id, relation, note }) {
-    const s = this.db.prepare('SELECT id FROM steps WHERE id=?').get(fromStepId);
-    if (!s) throw new Error(`no step with id ${fromStepId}`);
+    this._mustStep(fromStepId);
     if (to_plan_id == null && to_step_id == null) throw new Error('link needs a to_plan_id or to_step_id');
     const rel = relation ?? 'references';
     if (!RELATIONS.has(rel)) throw new Error(`bad relation: ${rel}`);
-    if (to_plan_id != null && !this.db.prepare('SELECT id FROM plans WHERE id=?').get(to_plan_id))
-      throw new Error(`no plan with id ${to_plan_id}`);
-    if (to_step_id != null && !this.db.prepare('SELECT id FROM steps WHERE id=?').get(to_step_id))
-      throw new Error(`no step with id ${to_step_id}`);
+    if (to_plan_id != null) this._mustPlan(to_plan_id);
+    if (to_step_id != null) this._mustStep(to_step_id);
     const info = this.db
       .prepare('INSERT INTO links (from_step_id, to_plan_id, to_step_id, relation, note, created_at) VALUES (?,?,?,?,?,?)')
       .run(fromStepId, to_plan_id ?? null, to_step_id ?? null, rel, String(note ?? ''), now());
@@ -626,13 +615,9 @@ export class Store {
   addFileRef({ plan_id, step_id, path, role, note }) {
     if (!path || !String(path).trim()) throw new Error('file path is required');
     let pid = plan_id;
-    if (step_id != null) {
-      const s = this.db.prepare('SELECT plan_id FROM steps WHERE id=?').get(step_id);
-      if (!s) throw new Error(`no step with id ${step_id}`);
-      pid = s.plan_id;
-    }
+    if (step_id != null) pid = this._mustStep(step_id, 'plan_id').plan_id;
     if (pid == null) throw new Error('provide step_id or plan_id');
-    if (!this.db.prepare('SELECT id FROM plans WHERE id=?').get(pid)) throw new Error(`no plan with id ${pid}`);
+    this._mustPlan(pid);
     const r = role ?? 'reference';
     if (!FILE_ROLES.has(r)) throw new Error(`bad role: ${r} (primary|dependency|related|reference)`);
     const info = this.db.prepare('INSERT INTO file_refs (plan_id, step_id, path, role, note, created_at) VALUES (?,?,?,?,?,?)')
@@ -717,8 +702,7 @@ export class Store {
     const k = kind ?? 'rule';
     if (!REF_KINDS.has(k)) throw new Error(`bad ref kind: ${k} (rule|tool)`);
     if (!name || !String(name).trim()) throw new Error('ref name is required');
-    if (plan_id != null && !this.db.prepare('SELECT id FROM plans WHERE id=?').get(plan_id))
-      throw new Error(`no plan with id ${plan_id}`);
+    if (plan_id != null) this._mustPlan(plan_id);
     let proj = null;
     if (plan_id == null && !global) {
       proj = project_id ?? this.currentProjectId();
@@ -787,7 +771,7 @@ export class Store {
   // Ingest a NetworkX node-link object (graphify graph.json): { nodes:[...], links:[...] }.
   // Replaces any existing graph for the plan. Computes degree for ranking.
   importGraph(planId, graph) {
-    if (!this.db.prepare('SELECT id FROM plans WHERE id=?').get(planId)) throw new Error(`no plan with id ${planId}`);
+    this._mustPlan(planId);
     const nodes = graph?.nodes || [];
     const edges = graph?.links || graph?.edges || [];
     if (!Array.isArray(nodes) || !Array.isArray(edges)) throw new Error('graph must have nodes[] and links[]/edges[]');
@@ -971,7 +955,7 @@ export class Store {
 
   // Clone a template's steps onto a plan (appended in order).
   instantiateTemplate(idOrName, planId) {
-    if (!this.db.prepare('SELECT id FROM plans WHERE id=?').get(planId)) throw new Error(`no plan with id ${planId}`);
+    this._mustPlan(planId);
     const tpl = this.getTemplate(idOrName);
     this._tx(() => { // all-or-nothing: a half-instantiated template is worse than none
       for (const s of tpl.steps) this.addStep(planId, { title: s.title, context: s.context, tools: s.tools, role: s.role, acceptance_criteria: s.acceptance_criteria });
@@ -1000,6 +984,19 @@ export class Store {
   }
 
   // ---- internal ----------------------------------------------------------
+
+  // Existence guards: return the row (selected columns) or throw the canonical
+  // "no plan/step with id N" error every caller (and the smoke suite) relies on.
+  _mustPlan(id, cols = 'id') {
+    const row = this.db.prepare(`SELECT ${cols} FROM plans WHERE id=?`).get(id);
+    if (!row) throw new Error(`no plan with id ${id}`);
+    return row;
+  }
+  _mustStep(id, cols = 'id') {
+    const row = this.db.prepare(`SELECT ${cols} FROM steps WHERE id=?`).get(id);
+    if (!row) throw new Error(`no step with id ${id}`);
+    return row;
+  }
 
   touchPlan(id) { this.db.prepare('UPDATE plans SET updated_at=? WHERE id=?').run(now(), id); }
 }
