@@ -293,18 +293,21 @@ export class Store {
       .run(String(name).trim(), String(description ?? ''), 'active', ts, ts);
     return this.getProject(Number(info.lastInsertRowid));
   }
+  // Common project shape (identity + plan counts); callers add their extras
+  // (getProject: timestamps, listProjects: the `current` flag).
+  _projectRow(p) {
+    const c = this.db.prepare("SELECT COUNT(*) n, SUM(status='done') done FROM plans WHERE project_id=?").get(p.id);
+    return { id: p.id, name: p.name, description: p.description, status: p.status, plans: c.n ?? 0, plans_done: c.done ?? 0 };
+  }
   getProject(id) {
     const p = this.db.prepare('SELECT * FROM projects WHERE id=?').get(id);
     if (!p) throw new Error(`no project with id ${id}`);
-    const c = this.db.prepare("SELECT COUNT(*) n, SUM(status='done') done FROM plans WHERE project_id=?").get(id);
-    return { id: p.id, name: p.name, description: p.description, status: p.status, plans: c.n ?? 0, plans_done: c.done ?? 0, created_at: p.created_at, updated_at: p.updated_at };
+    return { ...this._projectRow(p), created_at: p.created_at, updated_at: p.updated_at };
   }
   listProjects() {
     const cur = this.currentProjectId();
-    return this.db.prepare('SELECT * FROM projects ORDER BY id').all().map((p) => {
-      const c = this.db.prepare("SELECT COUNT(*) n, SUM(status='done') done FROM plans WHERE project_id=?").get(p.id);
-      return { id: p.id, name: p.name, description: p.description, status: p.status, plans: c.n ?? 0, plans_done: c.done ?? 0, current: p.id === cur };
-    });
+    return this.db.prepare('SELECT * FROM projects ORDER BY id').all()
+      .map((p) => ({ ...this._projectRow(p), current: p.id === cur }));
   }
   setProjectStatus(id, status) {
     if (!['active', 'archived'].includes(status)) throw new Error(`bad project status: ${status} (active|archived)`);
