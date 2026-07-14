@@ -338,7 +338,7 @@ export class Store {
     const p = this.db.prepare('SELECT * FROM plans WHERE id=?').get(id);
     if (!p) throw new Error(`no plan with id ${id}`);
     const steps = this.db
-      .prepare('SELECT id, idx, title, status FROM steps WHERE plan_id=? ORDER BY idx')
+      .prepare('SELECT id, idx, title, status FROM steps WHERE plan_id=? ORDER BY idx, id')
       .all(id);
     return {
       id: p.id,
@@ -368,18 +368,26 @@ export class Store {
     if (!plan) throw new Error(`no plan with id ${planId}`);
     if (!title || !String(title).trim()) throw new Error('step title is required');
     const ts = now();
-    let order = idx;
-    if (order == null) {
-      const max = this.db.prepare('SELECT MAX(idx) m FROM steps WHERE plan_id=?').get(planId);
-      order = (max.m ?? 0) + 1;
-    }
-    const info = this.db
-      .prepare(`INSERT INTO steps (plan_id, idx, title, status, context, tools, role, acceptance_criteria, carry_forward, created_at, updated_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
-      .run(planId, order, String(title).trim(), 'pending', String(context ?? ''), jsonArr(tools),
-           String(role ?? '').trim(), String(acceptance_criteria ?? ''), String(carry_forward ?? ''), ts, ts);
+    const newId = this._tx(() => { // shift + insert must be one atomic unit
+      let order = idx;
+      if (order == null) {
+        const max = this.db.prepare('SELECT MAX(idx) m FROM steps WHERE plan_id=?').get(planId);
+        order = (max.m ?? 0) + 1;
+      } else {
+        order = Number(order);
+        if (!Number.isInteger(order) || order < 1) throw new Error(`bad idx: ${idx} (must be an integer >= 1)`);
+        // true insert-at-idx: make room by shifting everything at/after the slot down one
+        this.db.prepare('UPDATE steps SET idx = idx + 1 WHERE plan_id=? AND idx >= ?').run(planId, order);
+      }
+      const info = this.db
+        .prepare(`INSERT INTO steps (plan_id, idx, title, status, context, tools, role, acceptance_criteria, carry_forward, created_at, updated_at)
+                  VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
+        .run(planId, order, String(title).trim(), 'pending', String(context ?? ''), jsonArr(tools),
+             String(role ?? '').trim(), String(acceptance_criteria ?? ''), String(carry_forward ?? ''), ts, ts);
+      return Number(info.lastInsertRowid);
+    });
     this.touchPlan(planId);
-    return this.getStep(Number(info.lastInsertRowid));
+    return this.getStep(newId);
   }
 
   // level 2 — the full step payload: context, tools, criteria, carry-forward,
@@ -482,7 +490,7 @@ export class Store {
     const plan = this.db.prepare('SELECT id FROM plans WHERE id=?').get(planId);
     if (!plan) throw new Error(`no plan with id ${planId}`);
     const remaining = this.db
-      .prepare("SELECT id, idx, title, status FROM steps WHERE plan_id=? AND status NOT IN ('done','skipped') ORDER BY idx")
+      .prepare("SELECT id, idx, title, status FROM steps WHERE plan_id=? AND status NOT IN ('done','skipped') ORDER BY idx, id")
       .all(planId);
     if (!remaining.length) return null;
     const blocked = remaining.filter((r) => r.status === 'blocked');
@@ -906,7 +914,7 @@ export class Store {
 
   getTemplate(idOrName) {
     const t = this._resolveTemplate(idOrName);
-    const steps = this.db.prepare('SELECT idx, title, context, tools, role, acceptance_criteria FROM template_steps WHERE template_id=? ORDER BY idx').all(t.id)
+    const steps = this.db.prepare('SELECT idx, title, context, tools, role, acceptance_criteria FROM template_steps WHERE template_id=? ORDER BY idx, id').all(t.id)
       .map((s) => ({ idx: s.idx, title: s.title, context: s.context, tools: parseArr(s.tools), role: s.role ?? '', acceptance_criteria: s.acceptance_criteria }));
     return { id: t.id, name: t.name, description: t.description, keywords: parseArr(t.keywords), steps };
   }

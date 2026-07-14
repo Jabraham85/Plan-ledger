@@ -147,6 +147,18 @@ check('suggest: dependency (a imports b)', sug.suggestions.some((x) => x.path ==
 check('suggest: dependent (c imports a)', sug.suggestions.some((x) => x.path === '/root/c.mjs' && x.role === 'related'));
 check('suggest: paths use the primary\'s absolute root', sug.matched === 'a.mjs');
 
+// explicit-idx insert: shifts existing steps instead of duplicating the slot
+const ip = s.createPlan({ title: 'insert-at-idx plan' });
+const i1 = s.addStep(ip.id, { title: 'first' });
+const i2 = s.addStep(ip.id, { title: 'second' });
+const i0 = s.addStep(ip.id, { title: 'now first', idx: 1 });
+const ipSteps = s.openPlan(ip.id).steps;
+check('insert at idx 1 shifts the others', ipSteps.map((x) => x.title).join(',') === 'now first,first,second'
+  && ipSteps.map((x) => x.idx).join(',') === '1,2,3' && i0.idx === 1 && i1.id !== i2.id);
+assert.throws(() => s.addStep(ip.id, { title: 'bad slot', idx: 0 }), /bad idx/);
+assert.throws(() => s.addStep(ip.id, { title: 'bad slot', idx: -3 }), /bad idx/);
+check('addStep rejects idx < 1', true);
+
 // importGraph atomicity: a failed re-import must not wipe the existing graph
 const ag = s.createPlan({ title: 'atomic graph plan' });
 s.importGraph(ag.id, { nodes: [{ id: 'n1' }, { id: 'n2' }], links: [{ source: 'n1', target: 'n2' }] });
