@@ -139,6 +139,27 @@ function buildPrompt(step) {
   ].join('\n');
 }
 
+// Shared spawn+parse for both agent modes. `fallback` is what an unparseable/
+// failed spawn resolves to — the modes deliberately differ: MCP mode falls back
+// to null (judge by DB state only, record_attempt already ran in-agent), inject
+// mode falls back to an explicit error-shaped result (the RUNNER must record a
+// fail attempt, so it needs a real object).
+function spawnClaude(args, fallback = null) {
+  return new Promise((resolve) => {
+    let out = '';
+    const child = spawn(claudeBin, args, { stdio: ['ignore', 'pipe', 'inherit'] });
+    child.stdout.on('data', (d) => { out += d; });
+    child.on('close', () => {
+      try {
+        const r = JSON.parse(out), u = r.usage || {};
+        resolve({ isError: !!r.is_error, apiErrorStatus: r.api_error_status || null, stopReason: r.stop_reason || '', result: r.result || '', cost: r.total_cost_usd || 0, turns: r.num_turns || 0,
+          tin: (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0), tout: u.output_tokens || 0 });
+      } catch { resolve(fallback); }
+    });
+    child.on('error', (e) => { console.error('  spawn error:', e.message); resolve(fallback); });
+  });
+}
+
 // MCP mode also captures the agent's JSON result — NOT to judge pass/fail (that
 // stays DB-driven via record_attempt), but so usage-limit stops are visible here
 // too. Before this, only --inject mode could detect a 429/limit, so the default
@@ -150,19 +171,7 @@ function runAgent(step) {
   if (allowedTools) args.push('--allowedTools', allowedTools);
   if (budgetUsd) args.push('--max-budget-usd', budgetUsd);
   if (model) args.push('--model', model);
-  return new Promise((resolve) => {
-    let out = '';
-    const child = spawn(claudeBin, args, { stdio: ['ignore', 'pipe', 'inherit'] });
-    child.stdout.on('data', (d) => { out += d; });
-    child.on('close', () => {
-      try {
-        const r = JSON.parse(out), u = r.usage || {};
-        resolve({ isError: !!r.is_error, apiErrorStatus: r.api_error_status || null, stopReason: r.stop_reason || '', result: r.result || '', cost: r.total_cost_usd || 0, turns: r.num_turns || 0,
-          tin: (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0), tout: u.output_tokens || 0 });
-      } catch { resolve(null); } // unparseable/empty → judge by DB state only, as before
-    });
-    child.on('error', (e) => { console.error('  spawn error:', e.message); resolve(null); });
-  });
+  return spawnClaude(args, null); // unparseable/empty → judge by DB state only, as before
 }
 
 // INJECTION MODE — give the agent its task DIRECTLY (no MCP, no get_step/record_attempt
@@ -203,19 +212,7 @@ function runInjected(step) {
   if (lean) args.push('--strict-mcp-config'); // inject mode needs no MCP → truly lean per-step agent
   if (budgetUsd) args.push('--max-budget-usd', budgetUsd);
   if (model) args.push('--model', model);
-  return new Promise((resolve) => {
-    let out = '';
-    const child = spawn(claudeBin, args, { stdio: ['ignore', 'pipe', 'inherit'] });
-    child.stdout.on('data', (d) => { out += d; });
-    child.on('close', () => {
-      try {
-        const r = JSON.parse(out), u = r.usage || {};
-        resolve({ isError: !!r.is_error, apiErrorStatus: r.api_error_status || null, stopReason: r.stop_reason || '', result: r.result || '', cost: r.total_cost_usd || 0, turns: r.num_turns || 0,
-          tin: (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0), tout: u.output_tokens || 0 });
-      } catch { resolve({ isError: true, apiErrorStatus: null, stopReason: '', result: '', cost: 0, turns: 0, tin: 0, tout: 0 }); }
-    });
-    child.on('error', (e) => { console.error('  spawn error:', e.message); resolve({ isError: true, apiErrorStatus: null, stopReason: '', result: '', cost: 0, turns: 0, tin: 0, tout: 0 }); });
-  });
+  return spawnClaude(args, { isError: true, apiErrorStatus: null, stopReason: '', result: '', cost: 0, turns: 0, tin: 0, tout: 0 });
 }
 
 // Stop the whole run on a spend ceiling or a real usage/rate-limit error. The CLI gives
