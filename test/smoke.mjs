@@ -183,6 +183,14 @@ const zb = s.nextStep(planZ.id);
 check('all remaining blocked → all_blocked (not null/complete)', zb.all_blocked === true && zb.blocked_steps.length === 2);
 check('plan status accepts blocked', s.setPlanStatus(planZ.id, 'blocked').status === 'blocked');
 
+// attempts cap: getStep returns only the LAST 10 attempts + attempts_total
+const capPlan = s.createPlan({ title: 'attempt cap plan' });
+const capStep = s.addStep(capPlan.id, { title: 'noisy step' });
+for (let i = 1; i <= 12; i++) s.recordAttempt(capStep.id, { what_tried: `try ${i}`, verdict: 'fail' });
+const capped = s.getStep(capStep.id);
+check('getStep caps attempts at last 10', capped.attempts.length === 10 && capped.attempts_total === 12);
+check('capped attempts are the newest, oldest→newest order', capped.attempts[0].what_tried === 'try 3' && capped.attempts.at(-1).what_tried === 'try 12');
+
 // nextPlan: no project_id defaults to the CURRENT project (regression: NULL used to
 // bind into "project_id IS NULL OR project_id=?" and match nothing → "fully worked")
 const np = s.nextPlan();

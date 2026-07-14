@@ -400,7 +400,10 @@ export class Store {
   getStep(id) {
     const s = this.db.prepare('SELECT * FROM steps WHERE id=?').get(id);
     if (!s) throw new Error(`no step with id ${id}`);
-    const attempts = this.db.prepare('SELECT id, what_tried, result, verdict, role, review_rounds, executor, created_at FROM attempts WHERE step_id=? ORDER BY id').all(id);
+    // Attempts are capped to the LAST 10 (oldest→newest) — a step that failed 50×
+    // must not drown the payload; attempts_total says how many exist in all.
+    const attempts_total = this.db.prepare('SELECT COUNT(*) c FROM attempts WHERE step_id=?').get(id).c;
+    const attempts = this.db.prepare('SELECT id, what_tried, result, verdict, role, review_rounds, executor, created_at FROM attempts WHERE step_id=? ORDER BY id DESC LIMIT 10').all(id).reverse();
     const links = this.db.prepare('SELECT id, to_plan_id, to_step_id, relation, note FROM links WHERE from_step_id=?').all(id);
     return {
       id: s.id,
@@ -414,6 +417,7 @@ export class Store {
       acceptance_criteria: s.acceptance_criteria,
       carry_forward: s.carry_forward,
       attempts,
+      attempts_total,
       links,
       file_refs: this.listFileRefs({ step_id: id }), // surface only — paths/roles, no content
       created_at: s.created_at,

@@ -145,9 +145,11 @@ export function buildPlanContext(store, planId) {
     if (step.acceptance_criteria) out.push(`- **Acceptance:** ${step.acceptance_criteria}`);
     if (step.tools?.length) out.push(`- **Tools:** ${step.tools.join(', ')}`);
     if (step.carry_forward) out.push(`- **Carry-forward:** ${step.carry_forward}`);
-    const fails = step.attempts.filter((a) => a.verdict !== 'pass');
+    // Same cap as getStep: at most the 10 most recent failures, never the whole history.
+    const fails = step.attempts.filter((a) => a.verdict !== 'pass').slice(-10);
     if (fails.length) {
-      out.push('- **Failures to avoid:**');
+      const more = (step.attempts_total ?? step.attempts.length) - step.attempts.length;
+      out.push(`- **Failures to avoid${more > 0 ? ` (${more} older attempt(s) not shown)` : ''}:**`);
       for (const a of fails) out.push(`  - tried: ${a.what_tried}${a.result ? ` → ${a.result}` : ''}`);
     }
     if (step.links?.length) {
