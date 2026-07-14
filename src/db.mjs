@@ -175,7 +175,9 @@ const STOP = new Set(['the', 'and', 'for', 'with', 'that', 'this', 'from', 'into
   'are', 'was', 'not', 'but', 'use', 'used', 'using', 'via', 'run', 'add', 'get', 'set', 'its',
   'has', 'have', 'will', 'can', 'per', 'than', 'then', 'when', 'what', 'which', 'our', 'out', 'off',
   'all', 'any', 'one', 'two', 'step', 'plan', 'steps', 'plans', 'node']);
-const tokenize = (s) => String(s ?? '').toLowerCase().split(/[^a-z0-9_]+/).filter((w) => w.length > 2 && !STOP.has(w));
+// Exported so the RAG ranker (src/rag/rank.mjs) and expander (src/rag/expand.mjs)
+// tokenize identically to the ledger's getLessons/recall — one lexical contract.
+export const tokenize = (s) => String(s ?? '').toLowerCase().split(/[^a-z0-9_]+/).filter((w) => w.length > 2 && !STOP.has(w));
 
 // Shared IDF-weighted lexical ranker for getLessons + recall. `entries` is
 // [{ doc, toks:Set }]; returns [{ doc, score }] for score > 0, best first,
