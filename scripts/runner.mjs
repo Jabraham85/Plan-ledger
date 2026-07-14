@@ -130,7 +130,22 @@ function buildDirectPrompt(step) {
     step.acceptance_criteria ? `\nAcceptance: ${step.acceptance_criteria}` : '',
     step.carry_forward ? `\nCarried context: ${step.carry_forward}` : '',
     `\nWork in the current directory. Use Read/Write only. When done, state briefly what you did.`,
+    `The FINAL LINE of your output MUST be exactly:`,
+    `VERDICT: pass|fail|partial — <one-line summary of what you tried>`,
+    `(pick ONE verdict; e.g. "VERDICT: pass — wrote the parser and verified the sample round-trips").`,
   ].filter(Boolean).join('\n');
+}
+
+// The inject-mode result contract: the agent's final line must be
+// "VERDICT: pass|fail|partial — <what_tried>". No marker → FAIL (an agent that
+// didn't follow the contract can't be trusted to have finished the step).
+function parseVerdict(text) {
+  const lines = String(text || '').trim().split('\n');
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const m = /^\s*VERDICT:\s*(pass|fail|partial)\s*(?:[—–-]+\s*(.*))?$/i.exec(lines[i]);
+    if (m) return { verdict: m[1].toLowerCase(), what_tried: (m[2] || '').trim() || null };
+  }
+  return { verdict: 'fail', what_tried: null };
 }
 function runInjected(step) {
   const args = ['-p', buildDirectPrompt(step), '--output-format', 'json',
@@ -192,11 +207,12 @@ async function workPlan(pid) {
     if (inject) {
       const res = await runInjected(step);
       usage.cost += res.cost; usage.in += res.tin; usage.out += res.tout; usage.turns += res.turns; usage.agents++;
-      const ok = !res.isError && res.result.trim().length > 0; // gate: empty/errored result → fail → retry
+      // gate: the agent must end with a VERDICT line; missing marker or an errored run → fail → retry
+      const v = res.isError ? { verdict: 'fail', what_tried: null } : parseVerdict(res.result);
       store.recordAttempt(step.id, {
-        what_tried: `[orchestrator:inject] ${(res.result || '(no output)').replace(/\s+/g, ' ').slice(0, 200)}`,
-        result: ok ? 'completed' : 'agent produced no usable result',
-        verdict: ok ? 'pass' : 'fail',
+        what_tried: `[orchestrator:inject] ${(v.what_tried || res.result || '(no output)').replace(/\s+/g, ' ').slice(0, 200)}`,
+        result: v.what_tried ? `agent verdict: ${v.verdict}` : (res.isError ? 'agent errored' : 'agent output had no VERDICT line'),
+        verdict: v.verdict,
       });
       if (budgetOrLimitStop(res)) return 'paused';
     } else {
