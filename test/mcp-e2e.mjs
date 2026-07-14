@@ -24,6 +24,9 @@ await client.connect(transport);
 
 const tools = (await client.listTools()).tools;
 console.log(`tools exposed: ${tools.length} -> ${tools.map((t) => t.name).join(', ')}`);
+check('tool count matches the registered surface', tools.length === 41);
+check('retired tools are gone (set_ref_enabled, list_file_refs)',
+  !tools.some((t) => t.name === 'set_ref_enabled' || t.name === 'list_file_refs'));
 
 const plan = parse(await client.callTool({ name: 'create_plan', arguments: { title: 'E2E plan', keywords: ['e2e'] } }));
 console.log('created plan', plan.id);

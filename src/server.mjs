@@ -333,12 +333,6 @@ tool('create_ref', {
   },
 }, ({ kind, ...rest }) => store.createRef({ kind, ...rest }));
 
-tool('set_ref_enabled', {
-  title: 'Toggle a rule / tool on or off',
-  description: 'Turn a reference on or off. Off → excluded from get_context (stops it sticking in chats).',
-  inputSchema: { ref_id: z.number().int(), enabled: z.boolean() },
-}, ({ ref_id, enabled }) => store.setRefEnabled(ref_id, enabled));
-
 tool('update_ref', {
   title: 'Update a rule / tool',
   description: 'Edit a reference (kind/name/body/enabled/plan_id/keywords). Only pass what changes.',
@@ -537,12 +531,6 @@ tool('add_file_ref', {
     note: z.string().optional().describe('why it matters / what it is'),
   },
 }, (a) => store.addFileRef(a));
-
-tool('list_file_refs', {
-  title: 'List cited files (surface only)',
-  description: 'List the files cited on a step or plan — paths/roles/notes only, NEVER content. Expand with read_file_ref.',
-  inputSchema: { step_id: z.number().int().optional(), plan_id: z.number().int().optional() },
-}, ({ step_id, plan_id }) => store.listFileRefs({ step_id, plan_id }));
 
 tool('read_file_ref', {
   title: 'Expand a cited file (read its content on demand)',

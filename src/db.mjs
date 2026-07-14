@@ -761,8 +761,6 @@ export class Store {
     return this.getRef(id);
   }
 
-  setRefEnabled(id, enabled) { return this.updateRef(id, { enabled: !!enabled }); }
-
   deleteRef(id) {
     const info = this.db.prepare('DELETE FROM refs WHERE id=?').run(id);
     if (info.changes === 0) throw new Error(`no ref with id ${id}`);
