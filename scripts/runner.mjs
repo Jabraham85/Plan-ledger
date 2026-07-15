@@ -20,6 +20,13 @@
 //     step the agent leaves unfinished), then pause for a human.
 //  3. safety = DRY RUN by default; --live is explicit.
 //  4. model/effort = optional --model passthrough.
+//
+// VERIFY gate (benchmark-v1 improvement #1, docs/BENCHMARK_2026-07.md §6): an optional
+// first line in step.context, `VERIFY: <command>` (same convention as `RAG:`, see
+// docs/RAG.md §10). After the agent exits — BOTH modes — the runner runs the command
+// (scripts/runner-lib.mjs: parseVerify/runVerify/applyVerifyGate) and a claimed pass
+// (inject VERDICT line, or MCP-mode step reaching status=done) is downgraded to
+// verdict=fail with the command's output tail appended when it doesn't exit 0.
 
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -28,20 +35,32 @@ import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { Store, defaultDbPath } from '../src/db.mjs';
 import { resolveRole } from '../src/roles.mjs';
+import { parseVerdict, parseVerify, applyVerifyGate } from './runner-lib.mjs';
 
 // Resolve a directly-spawnable claude binary. On Windows the PATH `claude` is a
 // .cmd shim that Node's spawn can't launch without a shell — but it wraps a real
 // claude.exe, so prefer that (same class of gotcha as the postject .cmd issue).
+// Returns { cmd, prependArgs }: normally prependArgs is empty (cmd IS the
+// executable). Testability hook: CLAUDE_BIN pointing at a .mjs/.js/.cjs file is
+// run via THIS node instead of exec'd directly — spawn() without a shell can't
+// launch a script by file association on Windows — so a fake CLI stub can be
+// dropped in for tests with no OS-level shebang support. Node stops parsing its
+// OWN flags once it sees a script FILE (as opposed to -e/-p) to run, so every
+// arg after it lands in the stub's process.argv unparsed.
 function resolveClaude() {
-  if (process.env.CLAUDE_BIN) return process.env.CLAUDE_BIN;
+  if (process.env.CLAUDE_BIN) {
+    const bin = process.env.CLAUDE_BIN;
+    if (/\.(mjs|js|cjs)$/i.test(bin)) return { cmd: process.execPath, prependArgs: [bin] };
+    return { cmd: bin, prependArgs: [] };
+  }
   if (process.platform === 'win32') {
     const exe = join(process.env.APPDATA || join(homedir(), 'AppData', 'Roaming'),
       'npm', 'node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude.exe');
-    if (existsSync(exe)) return exe;
+    if (existsSync(exe)) return { cmd: exe, prependArgs: [] };
   }
-  return 'claude';
+  return { cmd: 'claude', prependArgs: [] };
 }
-const claudeBin = resolveClaude();
+const claudeResolved = resolveClaude();
 
 const argv = process.argv.slice(2);
 const flag = (n) => argv.includes(n);
@@ -155,7 +174,7 @@ function buildPrompt(step, r = resolveStepRole(step)) {
 function spawnClaude(args, fallback = null) {
   return new Promise((resolve) => {
     let out = '';
-    const child = spawn(claudeBin, args, { stdio: ['ignore', 'pipe', 'inherit'] });
+    const child = spawn(claudeResolved.cmd, [...claudeResolved.prependArgs, ...args], { stdio: ['ignore', 'pipe', 'inherit'] });
     child.stdout.on('data', (d) => { out += d; });
     child.on('close', () => {
       try {
@@ -188,6 +207,7 @@ function runAgent(step) {
 // plumbing) and let the RUNNER record the outcome from the agent's JSON. Removes the
 // per-agent MCP tool-schema overhead and the indirection that makes cold agents fumble.
 function buildDirectPrompt(step, r = resolveStepRole(step)) {
+  const verifyCmd = parseVerify(step.context);
   return [
     step.title, '',
     ...roleLines(r),
@@ -199,23 +219,17 @@ function buildDirectPrompt(step, r = resolveStepRole(step)) {
     // B2: state the REAL permission set — inject agents get whatever --allowed-tools
     // the runner was passed (default Write,Read); never contradict it in the prompt.
     `\nWork in the current directory. Available tools: ${allowedTools || 'Write, Read'}. When done, state briefly what you did.`,
+    // VERIFY gate: tell the agent up front, in plain language, that a claimed pass
+    // will be objectively checked — not just left as a line in its own context.
+    verifyCmd ? `\nThis step will be VERIFIED after you finish by running: \`${verifyCmd}\` (in this working ` +
+      `directory) — it must exit 0. A "VERDICT: pass" is OVERRIDDEN to "fail" if that command fails, so make ` +
+      `sure it actually passes before you report pass.` : '',
     `The FINAL LINE of your output MUST be exactly:`,
     `VERDICT: pass|fail|partial — <one-line summary of what you tried>`,
     `(pick ONE verdict; e.g. "VERDICT: pass — wrote the parser and verified the sample round-trips").`,
   ].filter(Boolean).join('\n');
 }
 
-// The inject-mode result contract: the agent's final line must be
-// "VERDICT: pass|fail|partial — <what_tried>". No marker → FAIL (an agent that
-// didn't follow the contract can't be trusted to have finished the step).
-function parseVerdict(text) {
-  const lines = String(text || '').trim().split('\n');
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const m = /^\s*VERDICT:\s*(pass|fail|partial)\s*(?:[—–-]+\s*(.*))?$/i.exec(lines[i]);
-    if (m) return { verdict: m[1].toLowerCase(), what_tried: (m[2] || '').trim() || null };
-  }
-  return { verdict: 'fail', what_tried: null };
-}
 function runInjected(step) {
   const r = resolveStepRole(step); // once per step: prompt line + model override share it
   const args = ['-p', buildDirectPrompt(step, r), '--output-format', 'json',
@@ -273,10 +287,19 @@ async function workPlan(pid) {
       usage.cost += res.cost; usage.in += res.tin; usage.out += res.tout; usage.turns += res.turns; usage.agents++;
       // gate: the agent must end with a VERDICT line; missing marker or an errored run → fail → retry
       const v = res.isError ? { verdict: 'fail', what_tried: null } : parseVerdict(res.result);
+      const baseResult = v.what_tried ? `agent verdict: ${v.verdict}` : (res.isError ? 'agent errored' : 'agent output had no VERDICT line');
+      // VERIFY gate: a claimed "pass" is re-checked against the step's own VERIFY
+      // command (if any) and downgraded to "fail" — with the command's output
+      // tail — when it doesn't actually exit 0. No-op when there's no VERIFY
+      // line or the agent didn't claim pass in the first place.
+      const verifyCmd = parseVerify(step.context);
+      const gated = applyVerifyGate(v.verdict, baseResult, verifyCmd, { cwd: process.cwd() });
+      if (gated.verified === false) console.log(`  ⛔ VERIFY override: step #${step.id} claimed pass but \`${verifyCmd}\` failed — recorded as fail.`);
+      else if (gated.verified === true) console.log(`  ✓ VERIFY passed: \`${verifyCmd}\``);
       store.recordAttempt(step.id, {
         what_tried: `[orchestrator:inject] ${(v.what_tried || res.result || '(no output)').replace(/\s+/g, ' ').slice(0, 200)}`,
-        result: v.what_tried ? `agent verdict: ${v.verdict}` : (res.isError ? 'agent errored' : 'agent output had no VERDICT line'),
-        verdict: v.verdict,
+        result: gated.resultText,
+        verdict: gated.verdict,
         role: step.role || '',
         executor: 'runner-inject',
       });
@@ -287,6 +310,30 @@ async function workPlan(pid) {
         usage.cost += res.cost; usage.in += res.tin; usage.out += res.tout; usage.turns += res.turns; usage.agents++;
         if (res.result) console.log(`  ⎿ ${res.result.replace(/\s+/g, ' ').slice(0, 300)}`);
         if (budgetOrLimitStop(res)) return 'paused';
+      }
+      // VERIFY gate for MCP mode: the agent calls record_attempt itself (inside
+      // the MCP tool loop), so there's no result text to intercept — instead,
+      // re-check VERIFY after the agent exits and, if it claimed done (pass) but
+      // VERIFY fails, record an OVERRIDING fail attempt and let recordAttempt's
+      // own verdict handling put the step back to failed.
+      const verifyCmd = parseVerify(step.context);
+      if (verifyCmd) {
+        const afterAgent = store.getStep(step.id);
+        if (afterAgent.status === 'done') {
+          const gated = applyVerifyGate('pass', 'agent claimed pass via record_attempt', verifyCmd, { cwd: process.cwd() });
+          if (gated.verdict === 'fail') {
+            store.recordAttempt(step.id, {
+              what_tried: `[orchestrator:verify-override] re-ran VERIFY (\`${verifyCmd}\`) after the step was marked done`,
+              result: gated.resultText,
+              verdict: 'fail',
+              role: step.role || '',
+              executor: 'runner-mcp',
+            });
+            console.log(`  ⛔ VERIFY override: step #${step.id} was done but \`${verifyCmd}\` failed — reverted to failed.`);
+          } else {
+            console.log(`  ✓ VERIFY passed: \`${verifyCmd}\``);
+          }
+        }
       }
     }
     const after = store.getStep(step.id);

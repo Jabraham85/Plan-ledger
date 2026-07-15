@@ -12,7 +12,7 @@
     "board": "node web/server.mjs",
     "orchestrate": "node scripts/runner.mjs",
     "build:exe": "node scripts/build-exe.mjs",
-    "test": "node test/smoke.mjs && node test/rag.mjs && node test/mcp-e2e.mjs",
+    "test": "node test/smoke.mjs && node test/rag.mjs && node test/mcp-e2e.mjs && node test/runner-unit.mjs",
     "test:rag": "node test/rag.mjs",
     "eval:rag": "node scripts/eval-rag.mjs",
     "inspect": "npx @modelcontextprotocol/inspector node src/server.mjs"
