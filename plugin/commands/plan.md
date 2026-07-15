@@ -59,9 +59,12 @@ to be different work than planned.
 override files exist: `.plan-roles.json` in the repo root, then `~/.claude/plan-roles.json`
 (`projects.<current project>.roles`, then `roles`) — first layer defining the role key wins. An
 entry may rename the executing agent (`agent` = any subagent_type, built-ins included), point at a
-`charter` file, set a `model`, or disable the role (`false`). Dispatch with `subagent_type` = the
-resolved agent (+ `model` if set and accepted); when the resolved agent differs from the role name
-and a charter exists, the brief MUST open with "read + adopt <charter path>", and the review-gate
+`charter` file, set a `model`, or disable the role (`false`). The base `~/.claude/plan-roles.json`
+now carries the model-tier policy itself — architect/debugger resolve to opus, all other specialists
+to sonnet — so dispatch always resolves a role's model through the map; the orchestrator may still
+escalate a single crux dispatch to opus by passing `model` on that Agent call. Dispatch with
+`subagent_type` = the resolved agent (+ `model` if set and accepted); when the resolved agent
+differs from the role name and a charter exists, the brief MUST open with "read + adopt <charter path>", and the review-gate
 DoD comes from that charter. Unknown or disabled role → treat the step as untagged: pick from the
 table (or the map's project roles — valid `role` values like the built-in twelve) and `update_step`.
 Full schema/precedence: plan-ledger `docs/ROLES.md` § Customizing the roster.
@@ -95,8 +98,16 @@ yourself if it's yours to make, escalate via blocked status if it's the user's, 
    **self-contained steps**, `add_step` for each. Every step MUST have a `context` executable in a
    fresh session with no other memory, a concrete `acceptance_criteria`, the `tools` it will use,
    and a `role` from the Roles table (who executes it — pick the specialist whose discipline the
-   step's core difficulty lives in). If the goal is vague, ask 1–2 clarifying questions BEFORE
-   writing steps.
+   step's core difficulty lives in). If the step's success is checkable by a command, its `context`
+   SHOULD open with a first line `VERIFY: <command>` — the headless runner enforces it. If the goal
+   is vague, ask 1–2 clarifying questions BEFORE writing steps.
+   - **Decompose by shared concern, not one-command-per-step.** Steps that would each reload the
+     same contract/spec belong in one step (benchmark v1: 3 steps re-transmitted one contract to
+     cold processes — 2.88M input tokens; `docs/BENCHMARK_2026-07.md` §6 item 2).
+   - **Reference shared specs, never copy them into step contexts.** Keep the spec in the repo (or
+     `rag_ingest` it under a codename) and cite the path/codename plus a `RAG:` starter line
+     instead of pasting spec text into N step contexts (benchmark v1: one spec was re-serialized
+     ~6× at plan creation — 26k output tokens; `docs/BENCHMARK_2026-07.md` §6 item 3).
 3. **Declare the plan's knowledge up front (RAG).** While decomposing, list every source the
    steps will need (repo folders, design docs, dependency gits, external sites/wikis). Check
    `rag_status`; `rag_ingest` anything missing under a stable codename (`frontier-docs`, not

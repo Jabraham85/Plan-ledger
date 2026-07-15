@@ -31,7 +31,16 @@ or website you didn't write), the `rag_*` tools do slim, cited retrieval — the
 
 - A task has multiple stages, or will outlive one session → **make a plan** (`create_plan`
   + `add_step` per stage). Each step's `context` must be self-contained, have a concrete
-  `acceptance_criteria`, and carry a `role` (the specialist that executes it — see below).
+  `acceptance_criteria`, and carry a `role` (the specialist that executes it — see below). If a
+  step's success is checkable by a command, its `context` SHOULD open with a first line
+  `VERIFY: <command>` — the headless runner enforces it.
+- **Decompose by shared concern, not one-command-per-step.** Steps that would each reload the
+  same contract/spec belong in one step (benchmark v1: 3 steps re-transmitted one contract to
+  cold processes — 2.88M input tokens; `docs/BENCHMARK_2026-07.md` §6 item 2).
+- **Reference shared specs, never copy them into step contexts.** Keep the spec in the repo (or
+  `rag_ingest` it under a codename) and cite the path/codename plus a `RAG:` starter line instead
+  of pasting spec text into N step contexts (benchmark v1: one spec was re-serialized ~6× at plan
+  creation — 26k output tokens; `docs/BENCHMARK_2026-07.md` §6 item 3).
 - You're continuing work → `list_plans` to orient, `open_plan` the relevant one, then work it.
 - Mid-task you learn something the *next* step needs → `write_carry_forward` into that step.
   This is how context survives a reset: write it forward, don't hold it in your head.
@@ -49,7 +58,11 @@ implementer, test-engineer, debugger, refactor-surgeon, build-devops, perf-engin
 researcher, tech-writer, ui-designer, ux-architect, game-designer). Assign at plan creation —
 pick the specialist whose discipline the step's core difficulty lives in. A role map
 (`.plan-roles.json` / `~/.claude/plan-roles.json`) may rename, re-charter, or disable a role;
-resolve through it before dispatch. Full schema: plan-ledger `docs/ROLES.md`.
+resolve through it before dispatch. The base `~/.claude/plan-roles.json` also carries the
+model-tier policy — architect/debugger resolve to opus, all other specialists to sonnet — so
+dispatch always resolves a role's model through the map, and the orchestrator may still escalate
+a single crux dispatch to opus by passing `model` on that Agent call. Full schema: plan-ledger
+`docs/ROLES.md`.
 
 ## The execution loop (one step at a time)
 
