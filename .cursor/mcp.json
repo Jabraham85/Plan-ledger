@@ -1,0 +1,10 @@
+{
+  "_note": "plan-ledger MCP server for Cursor 3.x. The server registers 42+ tools (growing toward ~47); Cursor 2.4+ dropped the old 40-tool cap and lazy-loads MCP tools, so the full surface works with no clipping. Copy this into ~/.cursor/mcp.json (all projects) or a project .cursor/mcp.json (this repo); adjust the path in args to where plan-ledger is installed. '_note' is an inert annotation Cursor ignores — delete it if a strict JSON parser ever complains. See docs/CURSOR.md.",
+  "mcpServers": {
+    "plan-ledger": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${userHome}/Documents/plan-ledger/src/server.mjs"]
+    }
+  }
+}

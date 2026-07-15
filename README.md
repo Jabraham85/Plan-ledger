@@ -114,6 +114,17 @@ Then in a session: *"Connect to plan-ledger and plan out X."* Claude calls
 `list_plans` to orient, `create_plan` + `add_step` to lay out the work, then runs
 the loop above.
 
+## Cursor
+
+plan-ledger runs in **Cursor** too — the same MCP server, the same 12 agent
+charters in `~/.claude/agents/` (Cursor 3.x reads that directory natively, so
+there's no fork), and a Cursor-native copy of the `/plan` loop. The glue ships in
+this repo: [`.cursor/mcp.json`](.cursor/mcp.json) (stdio server config) and
+[`.cursor/skills/plan-ledger/SKILL.md`](.cursor/skills/plan-ledger/SKILL.md) (the
+plan loop as a Cursor Skill). Full setup — global vs project config, the roster
+cross-read with its empirical-verify caveat, per-tool approval UX, and the headless
+`agent -p` tokens-only note — is in **[docs/CURSOR.md](docs/CURSOR.md)**.
+
 ## The orchestrator (shipped)
 
 `scripts/runner.mjs` makes plans walk themselves — a fresh headless agent per step,
