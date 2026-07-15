@@ -197,3 +197,26 @@ the four the step called out:
   (`runner.mjs:201`); baseline task-template SHA c7c9a5e16b7b.
 
 *Author: analyst (plan #97 step 509). Model `claude-sonnet-5`, claude CLI 2.1.114.*
+
+---
+
+## Benchmark v2 (stratum) — the layered-task follow-up (plan #100 step 525)
+
+Full results: **`docs/BENCHMARK_V2_RESULTS.md`** (protocol: `docs/BENCHMARK_V2_DESIGN.md`, commit
+2803a91; harness `C:/Users/AI/Documents/bench100/`). v1 measured the plan tool's **worst case** (one
+flat task, ~360 LOC, sonnet both arms — vanilla won 30/30 vs 29/30 at 5.4× less cost). v2 measured its
+**home turf**: a 6-stage physically-layered storage+SQL engine (`stratum`, ~1500 LOC, 130-test staged
+grader), **opus** both leaders, ARM B agents tiered per `plan-roles.json` (architect/debugger opus,
+implementer sonnet).
+
+**v2 verdict (n=1/cell, indicative):** quality **near dead-heat** — ARM B **130/130**, ARM A
+**129/130** (its lone miss a *mid-stack* B-tree case, **not** the predicted late-stack collapse). The
+new result is economic and **reverses v1**: ARM B cost **$8.19 vs ARM A $9.17 (≈11% cheaper)** and used
+≈12% fewer input tokens — **but** that flip is driven as much by the **tier policy** (sonnet did 62% of
+runner cost / the bulk implementation, under a $4.63 opus plan) as by decomposition itself (T-TIER
+confound). **Neither v1 nor v2 shows the plan tool as a quality multiplier** (within ±1 test both times);
+v2 shows it as a **cost lever on a cleanly-decomposable task**. Late-stack falloff **did not occur** —
+opus-4-8 held the whole stack in one context, so the thesis's degradation *mechanism* is unsupported at
+this task size. Both per-stage falloff curves, the ARM B per-step token table (first live exercise of
+the step-521 DB attribution), the full v1↔v2 comparative, threats (T-SHAPE, T-TIER, n=1, reviewer
+identity), and six data-derived findings are in `BENCHMARK_V2_RESULTS.md`.
