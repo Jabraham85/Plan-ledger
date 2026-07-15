@@ -27,6 +27,8 @@
 // (scripts/runner-lib.mjs: parseVerify/runVerify/applyVerifyGate) and a claimed pass
 // (inject VERDICT line, or MCP-mode step reaching status=done) is downgraded to
 // verdict=fail with the command's output tail appended when it doesn't exit 0.
+// Per-step usage logging (improvement #4): every attempt this runner records also gets
+// a "usage: in=… out=… cost=$… turns=… model=…" line appended to its result field.
 
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -35,7 +37,7 @@ import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { Store, defaultDbPath } from '../src/db.mjs';
 import { resolveRole } from '../src/roles.mjs';
-import { parseVerdict, parseVerify, applyVerifyGate } from './runner-lib.mjs';
+import { parseVerdict, parseVerify, applyVerifyGate, formatUsageLine, appendUsageToLatestAttempt } from './runner-lib.mjs';
 
 // Resolve a directly-spawnable claude binary. On Windows the PATH `claude` is a
 // .cmd shim that Node's spawn can't launch without a shell — but it wraps a real
@@ -200,7 +202,7 @@ function runAgent(step) {
   if (budgetUsd) args.push('--max-budget-usd', budgetUsd);
   const m = model ?? (r.mode === 'dispatch' ? r.model : null); // CLI --model beats the map's per-role model
   if (m) args.push('--model', m);
-  return spawnClaude(args, null); // unparseable/empty → judge by DB state only, as before
+  return spawnClaude(args, null).then((res) => res && { ...res, model: m }); // unparseable/empty → judge by DB state only, as before
 }
 
 // INJECTION MODE — give the agent its task DIRECTLY (no MCP, no get_step/record_attempt
@@ -238,7 +240,8 @@ function runInjected(step) {
   if (budgetUsd) args.push('--max-budget-usd', budgetUsd);
   const m = model ?? (r.mode === 'dispatch' ? r.model : null); // CLI --model beats the map's per-role model
   if (m) args.push('--model', m);
-  return spawnClaude(args, { isError: true, apiErrorStatus: null, stopReason: '', result: '', cost: 0, turns: 0, tin: 0, tout: 0 });
+  return spawnClaude(args, { isError: true, apiErrorStatus: null, stopReason: '', result: '', cost: 0, turns: 0, tin: 0, tout: 0 })
+    .then((res) => ({ ...res, model: m }));
 }
 
 // Stop the whole run on a spend ceiling or a real usage/rate-limit error. The CLI gives
@@ -296,19 +299,28 @@ async function workPlan(pid) {
       const gated = applyVerifyGate(v.verdict, baseResult, verifyCmd, { cwd: process.cwd() });
       if (gated.verified === false) console.log(`  ⛔ VERIFY override: step #${step.id} claimed pass but \`${verifyCmd}\` failed — recorded as fail.`);
       else if (gated.verified === true) console.log(`  ✓ VERIFY passed: \`${verifyCmd}\``);
+      const usageStr = formatUsageLine({ tin: res.tin, tout: res.tout, cost: res.cost, turns: res.turns, model: res.model });
       store.recordAttempt(step.id, {
         what_tried: `[orchestrator:inject] ${(v.what_tried || res.result || '(no output)').replace(/\s+/g, ' ').slice(0, 200)}`,
-        result: gated.resultText,
+        result: `${gated.resultText}\n${usageStr}`,
         verdict: gated.verdict,
         role: step.role || '',
         executor: 'runner-inject',
       });
       if (budgetOrLimitStop(res)) return 'paused';
     } else {
+      // Latest attempt id BEFORE the spawn — lets us tell whether the in-agent
+      // record_attempt call (via MCP) actually landed a NEW row afterward, so we
+      // know which attempt to append the usage line to (and which to re-check
+      // against VERIFY, never a stale/earlier one).
+      const lastAttemptIdBefore = store.db.prepare('SELECT MAX(id) m FROM attempts WHERE step_id=?').get(step.id).m || 0;
       const res = await runAgent(step);
       if (res) {
         usage.cost += res.cost; usage.in += res.tin; usage.out += res.tout; usage.turns += res.turns; usage.agents++;
         if (res.result) console.log(`  ⎿ ${res.result.replace(/\s+/g, ' ').slice(0, 300)}`);
+        const usageStr = formatUsageLine({ tin: res.tin, tout: res.tout, cost: res.cost, turns: res.turns, model: res.model });
+        const appended = appendUsageToLatestAttempt(store.db, step.id, lastAttemptIdBefore, usageStr);
+        if (!appended.appended) console.log(`  (usage line skipped — no new attempt recorded on step #${step.id})`);
         if (budgetOrLimitStop(res)) return 'paused';
       }
       // VERIFY gate for MCP mode: the agent calls record_attempt itself (inside

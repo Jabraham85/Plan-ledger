@@ -54,3 +54,23 @@ export function applyVerifyGate(verdict, resultText, verifyCmd, opts = {}) {
     verified: false,
   };
 }
+
+// Per-attempt usage line, persisted into the attempt's `result` field (in
+// addition to the runner's existing end-of-run console summary).
+export function formatUsageLine({ tin = 0, tout = 0, cost = 0, turns = 0, model } = {}) {
+  return `usage: in=${tin} out=${tout} cost=$${Number(cost || 0).toFixed(4)} turns=${turns} model=${model || 'default'}`;
+}
+
+// MCP mode has no hook into record_attempt (it runs inside the agent, via MCP
+// tools) — so usage is stitched on after the fact: if a NEW attempt landed on
+// this step while the agent ran, append the usage line to ITS result column
+// directly (db is the Store's public DatabaseSync handle — same direct-access
+// pattern test/smoke.mjs already uses for schema checks). If no new attempt
+// appeared (agent errored before ever calling record_attempt), there's nothing
+// to append to — skip and let the caller log a console note.
+export function appendUsageToLatestAttempt(db, stepId, sinceAttemptId, usageLine) {
+  const row = db.prepare('SELECT id, result FROM attempts WHERE step_id=? ORDER BY id DESC LIMIT 1').get(stepId);
+  if (!row || row.id <= sinceAttemptId) return { appended: false };
+  db.prepare('UPDATE attempts SET result=? WHERE id=?').run(`${row.result}\n${usageLine}`, row.id);
+  return { appended: true, attemptId: row.id };
+}

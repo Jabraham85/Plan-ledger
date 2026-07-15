@@ -1,7 +1,8 @@
 // runner-unit.mjs — unit tests for scripts/runner-lib.mjs (parseVerify, runVerify,
-// applyVerifyGate) plus a stubbed end-to-end proof that drives the REAL
-// scripts/runner.mjs against a temp DB with a fake CLAUDE_BIN, exercising the
-// VERIFY override for real (not just the pure helpers). Run: node test/runner-unit.mjs
+// applyVerifyGate, formatUsageLine, appendUsageToLatestAttempt) plus a stubbed
+// end-to-end proof that drives the REAL scripts/runner.mjs against a temp DB with
+// a fake CLAUDE_BIN, exercising the VERIFY override for real (not just the pure
+// helpers). Run: node test/runner-unit.mjs
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, rmSync } from 'node:fs';
@@ -9,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Store } from '../src/db.mjs';
-import { parseVerdict, parseVerify, runVerify, applyVerifyGate } from '../scripts/runner-lib.mjs';
+import { parseVerdict, parseVerify, runVerify, applyVerifyGate, formatUsageLine, appendUsageToLatestAttempt } from '../scripts/runner-lib.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 let pass = 0;
@@ -61,6 +62,37 @@ check('parseVerify: trims whitespace around the command', parseVerify('VERIFY:  
   check('applyVerifyGate: failure result names the exit code', r4.resultText.includes('exit 1'));
 }
 
+// --- formatUsageLine ---
+{
+  const line = formatUsageLine({ tin: 1234, tout: 56, cost: 0.789, turns: 3, model: 'sonnet' });
+  check('formatUsageLine: exact shape', line === 'usage: in=1234 out=56 cost=$0.7890 turns=3 model=sonnet');
+  const noModel = formatUsageLine({ tin: 1, tout: 1, cost: 0, turns: 1 });
+  check('formatUsageLine: missing model -> "default"', noModel === 'usage: in=1 out=1 cost=$0.0000 turns=1 model=default');
+}
+
+// --- appendUsageToLatestAttempt ---
+{
+  const s = new Store(':memory:');
+  const plan = s.createPlan({ title: 'usage-append plan', keywords: [] });
+  const step = s.addStep(plan.id, { title: 'noop step' });
+  const beforeId = s.db.prepare('SELECT MAX(id) m FROM attempts WHERE step_id=?').get(step.id).m || 0;
+  check('appendUsageToLatestAttempt: nothing to append when no new attempt landed',
+    appendUsageToLatestAttempt(s.db, step.id, beforeId, 'usage: in=1 out=1 cost=$0.0000 turns=1 model=default').appended === false);
+
+  s.recordAttempt(step.id, { what_tried: 'did the thing', result: 'base result', verdict: 'fail' });
+  const r = appendUsageToLatestAttempt(s.db, step.id, beforeId, 'usage: in=10 out=5 cost=$0.0010 turns=1 model=default');
+  check('appendUsageToLatestAttempt: appends to the newly-created attempt', r.appended === true);
+  const att = s.getStep(step.id).attempts.at(-1);
+  check('appendUsageToLatestAttempt: usage line lands in the result field', att.result.includes('base result') && att.result.includes('usage: in=10 out=5'));
+
+  // a call keyed off the attempt we JUST appended to (sinceId = its own id) has
+  // nothing newer to attach to — must skip, not silently overwrite the same row again
+  const latestId = s.db.prepare('SELECT MAX(id) m FROM attempts WHERE step_id=?').get(step.id).m;
+  const r2 = appendUsageToLatestAttempt(s.db, step.id, latestId, 'usage: in=999 out=999 cost=$9.9999 turns=9 model=x');
+  check('appendUsageToLatestAttempt: no attempt newer than sinceId -> skipped', r2.appended === false);
+  s.close();
+}
+
 console.log(`\n${pass} unit checks passed.\n`);
 
 // ============================================================================
@@ -107,8 +139,55 @@ console.log(`\n${pass} unit checks passed.\n`);
   const lastAttempt = finalStep.attempts.at(-1);
   check('e2e: override attempt recorded by runner-inject', lastAttempt.executor === 'runner-inject' && lastAttempt.verdict === 'fail');
   check('e2e: override attempt result carries the VERIFY output tail', lastAttempt.result.includes('E2E-VERIFY-FAILED-MARKER'));
+  check('e2e: override attempt result carries the usage line', /usage: in=\d+ out=\d+ cost=\$[\d.]+ turns=\d+ model=\w+/.test(lastAttempt.result));
   verify.close();
 
   for (const suf of ['', '-wal', '-shm']) rmSync(dbPath + suf, { force: true });
-  console.log(`\n${pass} total checks passed (incl. stubbed e2e).\n`);
+  console.log(`\n${pass} total checks passed (incl. inject-mode stubbed e2e).\n`);
+}
+
+// ============================================================================
+// STUBBED END-TO-END PROOF — MCP mode's "skip with a console note" branch.
+// The fake CLI is NOT a real MCP client (it never calls record_attempt over
+// MCP), so a non-inject (--live, no --inject) run against it must find no new
+// attempt afterward and skip the usage-line append with a console note instead
+// of guessing which attempt to touch — and must NOT run/override VERIFY either,
+// since the step never reached status=done.
+// ============================================================================
+{
+  const dbPath = join(tmpdir(), `plan-ledger-verify-mcp-e2e-${process.pid}.db`);
+  for (const suf of ['', '-wal', '-shm']) rmSync(dbPath + suf, { force: true });
+
+  const setup = new Store(dbPath);
+  const plan = setup.createPlan({ title: 'VERIFY MCP e2e plan', keywords: ['verify-mcp-e2e'] });
+  const step = setup.addStep(plan.id, {
+    title: 'MCP-mode step whose fake agent never calls record_attempt',
+    context: `VERIFY: ${JSON.stringify(process.execPath)} -e "process.exit(1)"\nMCP-mode stub — the fake CLAUDE_BIN never touches the DB.`,
+  });
+  setup.close();
+
+  const runnerPath = join(__dirname, '..', 'scripts', 'runner.mjs');
+  const fakeCli = join(__dirname, 'fixtures', 'fake-claude-cli.mjs');
+  const out = execFileSync(process.execPath, [
+    runnerPath, '--plan', String(plan.id), '--live',
+    '--max-attempts', '1', '--allowedTools', 'Write,Read',
+  ], {
+    env: { ...process.env, CLAUDE_BIN: fakeCli, PLAN_LEDGER_DB: dbPath },
+    encoding: 'utf8',
+  });
+  console.log(out);
+
+  check('MCP e2e: skip note printed (no new attempt from the fake non-MCP CLI)',
+    out.includes('usage line skipped — no new attempt recorded'));
+  check('MCP e2e: VERIFY was never claimed to run (step never reached done)',
+    !out.includes('VERIFY override') && !out.includes('VERIFY passed'));
+
+  const verify = new Store(dbPath);
+  const finalStep = verify.getStep(step.id);
+  check('MCP e2e: step left pending (agent never called record_attempt)', finalStep.status === 'pending');
+  check('MCP e2e: no attempts were fabricated', finalStep.attempts.length === 0);
+  verify.close();
+
+  for (const suf of ['', '-wal', '-shm']) rmSync(dbPath + suf, { force: true });
+  console.log(`\n${pass} total checks passed (incl. both stubbed e2e proofs).\n`);
 }
