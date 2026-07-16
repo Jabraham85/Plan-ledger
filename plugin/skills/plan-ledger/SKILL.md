@@ -64,6 +64,18 @@ dispatch always resolves a role's model through the map, and the orchestrator ma
 a single crux dispatch to opus by passing `model` on that Agent call. Full schema: plan-ledger
 `docs/ROLES.md`.
 
+## Parallel dispatch (do this before the one-at-a-time loop)
+
+Call `ready_steps <plan_id>` first — it returns every pending step whose `builds_on`/`blocks`
+dependencies are already satisfied (the full concurrently-launchable frontier, not just the
+lowest-idx step; same dependency gate as `next_step`). When it returns more than one step,
+DISPATCH THE WHOLE FRONTIER CONCURRENTLY — one Agent-tool call per ready step in a single batch —
+then run the review gate on each as it reports. Fall back to the sequential loop below only when
+the frontier is a single step or the steps genuinely must serialize. (The headless
+`npm run orchestrate` runner is still sequential — a `--parallel` flag is a documented follow-up
+in `scripts/runner.mjs`; this rule is for interactive orchestration, where concurrent Agent-tool
+calls actually run in parallel.)
+
 ## The execution loop (one step at a time)
 
 1. `next_step <plan_id>` → the next WORKABLE step, with full context (blocked steps are
@@ -78,11 +90,15 @@ a single crux dispatch to opus by passing `model` on that Agent call. Full schem
 4. **Review gate (mandatory).** When the agent reports: evidence first (build/test output
    verbatim, real paths, screenshots — no evidence = send-back); check the step's
    `acceptance_criteria` then the role's `## Definition of done` box by box; unmet →
-   `SendMessage` the SAME agent a numbered correction list (max 3 rounds, then finish it
-   yourself or `record_attempt fail`).
+   `add_note(step_id, author: "orchestrator", body: <numbered correction list>)` to make the
+   back-and-forth permanent on the step, THEN `SendMessage` the SAME agent the same list. When it
+   replies, `add_note(step_id, author: <role>, body: <reply summary>)`. Max 3 rounds, then finish
+   it yourself or `record_attempt fail`.
 5. `record_attempt` — **always log failures too**, noting `role=<name>, review_rounds=<n>` and
-   a `what_tried` specific enough that "don't repeat this" is actionable. `pass` finishes the
-   step; `fail`/`partial` keeps it open and remembered.
+   a `what_tried` specific enough that "don't repeat this" is actionable, plus a `layman` param:
+   a plain-English "what was done + thoughts" summary in basic terms for a human skimmer (distinct
+   from `what_tried`) — every dispatched step gets one. `pass` finishes the step; `fail`/`partial`
+   keeps it open and remembered.
 6. `write_carry_forward` anything the next step needs; `link_items` with relation `builds_on`
    when a step depends on earlier work. Then loop to 1, or stop if the user wanted a single
    step. Working-loop tool results carry a `directive` — follow it; don't end your turn while

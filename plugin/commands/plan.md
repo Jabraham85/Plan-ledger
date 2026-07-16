@@ -80,10 +80,13 @@ never delegate ledger calls to the role agent.
    screenshots for visual work. Claims without evidence = automatic send-back.
 2. Check the step's `acceptance_criteria`, then the role's `## Definition of done` (bottom of its
    agent file), box by box against the report.
-3. Unmet → `SendMessage` the SAME agent a numbered correction list (what failed, which DoD box,
-   what evidence is missing). **Max 3 rounds**; then finish it yourself or record_attempt `fail`
-   with the lesson.
-4. `record_attempt` ALWAYS notes `role=<name>, review_rounds=<n>` in `what_tried`.
+3. Unmet → `add_note(step_id, author: "orchestrator", body: <numbered correction list>)` so the
+   back-and-forth is permanent on the step, THEN `SendMessage` the SAME agent the same list. When
+   it replies, `add_note(step_id, author: <role>, body: <reply summary>)`. **Max 3 rounds**; then
+   finish it yourself or record_attempt `fail` with the lesson.
+4. `record_attempt` ALWAYS notes `role=<name>, review_rounds=<n>` in `what_tried`, and sets its
+   `layman` param to a plain-English "what was done + thoughts" summary in basic terms (distinct
+   from `what_tried`) — every dispatched step gets one (or `set_layman(step_id, text)` after the fact).
 
 A BLOCKED report (spec fork, contradiction, missing decision) is not a failure — resolve the fork
 yourself if it's yours to make, escalate via blocked status if it's the user's, then re-dispatch.
@@ -155,6 +158,16 @@ forward on your own — across steps AND across plans — choosing the best path
 You are self-motivated: keep working until nothing is workable. Only stop to ask if the user
 explicitly scoped it ("just one step" / "just this plan").
 
+**Parallel dispatch.** Before working steps one at a time, call `ready_steps <plan_id>` — it
+returns every pending step whose `builds_on`/`blocks` dependencies are already satisfied (the
+full concurrently-launchable frontier, not just the lowest-idx one; same dependency gate as
+`next_step`). When it returns more than one step, DISPATCH THE WHOLE FRONTIER CONCURRENTLY — one
+Agent-tool call per ready step, sent in a single batch — then run the review gate on each as it
+reports. Fall back to the sequential `next_step` loop below only when the frontier is a single
+step or the steps genuinely must serialize. (The headless `npm run orchestrate` runner is still
+sequential — a `--parallel` flag is a documented follow-up in `scripts/runner.mjs`; this rule is
+for interactive orchestration, where concurrent Agent-tool calls actually run in parallel.)
+
 **Inner loop — work a plan's steps:**
 1. `next_step <plan_id>` → the next **workable** step (blocked steps are skipped; full context +
    embedded lessons). Three shapes: a step → work it · `{all_blocked}` → `set_plan_status(blocked)`,
@@ -168,7 +181,7 @@ explicitly scoped it ("just one step" / "just this plan").
    3 rounds). No `role` on the step → pick one from the table now (and `update_step` it). Self-execute
    only trivial mechanical steps. **Always pick the best path yourself** — decide and act.
 5. `record_attempt` (`pass` finishes it; `partial`/`fail` is logged and kept) — always noting
-   `role=<name>, review_rounds=<n>`.
+   `role=<name>, review_rounds=<n>` and setting `layman` (plain-English what-was-done + thoughts).
 6. `write_carry_forward` anything the next step needs, then loop to 1.
 
 **When a step is BLOCKED** (genuinely needs the user — a decision only they can make, a credential, the editor/PIE reopened, or an external action you can't perform):
