@@ -77,6 +77,17 @@ CREATE TABLE IF NOT EXISTS attempts (
 );
 CREATE INDEX IF NOT EXISTS idx_attempts_step ON attempts(step_id);
 
+-- Append-only review/feedback thread on a step — distinct from attempts (work
+-- records) and links (graph edges). The back-and-forth discussion, not a log.
+CREATE TABLE IF NOT EXISTS notes (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  step_id     INTEGER NOT NULL REFERENCES steps(id) ON DELETE CASCADE,
+  author      TEXT    NOT NULL DEFAULT '',
+  body        TEXT    NOT NULL,
+  created_at  TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_notes_step ON notes(step_id);
+
 -- A directed edge: a step "builds_on"/"references" another plan or step.
 -- Lets the agent walk back to what a step is built upon without loading history.
 CREATE TABLE IF NOT EXISTS links (
@@ -257,7 +268,7 @@ export class Store {
   // migrations here gated on `v < N`, then bump USER_VERSION to N. The hasCol
   // backfills in the version-1 block are belt-and-braces (safe on any DB shape),
   // so they run unconditionally; NEW migrations should rely on the version gate.
-  static USER_VERSION = 2;
+  static USER_VERSION = 3;
 
   _migrate() {
     const v = this.db.prepare('PRAGMA user_version').get().user_version;
@@ -278,6 +289,9 @@ export class Store {
 
     // Layman box: plain-English per-step field, distinct from what_tried (added 2026-07).
     if (!hasCol('steps', 'layman')) this.db.exec("ALTER TABLE steps ADD COLUMN layman TEXT NOT NULL DEFAULT ''");
+    // notes table (review/feedback thread) needs no hasCol backfill — it's a brand-new
+    // table, so `CREATE TABLE IF NOT EXISTS` in SCHEMA (executed every boot, above)
+    // already creates it on an old-shape DB; only the version stamp bump is needed here.
 
     // ---- numbered migrations (gate on v, wrap in _tx, bump the stamp) ----
     // if (v < 2) this._tx(() => { this.db.exec('ALTER TABLE ...'); });
@@ -474,6 +488,7 @@ export class Store {
       attempts,
       attempts_total,
       links,
+      notes: this.listNotes(id), // append-only review/feedback thread, ordered
       file_refs: this.listFileRefs({ step_id: id }), // surface only — paths/roles, no content
       created_at: s.created_at,
       updated_at: s.updated_at,
@@ -656,6 +671,20 @@ export class Store {
         what_tried: x.doc.what_tried, result: x.doc.result, verdict: x.doc.verdict,
         score: Math.round(x.score * 100) / 100,
       }));
+  }
+
+  // ---- notes (append-only review/feedback thread on a step) --------------
+
+  addNote(stepId, { author, body }) {
+    this._mustStep(stepId);
+    if (!body || !String(body).trim()) throw new Error('note body is required');
+    this.db.prepare('INSERT INTO notes (step_id, author, body, created_at) VALUES (?,?,?,?)')
+      .run(stepId, String(author ?? '').trim(), String(body), now());
+    return this.getStep(stepId);
+  }
+
+  listNotes(stepId) {
+    return this.db.prepare('SELECT id, author, body, created_at FROM notes WHERE step_id=? ORDER BY id').all(stepId);
   }
 
   // ---- links -------------------------------------------------------------

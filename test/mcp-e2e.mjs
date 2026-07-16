@@ -30,7 +30,7 @@ await client.connect(transport);
 
 const tools = (await client.listTools()).tools;
 console.log(`tools exposed: ${tools.length} -> ${tools.map((t) => t.name).join(', ')}`);
-check('tool count matches the registered surface', tools.length === 49);
+check('tool count matches the registered surface', tools.length === 50);
 check('retired tools are gone (set_ref_enabled, list_file_refs)',
   !tools.some((t) => t.name === 'set_ref_enabled' || t.name === 'list_file_refs'));
 // RAG sidecar surface (§5): all six tools registered on the same server.
@@ -138,6 +138,14 @@ check('set_layman round-trips over MCP', afterSet.layman === 'Plain English: wir
 await client.callTool({ name: 'record_attempt', arguments: { step_id: lstepE.id, what_tried: 'did the work', verdict: 'pass', layman: 'Made the button work when clicked.' } });
 const afterAttemptLayman = parse(await client.callTool({ name: 'get_step', arguments: { step_id: lstepE.id } }));
 check('record_attempt(layman=...) round-trips over MCP', afterAttemptLayman.layman === 'Made the button work when clicked.');
+
+// notes thread over MCP
+const nstepE = parse(await client.callTool({ name: 'add_step', arguments: { plan_id: rp.id, title: 'notes e2e step' } }));
+await client.callTool({ name: 'add_note', arguments: { step_id: nstepE.id, author: 'reviewer', body: 'Please double-check the edge case.' } });
+await client.callTool({ name: 'add_note', arguments: { step_id: nstepE.id, author: 'implementer', body: 'Done, covered in the next attempt.' } });
+const afterNotes = parse(await client.callTool({ name: 'get_step', arguments: { step_id: nstepE.id } }));
+check('add_note appends twice over MCP, in order', afterNotes.notes.length === 2
+  && afterNotes.notes[0].body.includes('edge case') && afterNotes.notes[1].body.includes('Done'));
 
 await client.close();
 rmSync(rolesPath, { force: true });

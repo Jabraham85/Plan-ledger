@@ -340,6 +340,18 @@ tool('write_carry_forward', {
   };
 });
 
+tool('add_note', {
+  title: 'Append a note to a step\'s review thread',
+  description:
+    'Append one entry to a step\'s append-only discussion thread (review/feedback back-and-forth) — distinct ' +
+    'from record_attempt (work records) and link_items (graph edges). Returned in order by get_step as `notes`.',
+  inputSchema: {
+    step_id: z.number().int(),
+    author: z.string().max(64).optional().describe('who is writing this note (e.g. a role name or "user")'),
+    body: z.string(),
+  },
+}, ({ step_id, author, body }) => slimStep(store.addNote(step_id, { author, body })));
+
 tool('link_items', {
   title: 'Link a step to a related plan/step',
   description:

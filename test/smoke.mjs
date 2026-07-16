@@ -238,6 +238,19 @@ check('record_attempt without layman leaves it unchanged', (() => {
   return s.getStep(lstep.id).layman === before;
 })());
 
+// notes: append-only review/feedback thread, ordered
+const np2 = s.createPlan({ title: 'notes plan' });
+const nstep = s.addStep(np2.id, { title: 'notes step' });
+check('notes empty by default', s.getStep(nstep.id).notes.length === 0);
+s.addNote(nstep.id, { author: 'reviewer', body: 'This looks off, please check the edge case.' });
+s.addNote(nstep.id, { author: 'implementer', body: 'Fixed, see attempt 2.' });
+const withNotes = s.getStep(nstep.id);
+check('add_note appends twice, both present', withNotes.notes.length === 2);
+check('notes returned in order (oldest first)', withNotes.notes[0].body.includes('edge case') && withNotes.notes[1].body.includes('Fixed'));
+check('notes carry author', withNotes.notes[0].author === 'reviewer' && withNotes.notes[1].author === 'implementer');
+assert.throws(() => s.addNote(nstep.id, { author: 'x', body: '' }), /required/);
+check('addNote rejects empty body', true);
+
 // attempts cap: getStep returns only the LAST 10 attempts + attempts_total
 const capPlan = s.createPlan({ title: 'attempt cap plan' });
 const capStep = s.addStep(capPlan.id, { title: 'noisy step' });
@@ -276,6 +289,8 @@ check('nextPlan(project) scopes to that project only', s.nextPlan(projB.id) === 
   check('migration adds attempt provenance columns', cols.includes('role') && cols.includes('review_rounds') && cols.includes('executor'));
   const stepCols = ms.db.prepare('PRAGMA table_info(steps)').all().map((c) => c.name);
   check('migration adds steps.layman column to an old-shape DB', stepCols.includes('layman'));
+  const tableNames = ms.db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map((t) => t.name);
+  check('migration creates the notes table on an old-shape DB', tableNames.includes('notes'));
   check('migration stamps PRAGMA user_version', ms.db.prepare('PRAGMA user_version').get().user_version === Store.USER_VERSION);
   ms.close();
   for (const suf of ['', '-wal', '-shm']) rmSync(migPath + suf, { force: true });
