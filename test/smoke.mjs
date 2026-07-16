@@ -224,6 +224,20 @@ check('readySteps excludes done step2 itself (only pending)', !readyAfter.some((
 const nsPick = s.nextStep(rp.id);
 check('nextStep and readySteps agree on workability', readyAfter.some((x) => x.id === nsPick.id));
 
+// layman box: round-trips via BOTH record_attempt(layman=...) and set_layman
+const lp = s.createPlan({ title: 'layman plan' });
+const lstep = s.addStep(lp.id, { title: 'layman step' });
+check('layman defaults to empty string', s.getStep(lstep.id).layman === '');
+s.setLayman(lstep.id, 'In plain terms: we wired up the button.');
+check('set_layman round-trips via getStep', s.getStep(lstep.id).layman === 'In plain terms: we wired up the button.');
+s.recordAttempt(lstep.id, { what_tried: 'wired the button handler', verdict: 'pass', layman: 'Made the button actually do something when clicked.' });
+check('record_attempt(layman=...) round-trips via getStep', s.getStep(lstep.id).layman === 'Made the button actually do something when clicked.');
+check('record_attempt without layman leaves it unchanged', (() => {
+  const before = s.getStep(lstep.id).layman;
+  s.recordAttempt(lstep.id, { what_tried: 'a follow-up try', verdict: 'fail' });
+  return s.getStep(lstep.id).layman === before;
+})());
+
 // attempts cap: getStep returns only the LAST 10 attempts + attempts_total
 const capPlan = s.createPlan({ title: 'attempt cap plan' });
 const capStep = s.addStep(capPlan.id, { title: 'noisy step' });
@@ -250,10 +264,18 @@ check('nextPlan(project) scopes to that project only', s.nextPlan(projB.id) === 
     id INTEGER PRIMARY KEY AUTOINCREMENT, step_id INTEGER NOT NULL,
     what_tried TEXT NOT NULL, result TEXT NOT NULL DEFAULT '',
     verdict TEXT NOT NULL DEFAULT 'fail', created_at TEXT NOT NULL);`);
+  // old-shape steps table: no layman column, predates the layman box
+  raw.exec(`CREATE TABLE steps (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, plan_id INTEGER NOT NULL, idx INTEGER NOT NULL,
+    title TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', context TEXT NOT NULL DEFAULT '',
+    tools TEXT NOT NULL DEFAULT '[]', acceptance_criteria TEXT NOT NULL DEFAULT '',
+    carry_forward TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);`);
   raw.close();
   const ms = new Store(migPath); // ctor migrates
   const cols = ms.db.prepare('PRAGMA table_info(attempts)').all().map((c) => c.name);
   check('migration adds attempt provenance columns', cols.includes('role') && cols.includes('review_rounds') && cols.includes('executor'));
+  const stepCols = ms.db.prepare('PRAGMA table_info(steps)').all().map((c) => c.name);
+  check('migration adds steps.layman column to an old-shape DB', stepCols.includes('layman'));
   check('migration stamps PRAGMA user_version', ms.db.prepare('PRAGMA user_version').get().user_version === Store.USER_VERSION);
   ms.close();
   for (const suf of ['', '-wal', '-shm']) rmSync(migPath + suf, { force: true });

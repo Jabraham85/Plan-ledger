@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS steps (
   role                TEXT    NOT NULL DEFAULT '',        -- subagent role that executes this step (e.g. implementer)
   acceptance_criteria TEXT    NOT NULL DEFAULT '',        -- how we know the step passed
   carry_forward       TEXT    NOT NULL DEFAULT '',        -- notes written FOR this step by the previous one
+  layman              TEXT    NOT NULL DEFAULT '',        -- plain-English "what was done + thoughts" (distinct from what_tried)
   created_at          TEXT    NOT NULL,
   updated_at          TEXT    NOT NULL
 );
@@ -256,7 +257,7 @@ export class Store {
   // migrations here gated on `v < N`, then bump USER_VERSION to N. The hasCol
   // backfills in the version-1 block are belt-and-braces (safe on any DB shape),
   // so they run unconditionally; NEW migrations should rely on the version gate.
-  static USER_VERSION = 1;
+  static USER_VERSION = 2;
 
   _migrate() {
     const v = this.db.prepare('PRAGMA user_version').get().user_version;
@@ -274,6 +275,9 @@ export class Store {
     if (!hasCol('attempts', 'review_rounds')) this.db.exec('ALTER TABLE attempts ADD COLUMN review_rounds INTEGER NOT NULL DEFAULT 0');
     if (!hasCol('attempts', 'executor')) this.db.exec("ALTER TABLE attempts ADD COLUMN executor TEXT NOT NULL DEFAULT ''");
     this.db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('current_project', '1')").run();
+
+    // Layman box: plain-English per-step field, distinct from what_tried (added 2026-07).
+    if (!hasCol('steps', 'layman')) this.db.exec("ALTER TABLE steps ADD COLUMN layman TEXT NOT NULL DEFAULT ''");
 
     // ---- numbered migrations (gate on v, wrap in _tx, bump the stamp) ----
     // if (v < 2) this._tx(() => { this.db.exec('ALTER TABLE ...'); });
@@ -466,6 +470,7 @@ export class Store {
       role: s.role ?? '',
       acceptance_criteria: s.acceptance_criteria,
       carry_forward: s.carry_forward,
+      layman: s.layman ?? '',
       attempts,
       attempts_total,
       links,
@@ -473,6 +478,16 @@ export class Store {
       created_at: s.created_at,
       updated_at: s.updated_at,
     };
+  }
+
+  // Plain-English per-step field: settable directly (used by set_layman) or via
+  // recordAttempt's optional `layman` param. Distinct from what_tried, which is
+  // evidence-heavy and lives on the attempt, not the step.
+  setLayman(stepId, text) {
+    const s = this._mustStep(stepId, 'plan_id');
+    this.db.prepare('UPDATE steps SET layman=?, updated_at=? WHERE id=?').run(String(text ?? ''), now(), stepId);
+    this.touchPlan(s.plan_id);
+    return this.getStep(stepId);
   }
 
   updateStep(id, fields) {
@@ -515,7 +530,9 @@ export class Store {
   }
 
   // The whole "don't repeat past pitfalls" mechanism: log what was tried + how it went.
-  recordAttempt(stepId, { what_tried, result, verdict, role, review_rounds, executor }) {
+  // Optional `layman` writes the step's plain-English box alongside the attempt —
+  // a convenience so the executor doesn't need a second call (set_layman still works too).
+  recordAttempt(stepId, { what_tried, result, verdict, role, review_rounds, executor, layman }) {
     this._mustStep(stepId);
     if (!what_tried || !String(what_tried).trim()) throw new Error('what_tried is required');
     const v = verdict ?? 'fail';
@@ -528,6 +545,7 @@ export class Store {
       // (setStepStatus also touches the plan, so no extra touchPlan here)
       if (v === 'pass') this.setStepStatus(stepId, 'done');
       else this.setStepStatus(stepId, 'failed');
+      if (layman != null) this.setLayman(stepId, layman);
     });
     return this.getStep(stepId);
   }

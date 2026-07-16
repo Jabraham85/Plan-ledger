@@ -282,6 +282,7 @@ tool('record_attempt', {
     role: z.string().max(64).optional().describe('subagent role that executed the attempt (e.g. implementer)'),
     review_rounds: z.number().int().min(0).optional().describe('orchestrator send-back rounds before acceptance'),
     executor: z.string().max(64).optional().describe('who drove the attempt (e.g. runner-mcp, runner-inject, orchestrator)'),
+    layman: z.string().optional().describe('plain-English "what was done + thoughts" for this step (distinct from what_tried) — set/overwrites the step\'s layman box'),
   },
 }, ({ step_id, ...rest }) => {
   const step = store.recordAttempt(step_id, rest);
@@ -309,6 +310,15 @@ tool('record_attempt', {
   }
   return { ...slimStep(step), plan_progress: progress, directive };
 });
+
+tool('set_layman', {
+  title: 'Set a step\'s plain-English box',
+  description:
+    'Write the step\'s layman field: plain-English "what was done + thoughts", basic terms — distinct from ' +
+    'what_tried (which is evidence-heavy, on the attempt). Replaces the current value. Also settable inline via ' +
+    'record_attempt\'s optional `layman` param.',
+  inputSchema: { step_id: z.number().int(), text: z.string() },
+}, ({ step_id, text }) => slimStep(store.setLayman(step_id, text)));
 
 tool('write_carry_forward', {
   title: 'Carry context forward to a step',

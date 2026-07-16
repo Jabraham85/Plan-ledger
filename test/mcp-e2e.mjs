@@ -30,7 +30,7 @@ await client.connect(transport);
 
 const tools = (await client.listTools()).tools;
 console.log(`tools exposed: ${tools.length} -> ${tools.map((t) => t.name).join(', ')}`);
-check('tool count matches the registered surface', tools.length === 48);
+check('tool count matches the registered surface', tools.length === 49);
 check('retired tools are gone (set_ref_enabled, list_file_refs)',
   !tools.some((t) => t.name === 'set_ref_enabled' || t.name === 'list_file_refs'));
 // RAG sidecar surface (§5): all six tools registered on the same server.
@@ -128,6 +128,16 @@ console.log('ready_steps after dep done:', readyAfter.steps.map((s) => s.id));
 check('ready_steps includes step3 once its dep is done', readyAfter.steps.some((s) => s.id === rs3.id));
 const nextPick = parse(await client.callTool({ name: 'next_step', arguments: { plan_id: rp.id } }));
 check('next_step and ready_steps agree on what is workable', readyAfter.steps.some((s) => s.id === nextPick.id));
+
+// layman box over MCP: both channels
+const lstepE = parse(await client.callTool({ name: 'add_step', arguments: { plan_id: rp.id, title: 'layman e2e step' } }));
+const setRes = parse(await client.callTool({ name: 'set_layman', arguments: { step_id: lstepE.id, text: 'Plain English: wired the thing up.' } }));
+check('set_layman ack is slim', setRes.context === undefined && setRes.id === lstepE.id);
+const afterSet = parse(await client.callTool({ name: 'get_step', arguments: { step_id: lstepE.id } }));
+check('set_layman round-trips over MCP', afterSet.layman === 'Plain English: wired the thing up.');
+await client.callTool({ name: 'record_attempt', arguments: { step_id: lstepE.id, what_tried: 'did the work', verdict: 'pass', layman: 'Made the button work when clicked.' } });
+const afterAttemptLayman = parse(await client.callTool({ name: 'get_step', arguments: { step_id: lstepE.id } }));
+check('record_attempt(layman=...) round-trips over MCP', afterAttemptLayman.layman === 'Made the button work when clicked.');
 
 await client.close();
 rmSync(rolesPath, { force: true });
