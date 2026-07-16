@@ -29,6 +29,21 @@
 // verdict=fail with the command's output tail appended when it doesn't exit 0.
 // Per-step usage logging (improvement #4): every attempt this runner records also gets
 // a "usage: in=… out=… cost=$… turns=… model=…" line appended to its result field.
+//
+// PARALLEL FRONTIER (plan-ledger step 554, not yet wired into this runner): the
+// store gained readySteps(planId) — the full set of pending, non-blocked steps
+// whose builds_on/blocks deps are already satisfied (same gate as nextStep, so
+// the two always agree) — and the MCP tool ready_steps exposes it for an agent
+// to dispatch a batch concurrently. This file's own concurrency (spawns.get,
+// markInProgress/sweepOrphans, budgetOrLimitStop, the retry-on-limit sleep loop)
+// is single-step-at-a-time and load-bearing; Promise.all'ing runAgent over a
+// readySteps() batch here needs those to become per-step-safe (shared usage
+// counters, orphan sweep keyed correctly under concurrent in_progress marks,
+// a global stopAll that doesn't half-apply mid-batch) before it's safe to flip
+// on. Left as a documented follow-up rather than risking the existing sequential
+// path: a future `--parallel` flag should keep sequential as the DEFAULT and,
+// per plan, pull readySteps(), Promise.all runAgent (or runInjected) over the
+// batch, then re-pull once the batch settles.
 
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';

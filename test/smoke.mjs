@@ -202,6 +202,28 @@ check('all remaining dependency-waiting → all_blocked with reason', dAll.all_b
 s.recordAttempt(sy.id, { what_tried: 'finished the dependency', verdict: 'pass' });
 check('dep done → deferred step becomes workable', s.nextStep(dp.id).id === d1.id);
 
+// readySteps: the concurrently-launchable frontier — must agree with nextStep on
+// what is workable. A 3-step plan; step3 builds_on step2 must be EXCLUDED until
+// step2 is done, then INCLUDED.
+const rp = s.createPlan({ title: 'ready steps plan' });
+const r1 = s.addStep(rp.id, { title: 'ready step one' });
+const r2 = s.addStep(rp.id, { title: 'ready step two' });
+const r3 = s.addStep(rp.id, { title: 'ready step three (depends on two)' });
+s.link(r3.id, { to_step_id: r2.id, relation: 'builds_on' });
+const readyBefore = s.readySteps(rp.id);
+console.log('  readySteps before step2 done:', readyBefore.map((x) => x.id));
+check('readySteps excludes step3 while its builds_on dep is unmet', !readyBefore.some((x) => x.id === r3.id));
+check('readySteps includes independent steps 1 and 2', readyBefore.some((x) => x.id === r1.id) && readyBefore.some((x) => x.id === r2.id));
+check('readySteps returns full step payload (context field present)', readyBefore[0].context !== undefined);
+s.recordAttempt(r2.id, { what_tried: 'finished step two', verdict: 'pass' });
+const readyAfter = s.readySteps(rp.id);
+console.log('  readySteps after step2 done:', readyAfter.map((x) => x.id));
+check('readySteps includes step3 once its dep is done', readyAfter.some((x) => x.id === r3.id));
+check('readySteps excludes done step2 itself (only pending)', !readyAfter.some((x) => x.id === r2.id));
+// nextStep and readySteps must agree: nextStep's pick is always IN readySteps (when not all_blocked)
+const nsPick = s.nextStep(rp.id);
+check('nextStep and readySteps agree on workability', readyAfter.some((x) => x.id === nsPick.id));
+
 // attempts cap: getStep returns only the LAST 10 attempts + attempts_total
 const capPlan = s.createPlan({ title: 'attempt cap plan' });
 const capStep = s.addStep(capPlan.id, { title: 'noisy step' });

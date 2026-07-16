@@ -30,7 +30,7 @@ await client.connect(transport);
 
 const tools = (await client.listTools()).tools;
 console.log(`tools exposed: ${tools.length} -> ${tools.map((t) => t.name).join(', ')}`);
-check('tool count matches the registered surface', tools.length === 47);
+check('tool count matches the registered surface', tools.length === 48);
 check('retired tools are gone (set_ref_enabled, list_file_refs)',
   !tools.some((t) => t.name === 'set_ref_enabled' || t.name === 'list_file_refs'));
 // RAG sidecar surface (§5): all six tools registered on the same server.
@@ -110,6 +110,24 @@ await client.callTool({ name: 'create_template', arguments: { name: 'e2e-tpl', s
 ] } });
 const tpl = parse(await client.callTool({ name: 'get_template', arguments: { template: 'e2e-tpl' } }));
 check('create_template keeps role on inline steps', tpl.steps[0].role === 'implementer' && tpl.steps[0].idx === 1);
+
+// ready_steps: the concurrently-launchable frontier, agreeing with next_step's dependency gate
+const rp = parse(await client.callTool({ name: 'create_plan', arguments: { title: 'ready-steps e2e plan', keywords: ['ready'] } }));
+const rs1 = parse(await client.callTool({ name: 'add_step', arguments: { plan_id: rp.id, title: 'ready one' } }));
+const rs2 = parse(await client.callTool({ name: 'add_step', arguments: { plan_id: rp.id, title: 'ready two' } }));
+const rs3 = parse(await client.callTool({ name: 'add_step', arguments: { plan_id: rp.id, title: 'ready three (depends on two)' } }));
+await client.callTool({ name: 'link_items', arguments: { from_step_id: rs3.id, to_step_id: rs2.id, relation: 'builds_on' } });
+const readyBefore = parse(await client.callTool({ name: 'ready_steps', arguments: { plan_id: rp.id } }));
+console.log('ready_steps before dep done:', readyBefore.steps.map((s) => s.id));
+check('ready_steps excludes step3 while its dep is unmet', !readyBefore.steps.some((s) => s.id === rs3.id));
+check('ready_steps includes independent steps 1 and 2', readyBefore.steps.some((s) => s.id === rs1.id) && readyBefore.steps.some((s) => s.id === rs2.id));
+check('ready_steps directive tells the caller to dispatch concurrently', /CONCURRENTLY/.test(readyBefore.directive));
+await client.callTool({ name: 'record_attempt', arguments: { step_id: rs2.id, what_tried: 'finished two', verdict: 'pass' } });
+const readyAfter = parse(await client.callTool({ name: 'ready_steps', arguments: { plan_id: rp.id } }));
+console.log('ready_steps after dep done:', readyAfter.steps.map((s) => s.id));
+check('ready_steps includes step3 once its dep is done', readyAfter.steps.some((s) => s.id === rs3.id));
+const nextPick = parse(await client.callTool({ name: 'next_step', arguments: { plan_id: rp.id } }));
+check('next_step and ready_steps agree on what is workable', readyAfter.steps.some((s) => s.id === nextPick.id));
 
 await client.close();
 rmSync(rolesPath, { force: true });

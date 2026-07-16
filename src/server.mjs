@@ -181,6 +181,26 @@ tool('next_step', {
   };
 });
 
+tool('ready_steps', {
+  title: 'Get the concurrently-launchable frontier',
+  description:
+    'Return EVERY pending, non-blocked step in a plan whose builds_on/blocks dependencies are already satisfied ' +
+    '(done or skipped) — the full set that could be dispatched RIGHT NOW, not just the lowest-idx one. Uses the ' +
+    'same dependency gate as next_step, so the two always agree on what is workable. Steps not listed are either ' +
+    'blocked, waiting on a dependency, or already done/in_progress/failed.',
+  inputSchema: { plan_id: z.number().int() },
+}, ({ plan_id }) => {
+  const steps = store.readySteps(plan_id).map((s) => roleWarning(s));
+  return {
+    steps,
+    directive: steps.length
+      ? `These ${steps.length} step(s) are independent and ready — dispatch them CONCURRENTLY (one agent per ` +
+        'step in a single batch), then review each. Steps not listed wait on a dependency or the user.'
+      : 'Nothing is ready right now — every remaining step is blocked, mid-flight, or waiting on a dependency. ' +
+        'Call next_step for the detailed reason.',
+  };
+});
+
 tool('next_plan', {
   title: 'Get the next workable plan',
   description:

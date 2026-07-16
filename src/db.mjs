@@ -542,6 +542,19 @@ export class Store {
   //   step object              → work this (may carry skipped_blocked_steps)
   //   { all_blocked: true }    → steps remain but every one waits on a human
   //   null                     → plan complete (nothing left to do)
+  // Shared dependency gate (nextStep + readySteps MUST agree): an outbound
+  // builds_on/blocks link from stepId to a step that is not yet done/skipped
+  // means the prerequisite hasn't landed. Plan-level links (to_plan_id only,
+  // no to_step_id) can't be status-checked, so they're ignored here — they
+  // never gate a step. Returns the list of unmet to_step_ids (empty = satisfied).
+  _unmetDeps(stepId) {
+    return this.db.prepare(`
+      SELECT l.to_step_id FROM links l JOIN steps d ON l.to_step_id = d.id
+      WHERE l.from_step_id=? AND l.relation IN ('builds_on','blocks') AND d.status NOT IN ('done','skipped')`)
+      .all(stepId).map((r) => r.to_step_id);
+  }
+  _depsSatisfied(step) { return this._unmetDeps(step.id).length === 0; }
+
   nextStep(planId) {
     this._mustPlan(planId);
     const remaining = this.db
@@ -551,10 +564,7 @@ export class Store {
     // Dependency gate: an outbound builds_on/blocks link to a step that is not yet
     // done/skipped means this step's prerequisite hasn't landed — skip it like a
     // blocked step (reason 'dependency') instead of handing it out to fail.
-    const unmetDeps = (stepId) => this.db.prepare(`
-      SELECT l.to_step_id FROM links l JOIN steps d ON l.to_step_id = d.id
-      WHERE l.from_step_id=? AND l.relation IN ('builds_on','blocks') AND d.status NOT IN ('done','skipped')`)
-      .all(stepId).map((r) => r.to_step_id);
+    const unmetDeps = (stepId) => this._unmetDeps(stepId);
     const blocked = remaining.filter((r) => r.status === 'blocked');
     const depWaiting = [];
     let workable = null;
@@ -581,6 +591,24 @@ export class Store {
     const skipped = describe([...blocked, ...depWaiting].filter((b) => b.idx < workable.idx));
     if (skipped.length) step.skipped_blocked_steps = skipped;
     return step;
+  }
+
+  // The concurrently-launchable frontier: EVERY pending, non-blocked step in the
+  // plan whose deps are satisfied (not just the lowest-idx one — that's nextStep's
+  // job). Uses the SAME _depsSatisfied gate as nextStep so the two agree by
+  // construction. Full step payload per entry (same shape nextStep hands out),
+  // each with lessons embedded so a dispatched agent has everything it needs.
+  readySteps(planId) {
+    this._mustPlan(planId);
+    const pending = this.db
+      .prepare("SELECT id, idx FROM steps WHERE plan_id=? AND status='pending' ORDER BY idx, id")
+      .all(planId);
+    const ready = pending.filter((r) => this._depsSatisfied(r));
+    return ready.map((r) => {
+      const step = this.getStep(r.id);
+      step.lessons = this.getLessons({ step_id: r.id, limit: 5 });
+      return step;
+    });
   }
 
   // Cross-plan failure memory: IDF-weighted lexical match of `terms` (or a step's
