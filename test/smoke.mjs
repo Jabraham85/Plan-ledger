@@ -162,6 +162,82 @@ assert.throws(() => s.addStep(ip.id, { title: 'bad slot', idx: 0 }), /bad idx/);
 assert.throws(() => s.addStep(ip.id, { title: 'bad slot', idx: -3 }), /bad idx/);
 check('addStep rejects idx < 1', true);
 
+// updateStep idx acts as a MOVE (contiguous 1..N invariant), not a raw column
+// write — moving step 3 to idx 1 slides the others down, and out-of-range idx
+// is rejected before it can corrupt ordering. Backed by a UNIQUE(plan_id, idx)
+// migration in _migrate; a raw column write would collide with the index.
+const mv = s.createPlan({ title: 'move-idx plan' });
+const mvA = s.addStep(mv.id, { title: 'A' });
+const mvB = s.addStep(mv.id, { title: 'B' });
+const mvC = s.addStep(mv.id, { title: 'C' });
+s.updateStep(mvC.id, { idx: 1 }); // C should slide to the front
+const moved = s.openPlan(mv.id).steps;
+check('updateStep(idx=1) moves step forward and renumbers siblings',
+  moved.map((x) => x.title).join(',') === 'C,A,B' && moved.map((x) => x.idx).join(',') === '1,2,3');
+s.updateStep(mvA.id, { idx: 3 }); // A should slide to the end
+const moved2 = s.openPlan(mv.id).steps;
+check('updateStep(idx=N) moves step backward and renumbers siblings',
+  moved2.map((x) => x.title).join(',') === 'C,B,A' && moved2.map((x) => x.idx).join(',') === '1,2,3');
+assert.throws(() => s.updateStep(mvA.id, { idx: 0 }), /bad idx/);
+assert.throws(() => s.updateStep(mvA.id, { idx: 99 }), /must be <=/);
+check('updateStep(idx) rejects out-of-range moves', true);
+// UNIQUE index prevents two steps in the same plan from sharing an idx even
+// via a direct raw write attempt. Confirming the index exists is the cheapest
+// proof that migration ran.
+check('UNIQUE(plan_id, idx) index installed by v4 migration',
+  s.db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='uq_steps_plan_idx'").get() != null);
+
+// An upstream-v3 DB with duplicate (plan_id, idx) rows must be repaired by the v4
+// migration in a single pass before the UNIQUE index goes down — otherwise the
+// index creation would fail on the seeded corruption.
+{
+  const legacy = new Store(':memory:');
+  legacy.db.exec('DROP INDEX IF EXISTS uq_steps_plan_idx');
+  legacy.db.exec('PRAGMA user_version = 3');
+  legacy.db.prepare("INSERT INTO plans (title, keywords, summary, status, created_at, updated_at, project_id) VALUES ('L', '[]', '', 'draft', ?, ?, 1)").run('t','t');
+  const pid = legacy.db.prepare('SELECT last_insert_rowid() id').get().id;
+  const ins = legacy.db.prepare("INSERT INTO steps (plan_id, idx, title, status, context, tools, role, acceptance_criteria, carry_forward, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)");
+  ins.run(pid, 1, 'a', 'pending', '', '[]', '', '', '', 't', 't');
+  ins.run(pid, 1, 'b', 'pending', '', '[]', '', '', '', 't', 't'); // duplicate idx on purpose
+  ins.run(pid, 5, 'c', 'pending', '', '[]', '', '', '', 't', 't'); // and a gap
+  legacy._migrate(); // repair-then-index; must not throw
+  const repaired = legacy.db.prepare('SELECT idx FROM steps WHERE plan_id=? ORDER BY idx').all(pid).map((r) => r.idx);
+  check('v4 migration upgrades v3 and renumbers duplicate/gapped idx contiguously', repaired.join(',') === '1,2,3');
+  legacy.db.exec('DROP INDEX uq_steps_plan_idx; PRAGMA user_version = 4');
+  legacy._migrate();
+  check('v4 self-heals a stamped DB whose unique index is missing',
+    legacy.db.prepare("SELECT 1 ok FROM sqlite_master WHERE type='index' AND name='uq_steps_plan_idx'").get()?.ok === 1);
+  legacy.close();
+}
+
+// nextStep atomic claim: pending → in_progress in one transaction (used by the
+// runner and any concurrent dispatcher so two workers can't take the same step).
+const cp = s.createPlan({ title: 'claim plan' });
+const cpA = s.addStep(cp.id, { title: 'claim-A' });
+s.addStep(cp.id, { title: 'claim-B' });
+const claimed = s.nextStep(cp.id, { claim: true, executor: 'test-runner' });
+check('nextStep({claim}) returns the workable step already flipped to in_progress',
+  claimed.id === cpA.id && claimed.status === 'in_progress' && claimed.claimed === true && claimed.claimed_by === 'test-runner');
+// Second claim in the same "tick" must skip the in_progress step and hand out the next.
+const claimed2 = s.nextStep(cp.id, { claim: true });
+check('nextStep({claim}) skips already-claimed steps and advances',
+  claimed2.id !== cpA.id && claimed2.status === 'in_progress');
+const activeOnly = s.nextStep(cp.id, { claim: true });
+check('nextStep({claim}) does not false-complete while every remaining step is in_progress',
+  activeOnly.all_in_progress === true && activeOnly.active_steps.length === 2);
+// Peek mode (no claim) is unchanged: does NOT skip in_progress, does NOT flip status.
+const peek = s.nextStep(cp.id);
+check('nextStep() peek mode preserves idempotent behavior',
+  peek.id === cpA.id && peek.status === 'in_progress' && peek.claimed === undefined);
+// claimStep helper: same CAS semantics for a specific id.
+const cs = s.createPlan({ title: 'cas plan' });
+const csA = s.addStep(cs.id, { title: 'cas-A' });
+const casClaim1 = s.claimStep(csA.id, { executor: 'A' });
+const casClaim2 = s.claimStep(csA.id, { executor: 'B' }); // must lose the race
+check('claimStep CAS: first caller wins, second gets current_status',
+  casClaim1.claimed === true && casClaim1.claimed_by === 'A'
+    && casClaim2.claimed === false && casClaim2.current_status === 'in_progress');
+
 // importGraph atomicity: a failed re-import must not wipe the existing graph
 const ag = s.createPlan({ title: 'atomic graph plan' });
 s.importGraph(ag.id, { nodes: [{ id: 'n1' }, { id: 'n2' }], links: [{ source: 'n1', target: 'n2' }] });
@@ -219,10 +295,28 @@ s.recordAttempt(r2.id, { what_tried: 'finished step two', verdict: 'pass' });
 const readyAfter = s.readySteps(rp.id);
 console.log('  readySteps after step2 done:', readyAfter.map((x) => x.id));
 check('readySteps includes step3 once its dep is done', readyAfter.some((x) => x.id === r3.id));
-check('readySteps excludes done step2 itself (only pending)', !readyAfter.some((x) => x.id === r2.id));
+check('readySteps excludes done step2 itself (only retryable work)', !readyAfter.some((x) => x.id === r2.id));
 // nextStep and readySteps must agree: nextStep's pick is always IN readySteps (when not all_blocked)
 const nsPick = s.nextStep(rp.id);
 check('nextStep and readySteps agree on workability', readyAfter.some((x) => x.id === nsPick.id));
+s.recordAttempt(r1.id, { what_tried: 'first attempt failed', verdict: 'fail' });
+check('readySteps includes failed retryable steps just like nextStep',
+  s.readySteps(rp.id).some((x) => x.id === r1.id && x.status === 'failed'));
+
+// readySteps({claim:true}) closes the parallel-frontier race: all returned
+// independent steps are in_progress before the orchestrator fans them out, and
+// a second caller sees an empty frontier rather than duplicating the work.
+const rcp = s.createPlan({ title: 'claimed frontier plan' });
+const rc1 = s.addStep(rcp.id, { title: 'frontier one' });
+const rc2 = s.addStep(rcp.id, { title: 'frontier two' });
+const claimedFrontier = s.readySteps(rcp.id, { claim: true, executor: 'cursor-test' });
+check('readySteps({claim}) atomically claims the whole frontier',
+  claimedFrontier.length === 2
+    && claimedFrontier.every((x) => x.status === 'in_progress' && x.claimed && x.claimed_by === 'cursor-test'));
+check('readySteps({claim}) prevents a second dispatcher seeing the same frontier',
+  s.readySteps(rcp.id, { claim: true, executor: 'second' }).length === 0);
+check('claimed frontier persisted in_progress status',
+  s.getStep(rc1.id).status === 'in_progress' && s.getStep(rc2.id).status === 'in_progress');
 
 // layman box: round-trips via BOTH record_attempt(layman=...) and set_layman
 const lp = s.createPlan({ title: 'layman plan' });
@@ -330,17 +424,27 @@ check('nextPlan(project) scopes to that project only', s.nextPlan(projB.id) === 
 
 // role map resolver: precedence, entry shorthands, charter chains, degradation
 // (docs/ROLE_MAP_DESIGN.md). All fixtures in a temp dir; PLAN_LEDGER_ROLES keeps
-// the user's real ~/.claude/plan-roles.json out of every case.
+// the user's real ~/.claude/plan-roles.json out of every case. HOME/USERPROFILE
+// are redirected at the fixture root so `homedir()`-relative charters (~/…) live
+// entirely in the temp tree — no assumption that the machine has any Claude Code
+// charters installed.
 {
   const { resolveRole, loadRoleMap } = await import('../src/roles.mjs');
-  const { tmpdir, homedir } = await import('node:os');
+  const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
   const { mkdirSync, writeFileSync, rmSync } = await import('node:fs');
   const root = join(tmpdir(), `plan-ledger-roles-${process.pid}`);
   const repo = join(root, 'repo');
   mkdirSync(join(repo, '.claude', 'agents'), { recursive: true });
   mkdirSync(join(root, 'charters'), { recursive: true });
+  mkdirSync(join(root, '.claude', 'agents'), { recursive: true });
+  writeFileSync(join(root, '.claude', 'agents', 'implementer.md'), '# implementer charter (fixture)');
   const savedRoles = process.env.PLAN_LEDGER_ROLES;
+  const savedHome = process.env.HOME;
+  const savedUserProfile = process.env.USERPROFILE;
+  process.env.HOME = root;
+  process.env.USERPROFILE = root;
+  const { homedir } = await import('node:os');
 
   const userMap = join(root, 'user-roles.json');
   writeFileSync(userMap, JSON.stringify({
@@ -398,12 +502,153 @@ check('nextPlan(project) scopes to that project only', s.nextPlan(projB.id) === 
   check('loadRoleMap: missing file → {} silently', Object.keys(loadRoleMap(join(root, 'nope.json'))).length === 0);
 
   if (savedRoles === undefined) delete process.env.PLAN_LEDGER_ROLES; else process.env.PLAN_LEDGER_ROLES = savedRoles;
+  if (savedHome === undefined) delete process.env.HOME; else process.env.HOME = savedHome;
+  if (savedUserProfile === undefined) delete process.env.USERPROFILE; else process.env.USERPROFILE = savedUserProfile;
   rmSync(root, { recursive: true, force: true });
 }
 
 // projectNameForPlan: the JOIN that keys the role map's user-file projects layer
 check('projectNameForPlan resolves the owning project\'s name', s.projectNameForPlan(plan.id) === 'General' && s.projectNameForPlan(planB.id) === 'Project B');
 check('projectNameForPlan → null for a missing plan', s.projectNameForPlan(999999) === null);
+
+// ---- Transparent execution roster (v5) -----------------------------------
+// Activation-time snapshot, audited reassignment, drift detection, redo preservation,
+// and actual-execution provenance on attempts. These are the invariants the board UI
+// and the runner both rely on — they must hold at the store level regardless of MCP.
+{
+  const rs = new Store(':memory:');
+  const rp = rs.createPlan({ title: 'roster plan', keywords: ['roster'] });
+  const rst = rs.addStep(rp.id, { title: 'roster step', context: 'ctx-initial', role: 'debugger' });
+  // Draft plans defer snapshotting until they go active. Adding a step to a draft
+  // plan must NOT create a step_assignments row yet.
+  check('draft plan: addStep does not snapshot', rs.getStep(rst.id).assignments.length === 0);
+  const draftRoster = rs.getPlanRoster(rp.id);
+  check('draft roster: snapshotted flag is false, no initial/planned', draftRoster.snapshotted === false && draftRoster.steps[0].initial === null && draftRoster.steps[0].planned === null);
+
+  // Activation snapshots every unsnapshotted step exactly once.
+  rs.setPlanStatus(rp.id, 'active');
+  const afterActive = rs.getStep(rst.id);
+  check('activation snapshots the step', afterActive.assignments.length === 1
+    && afterActive.assignments[0].role === 'debugger'
+    && afterActive.assignments[0].revision === 1
+    && afterActive.assignments[0].reason === ''
+    && afterActive.assignments[0].assigned_by === 'plan-activation');
+  // Re-activating an already-active plan is a no-op for snapshots (idempotent).
+  rs.setPlanStatus(rp.id, 'active');
+  check('re-activation does not double-snapshot', rs.getStep(rst.id).assignments.length === 1);
+
+  // A step added to an already-active plan snapshots immediately.
+  const rst2 = rs.addStep(rp.id, { title: 'follow-up on active plan', role: 'debugger' });
+  check('addStep on an active plan snapshots immediately', rs.getStep(rst2.id).assignments.length === 1
+    && rs.getStep(rst2.id).assignments[0].assigned_by === 'add-step');
+
+  // Post-initial reassignment: role change without a reason is refused.
+  assert.throws(() => rs.updateStep(rst.id, { role: 'implementer' }), /reason/i);
+  check('updateStep refuses a role change without a reason after snapshot', true);
+  // With a reason, updateStep appends a revision; explicit assignStep also appends.
+  rs.updateStep(rst.id, { role: 'implementer', reason: 'smoke: promote', assigned_by: 'smoke' });
+  rs.assignStep(rst.id, { role: 'implementer', reason: 'smoke: keep implementer, edit intent', assigned_by: 'reviewer' });
+  const revised = rs.getStep(rst.id);
+  check('assignments append with reason + assigned_by',
+    revised.assignments.length === 3
+      && revised.assignments[1].reason === 'smoke: promote' && revised.assignments[1].assigned_by === 'smoke'
+      && revised.assignments[2].reason === 'smoke: keep implementer, edit intent'
+      && revised.assignments[2].assigned_by === 'reviewer');
+  assert.throws(() => rs.assignStep(rst.id, { role: 'debugger' }), /reason/i);
+  check('assignStep refuses without a reason', true);
+
+  // Context-drift detection: editing context after the snapshot flags it.
+  rs.updateStep(rst.id, { context: 'ctx-edited-later' });
+  const drifted = rs.getPlanRoster(rp.id).steps.find((row) => row.step_id === rst.id);
+  check('roster drift: context_changed is set when the body diverges from the snapshot',
+    drifted.drift.context_changed === true);
+
+  // Actual-execution provenance: recordAttempt stores agent/model/model_source/session_ref.
+  rs.recordAttempt(rst.id, { what_tried: 'smoke provenance', verdict: 'pass',
+    agent: 'general-purpose', model: 'claude-sonnet-4-5', model_source: 'runner-cli', session_ref: 'sess-42' });
+  const attProv = rs.getStep(rst.id).attempts.at(-1);
+  check('recordAttempt persists agent/model/model_source/session_ref',
+    attProv.agent === 'general-purpose' && attProv.model === 'claude-sonnet-4-5'
+      && attProv.model_source === 'runner-cli' && attProv.session_ref === 'sess-42');
+  const rosterAfterAttempt = rs.getPlanRoster(rp.id).steps.find((row) => row.step_id === rst.id);
+  check('roster aggregates actual execution provenance from the latest attempt',
+    rosterAfterAttempt.actual?.model === 'claude-sonnet-4-5' && rosterAfterAttempt.actual?.model_source === 'runner-cli');
+
+  // Redo preserves attempts + all assignment revisions and appends a note.
+  rs.redoStep(rst.id, { reason: 'smoke: retry with different approach', assigned_by: 'user' });
+  const redone = rs.getStep(rst.id);
+  check('redoStep: back to pending, attempts and assignments preserved, note appended',
+    redone.status === 'pending'
+      && redone.attempts.length === 1
+      && redone.assignments.length === 3
+      && redone.notes.some((n) => n.body.includes('[redo]') && /different approach/.test(n.body)));
+  assert.throws(() => rs.redoStep(rst.id), /reason/i);
+  check('redoStep refuses without a reason', true);
+  rs.close();
+}
+
+// v5 migration coverage: an old-shape DB stamped at v4 must gain the new columns +
+// the step_assignments table without losing any data.
+{
+  const { DatabaseSync } = await import('node:sqlite');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { rmSync } = await import('node:fs');
+  const migPath = join(tmpdir(), `plan-ledger-v5-mig-${process.pid}.db`);
+  const raw = new DatabaseSync(migPath);
+  // Seed a fully-populated v4-shape schema: attempts without the new provenance columns,
+  // and NO step_assignments table at all.
+  raw.exec(`
+    CREATE TABLE projects (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'active',
+      created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+    CREATE TABLE settings ( key TEXT PRIMARY KEY, value TEXT );
+    CREATE TABLE plans (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, title TEXT NOT NULL,
+      keywords TEXT NOT NULL DEFAULT '[]', summary TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'draft', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+    CREATE TABLE steps (id INTEGER PRIMARY KEY AUTOINCREMENT, plan_id INTEGER NOT NULL, idx INTEGER NOT NULL,
+      title TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', context TEXT NOT NULL DEFAULT '',
+      tools TEXT NOT NULL DEFAULT '[]', role TEXT NOT NULL DEFAULT '',
+      acceptance_criteria TEXT NOT NULL DEFAULT '', carry_forward TEXT NOT NULL DEFAULT '',
+      layman TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+    CREATE TABLE attempts (id INTEGER PRIMARY KEY AUTOINCREMENT, step_id INTEGER NOT NULL,
+      what_tried TEXT NOT NULL, result TEXT NOT NULL DEFAULT '', verdict TEXT NOT NULL DEFAULT 'fail',
+      role TEXT NOT NULL DEFAULT '', review_rounds INTEGER NOT NULL DEFAULT 0,
+      executor TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL);
+    PRAGMA user_version = 4;`);
+  raw.prepare("INSERT INTO projects (id, name, description, status, created_at, updated_at) VALUES (1, 'General', '', 'active', 't', 't')").run();
+  raw.prepare("INSERT INTO plans (project_id, title, status, created_at, updated_at) VALUES (1, 'legacy plan', 'active', 't', 't')").run();
+  raw.prepare("INSERT INTO steps (plan_id, idx, title, role, created_at, updated_at) VALUES (1, 1, 'legacy step', 'implementer', 't', 't')").run();
+  raw.prepare("INSERT INTO attempts (step_id, what_tried, verdict, created_at) VALUES (1, 'legacy attempt', 'fail', 't')").run();
+  raw.close();
+
+  const ms = new Store(migPath);
+  const attCols = ms.db.prepare('PRAGMA table_info(attempts)').all().map((c) => c.name);
+  check('v5 migration adds attempts.agent/model/model_source/session_ref',
+    attCols.includes('agent') && attCols.includes('model') && attCols.includes('model_source') && attCols.includes('session_ref'));
+  const tables = ms.db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map((t) => t.name);
+  check('v5 migration creates step_assignments', tables.includes('step_assignments'));
+  // v6: the prior-plan discovery provenance table is created on an old-shape DB by the
+  // schema's CREATE TABLE IF NOT EXISTS, and the stamp advances to the current version.
+  check('v6 migration creates plan_consultations', tables.includes('plan_consultations'));
+  check('migration stamps PRAGMA user_version to the current USER_VERSION (>= 6)',
+    ms.db.prepare('PRAGMA user_version').get().user_version === Store.USER_VERSION && Store.USER_VERSION >= 6);
+  // Legacy row survives with sane defaults (blank actual-execution provenance = "unknown").
+  const legacyStep = ms.getStep(1);
+  check('legacy attempt is preserved with blank provenance defaults',
+    legacyStep.attempts.length === 1
+      && legacyStep.attempts[0].agent === '' && legacyStep.attempts[0].model === ''
+      && legacyStep.attempts[0].model_source === '' && legacyStep.attempts[0].session_ref === '');
+  // A step that pre-existed the snapshot mechanism has NO assignment history yet;
+  // re-activating (or first-time activating) is the trigger. The plan was already
+  // 'active' in the seeded DB, so the migration itself does not snapshot — but
+  // snapshotStepAssignment (or a downstream setPlanStatus toggle) will pick it up.
+  ms.snapshotStepAssignment(1, { assigned_by: 'migration-backfill' });
+  check('snapshotStepAssignment freezes a pre-existing step on demand',
+    ms.getStep(1).assignments.length === 1 && ms.getStep(1).assignments[0].role === 'implementer');
+  ms.close();
+  for (const suf of ['', '-wal', '-shm']) rmSync(migPath + suf, { force: true });
+}
 
 console.log(`\n${pass} checks passed.`);
 s.close();

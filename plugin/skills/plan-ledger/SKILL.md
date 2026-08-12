@@ -1,31 +1,47 @@
 ---
 description: >-
-  Use when planning or executing multi-step work that benefits from external memory —
-  any task with several stages, anything in an existing plan-ledger plan, or when the
-  user mentions plans/steps/context/"avoid past mistakes". Keeps working context small
-  by storing plans, per-step context, a role per step, and a failure log in the
-  plan-ledger MCP server.
+  Use when planning or executing multi-step work via the plan-ledger CLI bridge and visual board —
+  any task with several stages, anything in an existing plan, or when the user mentions
+  plans/steps/context/"avoid past mistakes". Keeps working context small by storing plans,
+  per-step context, a role per step, and a failure log on disk.
 ---
 
 # plan-ledger working discipline
 
-plan-ledger is **external working memory**. The durable truth — plans, per-step context,
-carry-forward notes, the role that executes each step, and the failure log — lives in its
-database, not in your context window. Your job is to keep your *own* context small and let
-the store hold the rest.
+plan-ledger is **external working memory** accessed through **`src/ledger-cli.mjs`** (JSON CLI
+bridge) — not `mcp__plan-ledger__*` MCP tools. The durable truth lives in SQLite; your job is to
+keep your *own* context small.
 
-Tools are `mcp__plan-ledger__*`. There are three disclosure levels — never pull a deeper
-level than the task needs:
+**Progressive disclosure** via the bridge:
 
-| Level | Tool | Use it to… |
+| Level | CLI operation | Use it to… |
 |------|------|-----------|
 | 0 | `list_plans` | see what exists (title + keywords + status only) |
 | 1 | `open_plan` | understand one plan + find the step to work (step index only) |
 | 2 | `get_step` / `next_step` | pull ONE step's full context to actually work it |
 
-**RAG sidecar.** To ground a step in an external corpus (a repo, docs tree, dependency git,
-or website you didn't write), the `rag_*` tools do slim, cited retrieval — the loop is
-`rag_query` → `rag_expand`/narrow → `rag_cite`. See plan-ledger `docs/RAG.md`.
+Every `/plan-ledger` turn opens the visual board first: `board --input '{"command":"open",…}'`.
+Cross-workspace Cursor uses the bridge documented in `docs/CURSOR.md` §1; repo-local MCP remains
+optional for RAG/templates/recall extras.
+
+## Planner-start requirement
+
+Before drafting a new plan, run `planner_start` with bounded keywords and persist consulted plan
+ids on the draft (`draft_plan_id`). Use `completed` matches as finished evidence and keep
+`related_active` separate as in-flight context.
+
+## Active update cadence
+
+During execution, send concise chat updates at dispatch, material phase changes, blockers,
+verification, reassignment, and completion, plus at least every **3 minutes** during quiet work.
+Keep board activity telemetry heartbeats at least once per **minute**.
+
+Privacy boundary: operational telemetry only (phase/status/progress/files/artifacts/commands and
+dispatch rationale). Never include private reasoning.
+Operational fields: `plan_id`, `step_id`, `run_id`, `session_ref`, `role`, `agent`,
+`requested_model`, `actual_model`, `model_source`, `phase`, `action_summary`, `command_summary`,
+`status`, `outcome`, `verification_state`, `blocker`, `progress_completed`, `progress_total`,
+`file_count`, `artifact_count`, `recent_artifacts`, `metadata`, `updated_at`, `ended_at`.
 
 ## When to reach for it
 
@@ -44,6 +60,17 @@ or website you didn't write), the `rag_*` tools do slim, cited retrieval — the
 - You're continuing work → `list_plans` to orient, `open_plan` the relevant one, then work it.
 - Mid-task you learn something the *next* step needs → `write_carry_forward` into that step.
   This is how context survives a reset: write it forward, don't hold it in your head.
+
+## Approval boundary
+
+For every new multi-step request, the first phase is planning only:
+1. Create the complete plan as `draft`, including all steps, roles/models, context, acceptance
+   criteria, dependencies, and verification commands.
+2. Present the whole plan and explicitly ask for approval. Stop without claiming or executing a
+   step and without editing implementation files.
+3. Only explicit approval authorizes `set_plan_status(active)`. Once approved, run the execution
+   loop autonomously until completion without asking between steps.
+4. If the user requests changes, revise and re-present the complete draft; wait for approval again.
 
 **Declare the plan's knowledge up front (RAG).** When decomposing a plan, list every source
 the steps will need (repo folders, design docs, dependency gits, external sites/wikis). Check
@@ -64,22 +91,50 @@ dispatch always resolves a role's model through the map, and the orchestrator ma
 a single crux dispatch to opus by passing `model` on that Agent call. Full schema: plan-ledger
 `docs/ROLES.md`.
 
-## Parallel dispatch (do this before the one-at-a-time loop)
+`docs/ROLES.md`.
 
-Call `ready_steps <plan_id>` first — it returns every pending step whose `builds_on`/`blocks`
-dependencies are already satisfied (the full concurrently-launchable frontier, not just the
-lowest-idx step; same dependency gate as `next_step`). When it returns more than one step,
-DISPATCH THE WHOLE FRONTIER CONCURRENTLY — one Agent-tool call per ready step in a single batch —
-then run the review gate on each as it reports. Fall back to the sequential loop below only when
-the frontier is a single step or the steps genuinely must serialize. (The headless
-`npm run orchestrate` runner is still sequential — a `--parallel` flag is a documented follow-up
-in `scripts/runner.mjs`; this rule is for interactive orchestration, where concurrent Agent-tool
-calls actually run in parallel.)
+**Implementer-first dispatch.** Concrete artifact/code steps default to `implementer`, informed by
+historical attempt evidence. Use architect/ui/perf roles only when their capability is materially
+required — not when the deliverable is implementation.
 
-## The execution loop (one step at a time)
+## Parallel orchestration (bounded pool, continuous refill)
 
-1. `next_step <plan_id>` → the next WORKABLE step, with full context (blocked steps are
-   skipped). `{complete}` = plan done; `{all_blocked}` = everything left waits on the user.
+Never claim the whole frontier in one batch. Before dispatch:
+
+1. **Peek:** `ready_steps(plan_id, claim:false, limit:N)`.
+2. **Select:** count free worker slots; exclude path-conflicting write steps (`OWNED_PATH:`,
+   `OWNED_GLOB:`, `file_refs` overlap).
+3. **Claim only selected steps:** `ready_steps(..., claim:true, limit:N)` or per-step claim after
+   path filtering.
+4. **Dispatch**; when a worker finishes, **refill that slot immediately** — no batch barrier.
+
+Parallel write mode requires isolated Git worktrees, serialized/cherry-picked integration of verified
+commits, and a clean integration tree; failed work is not integrated. Full contract:
+`docs/audits/parallel-supervisor-design.md`.
+
+**Automatic supervision:** every claimed step uses execution leases (heartbeat, child PID,
+first-artifact observation, bounded stale recovery, C1-C4 terminalization). Do not hand-maintain a
+duplicate lifecycle.
+
+## Headless runner
+
+Sequential is default (no `--parallel`). Opt-in parallel:
+
+```sh
+node scripts/runner.mjs --plan <id> --live --parallel --inject --max-workers 4
+```
+
+`--inject` keeps completion/integration under the supervisor before terminal success. Release gate:
+`npm run validate:r1-release` after focused/full tests.
+
+## The execution loop (sequential fallback)
+
+Never enter this loop for a `draft` plan. Present it and wait for approval first.
+
+1. `next_step(plan_id, claim:true, executor:"claude-interactive")` → atomically claim the next
+   WORKABLE step, with full context (blocked/dependency-waiting steps are skipped).
+   `{complete}` = plan done; `{all_blocked}` = everything left waits; `{all_in_progress}` =
+   another executor owns all remaining work, so do not duplicate or mark the plan done.
 2. **Read `attempts` before doing anything.** Each is `{ what_tried, result, verdict }`. If an
    approach already has a `fail` verdict, do NOT repeat it — choose a different one and say
    why. This is the whole point of the failure log.
@@ -103,6 +158,11 @@ calls actually run in parallel.)
    when a step depends on earlier work. Then loop to 1, or stop if the user wanted a single
    step. Working-loop tool results carry a `directive` — follow it; don't end your turn while
    a workable step remains unless the user scoped the run.
+
+Governance gates for injected/headless dispatch: preflight must pass before work, completion must
+end with `COMPLETION_JSON`, unsupported pass claims are rejected, repeated noncompliance recommends
+reassignment, dispatch-policy mismatches require explicit override reasons, retries are bounded, and
+partial publish outcomes fail atomically.
 
 A BLOCKED report (spec fork, missing decision, credential, external action) is not a failure:
 resolve the fork if it's yours, escalate via `set_step_status(blocked)` if it's the user's,

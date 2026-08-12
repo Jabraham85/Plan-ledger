@@ -5,14 +5,28 @@
   "type": "module",
   "description": "External working memory + plan graph for Claude, exposed over MCP. Plans are surface-indexed (title + keywords) and lazily opened; each step carries its own context, acceptance criteria, carry-forward notes, and a failure log.",
   "bin": {
-    "plan-ledger": "src/server.mjs"
+    "plan-ledger": "src/server.mjs",
+    "plan-ledger-cli": "src/ledger-cli.mjs"
   },
   "scripts": {
     "start": "node src/server.mjs",
     "board": "node web/server.mjs",
     "orchestrate": "node scripts/runner.mjs",
+    "validate:r1-release": "node scripts/r1-release-validation.mjs",
     "build:exe": "node scripts/build-exe.mjs",
-    "test": "node test/smoke.mjs && node test/rag.mjs && node test/mcp-e2e.mjs && node test/runner-unit.mjs",
+    "sync:global-skill": "node scripts/sync-global-skill.mjs",
+    "test": "node test/smoke.mjs && node test/dispatch-policy.mjs && node test/activity-store.mjs && node test/rag.mjs && node test/mcp-e2e.mjs && node test/approval-workflow.mjs && node test/runner-unit.mjs && node test/execution-governance.mjs && node test/execution-lifecycle.mjs && node test/parallel-supervisor.mjs && node test/planner-v2-e2e.mjs && node test/board-routes.mjs && node test/ledger-cli.mjs && node test/prior-plan-recall.mjs && node test/global-skill.mjs && node test/live-activity-ui.mjs && node test/cross-workspace-smoke.mjs",
+    "test:execution-lifecycle": "node test/execution-lifecycle.mjs",
+    "test:parallel-supervisor": "node test/parallel-supervisor.mjs",
+    "test:cross-workspace-smoke": "node test/cross-workspace-smoke.mjs",
+    "test:activity-store": "node test/activity-store.mjs",
+    "test:live-activity-ui": "node test/live-activity-ui.mjs",
+    "test:execution-governance": "node test/execution-governance.mjs",
+    "test:planner-v2-e2e": "node test/planner-v2-e2e.mjs",
+    "test:dispatch-policy": "node test/dispatch-policy.mjs",
+    "test:ledger-cli": "node test/ledger-cli.mjs",
+    "test:prior-plan-recall": "node test/prior-plan-recall.mjs",
+    "test:global-skill": "node test/global-skill.mjs",
     "test:rag": "node test/rag.mjs",
     "eval:rag": "node scripts/eval-rag.mjs",
     "inspect": "npx @modelcontextprotocol/inspector node src/server.mjs"

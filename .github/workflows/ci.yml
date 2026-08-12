@@ -1,0 +1,45 @@
+name: ci
+
+on:
+  push:
+    branches: [main, cursor]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: node ${{ matrix.node }} / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # plan-ledger needs Node >=22.5 for node:sqlite. Test on both LTS (22)
+        # and current (24) so a `node:sqlite` API drift shows up here rather
+        # than downstream in an MCP client.
+        node: ['22', '24']
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - name: install
+        run: npm ci
+      - name: test (store + rag + mcp-e2e + lifecycle + cross-workspace)
+        # npm test now includes execution-lifecycle (lease/disposition/gate
+        # regressions) and cross-workspace-smoke (bridge from a foreign
+        # workspace, full open→heartbeat→close→done invariants + release-gate
+        # summary of open leases / non-terminal activity / incomplete
+        # dispositions — must be zero to pass).
+        run: npm test
+      - name: eval:rag (deterministic ranker gate)
+        # RAG eval runs deterministically on the fixture corpus (test/fixtures/rag/*),
+        # so it's part of the ship gate — a regression in the ranker/expansion rule
+        # fails CI even if unit tests pass.
+        run: npm run eval:rag
+      - name: reliability summary (release gate — no open leases, no orphaned activity, no undisposed steps)
+        # Runs the cross-workspace smoke a second time in isolation so the
+        # per-run reliability summary is prominent in CI logs and the run
+        # fails loudly if any lifecycle counter is non-zero.
+        run: npm run test:cross-workspace-smoke

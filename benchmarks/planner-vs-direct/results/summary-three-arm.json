@@ -1,0 +1,55 @@
+{
+  "benchmark": "planner-vs-direct-with-agent-handoffs",
+  "statisticalNote": "One generated implementation per treatment (n=1); indicative only.",
+  "treatments": {
+    "direct": "One agent, explicit planning artifacts forbidden.",
+    "planner": "One agent, explicit decomposition and staged reassessment required.",
+    "orchestrated": "Fresh architect -> implementer -> test-engineer correction -> performance-engineer handoffs."
+  },
+  "direct": {
+    "score": 86.68,
+    "feasibilityPoints": 44.9,
+    "qualityPoints": 41.78,
+    "feasibleCases": 44,
+    "totalCases": 49,
+    "timeouts": 5,
+    "averageSolveMs": 59.384,
+    "p95SolveMs": 400,
+    "totalGradeMs": 4532.77
+  },
+  "planner": {
+    "score": 95.95,
+    "feasibilityPoints": 50,
+    "qualityPoints": 45.95,
+    "feasibleCases": 49,
+    "totalCases": 49,
+    "timeouts": 0,
+    "averageSolveMs": 16.404,
+    "p95SolveMs": 117.475,
+    "totalGradeMs": 2393.51
+  },
+  "orchestrated": {
+    "score": 95.95,
+    "feasibilityPoints": 50,
+    "qualityPoints": 45.95,
+    "feasibleCases": 49,
+    "totalCases": 49,
+    "timeouts": 0,
+    "averageSolveMs": 2.03,
+    "p95SolveMs": 2.839,
+    "totalGradeMs": 1919.31
+  },
+  "comparison": {
+    "orchestratedMinusDirectScore": 9.27,
+    "orchestratedMinusPlannerScore": 0,
+    "orchestratedVsPlannerAverageSolveSpeedup": 8.08,
+    "orchestratedVsPlannerP95SolveSpeedup": 41.38,
+    "safeUpperBound": 98.43
+  },
+  "sources": {
+    "direct": "C:\\Users\\Jose.Abraham\\Projects\\Plan-ledger\\benchmarks\\planner-vs-direct\\results\\direct.json",
+    "planner": "C:\\Users\\Jose.Abraham\\Projects\\Plan-ledger\\benchmarks\\planner-vs-direct\\results\\planner.json",
+    "orchestrated": "C:\\Users\\Jose.Abraham\\Projects\\Plan-ledger\\benchmarks\\planner-vs-direct\\results\\orchestrated.json",
+    "out": "C:\\Users\\Jose.Abraham\\Projects\\Plan-ledger\\benchmarks\\planner-vs-direct\\results\\summary-three-arm.json"
+  }
+}

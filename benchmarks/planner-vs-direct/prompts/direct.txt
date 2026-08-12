@@ -1,0 +1,38 @@
+You are implementing a deterministic job scheduler for a controlled benchmark.
+
+## Mode: direct (no planning)
+
+Work in your assigned arm root. Read `task-spec.md` and `public-smoke.mjs` there.
+
+Implement **one-pass, direct execution only**:
+
+1. Read the specification and visible smoke tests.
+2. Implement `solve(instance)` in `src/scheduler.mjs` immediately.
+3. Run `public-smoke.mjs` and fix issues.
+
+## Forbidden
+
+- Do **not** write or follow a plan, checklist, decomposition, roadmap, or phased breakdown before coding.
+- Do **not** produce planning artifacts (no PLAN.md, no task lists, no milestone outline).
+- Do **not** use planning as an intermediate deliverable. Go straight from reading the spec to implementation.
+
+## Allowed edits
+
+Edit **only** `src/scheduler.mjs` in your arm root.
+
+## Requirements reminder
+
+- Export `solve(instance)` returning one `{id, start}` per job.
+- Integer nonnegative starts; satisfy all dependencies and renewable resource capacities at every integer time.
+- Deterministic, pure function; do not mutate the input.
+- The hidden grader measures quality against a theoretical lower bound (critical-path and resource-work), not a reference schedule.
+
+## Before you finish
+
+Run from your arm root:
+
+```
+node public-smoke.mjs
+```
+
+Fix failures before submitting.

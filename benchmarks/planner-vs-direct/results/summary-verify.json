@@ -1,0 +1,58 @@
+{
+  "benchmark": "planner-vs-direct",
+  "comparedAt": "2026-07-16T16:27:40.462Z",
+  "statisticalNote": "n=1 per arm (single session each). Observed score deltas are indicative only; this protocol does not establish causal attribution between prompt style and outcomes.",
+  "orchestrationControls": {
+    "note": "Same model and tool access across arms are orchestration controls recorded by the operator. They are not independently auditable from benchmark artifacts alone.",
+    "promptTreatment": "Direct arm forbids planning artifacts; planner arm requires explicit decomposition, staged verification, and reassessment before/during implementation."
+  },
+  "direct": {
+    "overallScore": 0,
+    "feasibilityPoints": 0,
+    "qualityPoints": 0,
+    "feasibilityFraction": 0,
+    "qualityFraction": 0,
+    "invalidCaseCount": 49,
+    "failureDecomposition": {
+      "timeout": 0,
+      "threw": 49,
+      "validation": 0,
+      "nondeterministic": 0,
+      "inputMutated": 0,
+      "worker": 0,
+      "otherInvalid": 0
+    },
+    "runtimeMs": 1590.95
+  },
+  "planner": {
+    "overallScore": 86.68,
+    "feasibilityPoints": 44.9,
+    "qualityPoints": 41.78,
+    "feasibilityFraction": 0.898,
+    "qualityFraction": 0.8356,
+    "invalidCaseCount": 5,
+    "failureDecomposition": {
+      "timeout": 5,
+      "threw": 0,
+      "validation": 0,
+      "nondeterministic": 0,
+      "inputMutated": 0,
+      "worker": 0,
+      "otherInvalid": 0
+    },
+    "runtimeMs": 4519.43
+  },
+  "comparison": {
+    "scoreDeltaPlannerMinusDirect": 86.68,
+    "feasibilityDelta": 44.9,
+    "qualityDelta": 41.78,
+    "timeoutDelta": 5,
+    "otherInvalidDelta": -49,
+    "safeUpperBound": 98.43,
+    "safeUpperBoundNote": "Proven safe upper bound on overall score (possibly not tight). Quality is scored against theoretical lower bounds, not true optima; the calibration case has a proven integrality gap."
+  },
+  "sources": {
+    "direct": "C:\\Users\\Jose.Abraham\\Projects\\Plan-ledger\\benchmarks\\planner-vs-direct\\results\\template-stub.json",
+    "planner": "C:\\Users\\Jose.Abraham\\Projects\\Plan-ledger\\benchmarks\\planner-vs-direct\\results\\direct-stub.json"
+  }
+}

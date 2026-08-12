@@ -1,16 +1,30 @@
 ---
-description: Work with plan-ledger — create, list, open, work, and render plans held in the external MCP working-memory store.
-argument-hint: "new <title> | list | open <id> | board [id] | work <id> | next <id> | done <step_id>"
+description: Work with plan-ledger via the JSON CLI bridge and visual board.
+argument-hint: "new <title> | approve [id] | list | open <id> | board [id] | work <id> | next <id> | done <step_id>"
 ---
 
-You are driving **plan-ledger** (external working memory over MCP) for the user.
+You are driving **plan-ledger** (external working memory over the JSON CLI bridge) for the user.
 
 Parse `$ARGUMENTS`: the first word is the subcommand, the rest are its arguments.
-If `$ARGUMENTS` is empty, treat it as `board` (show all plans).
+If `$ARGUMENTS` is empty, treat it as `board` (open the visual board for all plans).
 
-All actions use the `mcp__plan-ledger__*` tools. Honor progressive disclosure — pull only
-the level you need: `list_plans` (surface) → `open_plan` (step index) → `get_step`/`next_step`
-(one step's full body). Never dump every step body when an index will do.
+**Every invocation:** open the visual board first via `board` `"command":"open"` (see
+`.cursor/skills/plan-ledger/SKILL.md` § Bridge invocation). All ledger I/O uses
+`src/ledger-cli.mjs` — not MCP. Honor progressive disclosure — pull only the level you need:
+`list_plans` (surface) → `open_plan` (step index) → `get_step`/`next_step` (one step's full body).
+
+**Planner-start preflight (required for new plans):** before decomposing a new goal, run
+`planner_start` with bounded keywords and record consulted ids on the draft (`draft_plan_id`).
+Treat `completed` matches as finished evidence and keep `related_active` separate.
+
+**Execution visibility contract:** send concise chat updates at dispatch, material phase changes,
+blockers, verification, reassignment, and completion, and at least every **3 minutes** during quiet
+work. Keep board activity telemetry at least once per **minute**. Updates are operational telemetry
+only (phase/status/progress/files/artifacts/commands/dispatch rationale), never private reasoning.
+Operational fields: `plan_id`, `step_id`, `run_id`, `session_ref`, `role`, `agent`,
+`requested_model`, `actual_model`, `model_source`, `phase`, `action_summary`, `command_summary`,
+`status`, `outcome`, `verification_state`, `blocker`, `progress_completed`, `progress_total`,
+`file_count`, `artifact_count`, `recent_artifacts`, `metadata`, `updated_at`, `ended_at`.
 
 **RAG sidecar.** To ground a step in an external corpus (a repo, docs tree, dependency git, or
 website you didn't write), the `rag_*` tools do slim, cited retrieval — the loop is
@@ -21,6 +35,14 @@ on your own: pick steps, pick the best approach, and **move from one plan to the
 asking**. Never present a menu of "do you want A, B, or stop?" — decide and act. The only time you
 stop is when there is genuinely nothing left you can work on; if something needs the user, **mark
 it blocked, note exactly what you need, and move to the next workable plan** rather than halting.
+
+**Approval boundary — mandatory.** Create and present the complete plan while it is `draft` before
+doing implementation work. A draft must include every step, role/model, context, acceptance
+criteria, dependency, and verification command. Ask for explicit approval and stop. Do not claim
+or dispatch a step, edit implementation files, or activate the plan in the planning turn. On an
+explicit "approve", "approved", "go ahead", "looks good", or equivalent, set the plan `active` and
+immediately execute autonomously until completion. Requested revisions are not approval: revise
+the draft, show the complete plan again, and wait.
 
 **Work at the PLAN level, never the step level.** The user names a *plan* (by id, title, or
 keyword) and says "work / continue / complete" it — they do NOT pick step numbers. YOU always
@@ -94,7 +116,7 @@ yourself if it's yours to make, escalate via blocked status if it's the user's, 
 ## Subcommands
 
 **`new <title…>`**  (optionally `… from <template>`)
-1. `create_plan` with the title; infer 3–8 `keywords` and a tight one-paragraph `summary`
+1. Run `planner_start`, then `create_plan` with the title; infer 3–8 `keywords` and a tight one-paragraph `summary`
    (what + why) from the title and conversation.
 2. If the user wrote **`from <template>`**, `instantiate_template(<template>, <plan_id>)` to seed
    the steps, then tailor each cloned step to the goal. OTHERWISE **decompose** the goal into
@@ -119,7 +141,29 @@ yourself if it's yours to make, escalate via blocked status if it's the user's, 
    queries. Step agents run those queries first (`rag_query`, then `rag_expand`/narrow as
    needed) and cite chunk ids — so they start grounded instead of rediscovering sources
    mid-step. Full guide: `docs/RAG.md`.
-4. Show the new plan as a board.
+4. Keep the plan `draft`. Show the whole plan as a board, including role/model, dependencies,
+   acceptance criteria, and verification for every step.
+5. Ask **"Approve plan #<id> to begin execution?"** and stop. Never begin step 1 in this turn.
+
+Governed/headless dispatch must enforce: preflight gates before work, required final-line
+`COMPLETION_JSON` evidence, unsupported pass rejection, one-correction noncompliance then recommend
+reassignment, deterministic override reasons for material dispatch mismatch, bounded transient
+retries, and atomic failure on partial publish.
+
+**Execution lease + verification disposition contract (mandatory).** Every claimed step runs inside
+one execution lease: `open_execution_lease` (atomic CAS-claim + activity binding), heartbeats on
+a bounded cadence (default 20s; 60s ceiling), `close_execution_lease` at the terminal event with
+`outcome` and optional `step_verdict`/`attempt`/`disposition`. Every closed step MUST carry a
+verification disposition (`verified` | `deferred` | `blocked` | `not_applicable` |
+`legacy_unknown`) — `pass` verdicts auto-set `verified`, everything else uses
+`set_step_disposition`. A plan cannot be `set_plan_status(done)` while any step is active, any
+lease is open, any activity run is non-terminal, or any closed step lacks a disposition. Use
+`assess_plan_terminalization` to see the current blockers. The board, MCP server, and runner all
+boot a background reaper (60–120s cadence) that closes stale/dead leases as `cancelled`.
+
+**`approve [<id|name>]`** — resolve the named draft plan (or the most recently presented draft),
+`set_plan_status(<id>, "active")`, then enter `work <id>` immediately and run every workable step
+until completion. Equivalent explicit approval in normal conversation follows the same path.
 
 **`template list | show <name> | save <plan_id> as <name>`** — `list_templates` /
 `get_template` / `save_as_template`. Apply one with `/plan new <goal> from <name>` or
@@ -158,21 +202,26 @@ forward on your own — across steps AND across plans — choosing the best path
 You are self-motivated: keep working until nothing is workable. Only stop to ask if the user
 explicitly scoped it ("just one step" / "just this plan").
 
-**Parallel dispatch.** Before working steps one at a time, call `ready_steps <plan_id>` — it
-returns every pending step whose `builds_on`/`blocks` dependencies are already satisfied (the
-full concurrently-launchable frontier, not just the lowest-idx one; same dependency gate as
-`next_step`). When it returns more than one step, DISPATCH THE WHOLE FRONTIER CONCURRENTLY — one
-Agent-tool call per ready step, sent in a single batch — then run the review gate on each as it
-reports. Fall back to the sequential `next_step` loop below only when the frontier is a single
-step or the steps genuinely must serialize. (The headless `npm run orchestrate` runner is still
-sequential — a `--parallel` flag is a documented follow-up in `scripts/runner.mjs`; this rule is
-for interactive orchestration, where concurrent Agent-tool calls actually run in parallel.)
+If the selected plan is `draft`, present it in full and ask for explicit approval instead of
+executing it.
+
+**Parallel pool.** Peek `ready_steps(plan_id, claim:false, limit:N)`, count free worker slots,
+exclude path-conflicting write steps (`OWNED_PATH:` / `OWNED_GLOB:` / `file_refs`), claim only the
+selected non-conflicting steps, dispatch, and **refill each slot immediately** when a worker
+finishes — never claim the whole frontier in one batch. Parallel write mode uses isolated Git
+worktrees and serialized cherry-pick integration; failed work is not integrated. Fall back to the
+sequential loop below when only one step is ready or paths conflict. Headless:
+`node scripts/runner.mjs --plan <id> --live --parallel --inject --max-workers 4` (sequential is
+default without `--parallel`). Release gate: `npm run validate:r1-release`. Details:
+`docs/audits/parallel-supervisor-design.md`.
 
 **Inner loop — work a plan's steps:**
-1. `next_step <plan_id>` → the next **workable** step (blocked steps are skipped; full context +
-   embedded lessons). Three shapes: a step → work it · `{all_blocked}` → `set_plan_status(blocked)`,
-   jump to the **outer loop** · `{complete}` → `set_plan_status(done)`, jump to the **outer loop**.
-2. Announce ("Working #<plan> step 4/8: <title>") and `set_step_status(<step>, in_progress)` so the board's Live mode focuses it.
+1. `next_step(plan_id, claim:true, executor:"claude-interactive")` → atomically claim the next
+   **workable** step (blocked/dependency-waiting steps are skipped; full context + embedded
+   lessons). Shapes: a step → work it · `{all_blocked}` → `set_plan_status(blocked)`, outer loop ·
+   `{all_in_progress}` → do not duplicate or mark done; wait/recover the active executor ·
+   `{complete}` → `set_plan_status(done)`, outer loop.
+2. Announce ("Working #<plan> step 4/8: <title>"); the claim already set it `in_progress`.
 3. Read its `carry_forward` and **`attempts`** FIRST. NEVER repeat an approach already marked `fail`.
 4. **DISPATCH per the Roles section** (resolve the role per **Roster overrides** first): brief the
    step's resolved agent (Agent tool) with the step's
@@ -190,9 +239,9 @@ for interactive orchestration, where concurrent Agent-tool calls actually run in
   workable one. Mark the whole plan blocked only when it returns `{all_blocked}`.
 
 **Outer loop — pick the next plan:**
-- `list_plans` → choose the best next **workable** plan in the current project: not complete, not blocked, and whose prerequisites (`builds_on` / cited deps) are satisfied. Prefer the plan that unblocks the most downstream work.
-- Found one → run the inner loop on it.
-- **None workable → only now stop.** Give one summary: what completed, and for each blocked item, exactly what you need from the user to unblock it.
+- Call `next_plan` (optionally scoped to `project_id`). Found one → run the inner loop on it.
+- `{complete}` → **only now stop.** Give one summary: what completed, and for each blocked item,
+  exactly what you need from the user to unblock it.
 
 For long unattended runs, the orchestrator does this same project loop headless — a FRESH process per step (true context reset) + usage-limit auto-retry:
 `npm run orchestrate -- --project <id> --live --retry-on-limit`

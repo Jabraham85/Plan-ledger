@@ -1,0 +1,519 @@
+{
+  "overallScore": 0,
+  "feasibilityPoints": 0,
+  "qualityPoints": 0,
+  "feasibilityFraction": 0,
+  "qualityFraction": 0,
+  "mathematicalCeiling": {
+    "maxOverallScore": 98.43,
+    "maxQualityFraction": 0.9686,
+    "note": "Proven safe upper bound (possibly not tight): quality uses the theoretical lower bound, and the calibration case has a proven integrality gap (LB=2, optimum=3). An optimum solver may score below this bound."
+  },
+  "failureDecomposition": {
+    "totalInvalid": 49,
+    "timeout": 0,
+    "threw": 49,
+    "validation": 0,
+    "nondeterministic": 0,
+    "inputMutated": 0,
+    "worker": 0,
+    "otherInvalid": 0
+  },
+  "groupBreakdown": {
+    "chains": {
+      "cases": 12,
+      "feasible": 0,
+      "avgQualityAllCases": 0,
+      "avgQualityFeasibleCases": 0
+    },
+    "forks": {
+      "cases": 12,
+      "feasible": 0,
+      "avgQualityAllCases": 0,
+      "avgQualityFeasibleCases": 0
+    },
+    "packing": {
+      "cases": 12,
+      "feasible": 0,
+      "avgQualityAllCases": 0,
+      "avgQualityFeasibleCases": 0
+    },
+    "mixed-dag": {
+      "cases": 8,
+      "feasible": 0,
+      "avgQualityAllCases": 0,
+      "avgQualityFeasibleCases": 0
+    },
+    "adversarial": {
+      "cases": 4,
+      "feasible": 0,
+      "avgQualityAllCases": 0,
+      "avgQualityFeasibleCases": 0
+    },
+    "calibration": {
+      "cases": 1,
+      "feasible": 0,
+      "avgQualityAllCases": 0,
+      "avgQualityFeasibleCases": 0
+    }
+  },
+  "invalidCases": [
+    {
+      "id": "chains-00",
+      "group": "chains",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "chains-01",
+      "group": "chains",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "chains-02",
+      "group": "chains",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "chains-03",
+      "group": "chains",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "chains-04",
+      "group": "chains",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "chains-05",
+      "group": "chains",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "chains-06",
+      "group": "chains",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "chains-07",
+      "group": "chains",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "chains-08",
+      "group": "chains",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "chains-09",
+      "group": "chains",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "chains-10",
+      "group": "chains",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "chains-11",
+      "group": "chains",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "forks-00",
+      "group": "forks",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "forks-01",
+      "group": "forks",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "forks-02",
+      "group": "forks",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "forks-03",
+      "group": "forks",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "forks-04",
+      "group": "forks",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "forks-05",
+      "group": "forks",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "forks-06",
+      "group": "forks",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "forks-07",
+      "group": "forks",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "forks-08",
+      "group": "forks",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "forks-09",
+      "group": "forks",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "forks-10",
+      "group": "forks",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "forks-11",
+      "group": "forks",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "packing-00",
+      "group": "packing",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "packing-01",
+      "group": "packing",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "packing-02",
+      "group": "packing",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "packing-03",
+      "group": "packing",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "packing-04",
+      "group": "packing",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "packing-05",
+      "group": "packing",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "packing-06",
+      "group": "packing",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "packing-07",
+      "group": "packing",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "packing-08",
+      "group": "packing",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "packing-09",
+      "group": "packing",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "packing-10",
+      "group": "packing",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "packing-11",
+      "group": "packing",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "mixed-dag-00",
+      "group": "mixed-dag",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "mixed-dag-01",
+      "group": "mixed-dag",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "mixed-dag-02",
+      "group": "mixed-dag",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "mixed-dag-03",
+      "group": "mixed-dag",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "mixed-dag-04",
+      "group": "mixed-dag",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "mixed-dag-05",
+      "group": "mixed-dag",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "mixed-dag-06",
+      "group": "mixed-dag",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "mixed-dag-07",
+      "group": "mixed-dag",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "adversarial-00",
+      "group": "adversarial",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "adversarial-01",
+      "group": "adversarial",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "adversarial-02",
+      "group": "adversarial",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "adversarial-03",
+      "group": "adversarial",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    },
+    {
+      "id": "calibration-gap-00",
+      "group": "calibration",
+      "failureKind": "threw",
+      "timedOut": false,
+      "errors": [
+        "solve threw: Not implemented: implement solve() per task-spec.md"
+      ]
+    }
+  ],
+  "runtime": {
+    "totalMs": 1590.95,
+    "averageMs": 0.056,
+    "p95Ms": 0.076,
+    "perCaseBudgetMs": 400
+  },
+  "metadata": {
+    "benchmark": "planner-vs-direct",
+    "seed": 1347174734,
+    "caseCount": 49,
+    "gradedAt": "2026-07-16T16:27:37.891Z",
+    "node": "v22.20.0",
+    "root": "C:\\Users\\Jose.Abraham\\Projects\\Plan-ledger\\benchmarks\\planner-vs-direct\\task-template",
+    "nRunsPerArm": 1,
+    "nRunsNote": "Single run per arm (n=1); outcomes are indicative, not statistically conclusive."
+  }
+}

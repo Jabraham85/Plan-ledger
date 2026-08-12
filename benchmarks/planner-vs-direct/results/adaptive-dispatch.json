@@ -1,0 +1,35 @@
+{
+  "treatment": "adaptive-cost-aware-specialists",
+  "policy": "Dispatch the next specialist only when the previous gate requires it.",
+  "usageAccounting": "Exact token counts were not exposed by the subagent runtime.",
+  "dispatches": [
+    {
+      "role": "scheduling-architect",
+      "model": "gpt-5-mini",
+      "mode": "read-only design",
+      "dispatched": true
+    },
+    {
+      "role": "scheduler-implementer",
+      "model": "gpt-5.3-codex",
+      "mode": "single-file implementation",
+      "dispatched": true
+    },
+    {
+      "role": "schedule-test-engineer",
+      "model": "gpt-5-mini",
+      "mode": "read-only black-box audit",
+      "dispatched": true,
+      "outcome": "pass; 11 public/focused cases valid; 80-job stress median 9.02 ms"
+    },
+    {
+      "role": "scheduler-perf-engineer",
+      "model": "gpt-5.3-codex",
+      "mode": "conditional measured optimization",
+      "dispatched": false,
+      "reason": "Test evidence showed no performance risk against the documented sub-second expectation."
+    }
+  ],
+  "totalAgentsDispatched": 3,
+  "correctionRounds": 0
+}

@@ -1,0 +1,28 @@
+{
+  "benchmark": "planner-vs-direct",
+  "comparedAt": "2026-07-16T16:12:44.330Z",
+  "direct": {
+    "overallScore": 0,
+    "feasibilityPoints": 0,
+    "qualityPoints": 0,
+    "invalidCaseCount": 49,
+    "runtimeMs": 1.57
+  },
+  "planner": {
+    "overallScore": 0,
+    "feasibilityPoints": 0,
+    "qualityPoints": 0,
+    "invalidCaseCount": 49,
+    "runtimeMs": 1.57
+  },
+  "comparison": {
+    "scoreDeltaPlannerMinusDirect": 0,
+    "feasibilityDelta": 0,
+    "qualityDelta": 0,
+    "mathematicalCeiling": 98.43
+  },
+  "sources": {
+    "direct": "C:\\Users\\Jose.Abraham\\Projects\\Plan-ledger\\benchmarks\\planner-vs-direct\\results\\direct-stub.json",
+    "planner": "C:\\Users\\Jose.Abraham\\Projects\\Plan-ledger\\benchmarks\\planner-vs-direct\\results\\direct-stub.json"
+  }
+}

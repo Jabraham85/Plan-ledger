@@ -37,7 +37,8 @@ All alternatives below are judged on, in order:
 
 **Why A wins:** the ledger DB is hot (six concurrent openers, grep evidence above) and *precious*; the RAG index is cold-written, hot-read, and *disposable* (re-ingest rebuilds it). Separating them means an ingest crash can never corrupt plan data, and `rag_forget` is a plain DELETE with no fear. There are **no cross-DB joins to lose** — nothing in the plans schema references chunks (the plan-time RAG declaration, §10, is a text convention precisely so this stays true). Evidence that would flip it: if steps ever need an enforced FK to chunks, revisit B.
 
-**Location:** `$PLAN_LEDGER_RAG_DB`, else `data/rag.db` next to `data/plan-ledger.db` (mirrors `src/server.mjs:22`).
+**Location:** `$PLAN_LEDGER_RAG_DB`, else `~/Documents/plan-ledger/data/rag.db`
+next to the default ledger DB (mirrors `src/rag/store.mjs`).
 
 ### DDL (v1)
 

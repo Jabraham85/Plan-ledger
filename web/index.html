@@ -68,6 +68,10 @@
   .b-failed,.b-abandoned { background: #371a1a; color: var(--fail); border-color: #5a2727; }
   .b-blocked { background: #352a10; color: var(--blocked); border-color: #5c4715; }
   .b-skipped { background: #23262d; color: var(--skip); border-color: #333845; }
+  .b-health-healthy { background: #14301f; color: var(--done); border-color: #1f5236; }
+  .b-health-awaiting_artifact { background: #16273f; color: var(--prog); border-color: #244067; }
+  .b-health-needs_manual_verification { background: #352a10; color: var(--blocked); border-color: #5c4715; }
+  .b-health-stale_lease { background: #3a220f; color: #f97316; border-color: #7a3f16; }
 
   .chips { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px; }
   .chip { font-size: 11px; color: var(--muted); background: var(--panel2);
@@ -131,9 +135,76 @@
   .attempt .what { font-weight: 600; margin-bottom: 3px; }
   .attempt .res { color: var(--muted); font-size: 12.5px; white-space: pre-wrap; }
   .attempt .ts { color: var(--faint); font-size: 11px; margin-top: 4px; }
+  .attempt .prov { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 5px; font-size: 11px; color: var(--muted); }
+  .attempt .prov .k { color: var(--faint); }
+  .attempt .prov .unknown { color: var(--faint); font-style: italic; }
+
+  /* execution roster (v5) */
+  .roster { display: grid; gap: 8px; }
+  .rosterCard { border: 1px solid var(--line); border-radius: 9px; padding: 9px 12px; background: var(--panel); }
+  .rosterCard .top { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; flex-wrap: wrap; }
+  .rosterCard .rname { font-weight: 600; }
+  .rosterCard .rgrid { display: grid; grid-template-columns: 96px 1fr; gap: 3px 12px; font-size: 12px; }
+  .rosterCard .rgrid .k { color: var(--faint); }
+  .rosterCard .rgrid .v { color: #cfd5e1; word-break: break-word; }
+  .rosterCard .rgrid .v.unknown { color: var(--faint); font-style: italic; }
+  .drift { display: inline-flex; gap: 4px; align-items: center; font-size: 10.5px; padding: 2px 7px; border-radius: 99px; background: #352a10; color: var(--blocked); border: 1px solid #5c4715; font-weight: 600; }
+  .ctxPreview { color: var(--muted); font-size: 11.5px; margin-top: 6px; white-space: pre-wrap; max-height: 60px; overflow: hidden; position: relative; }
+  .rev { border-left: 2px solid var(--line); padding: 4px 8px; margin-top: 4px; font-size: 11.5px; color: var(--muted); }
+  .rev.initial { border-left-color: var(--accent); }
+  .rev.reassigned { border-left-color: var(--blocked); }
   .link { font-size: 12.5px; color: var(--accent); }
   .empty { color: var(--faint); padding: 28px 4px; text-align: center; font-size: 13px; }
   .err { color: var(--fail); }
+  .srOnly {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+  }
+
+  /* live activity (v7 routes) */
+  .activityPanel {
+    margin-top: 12px; border-top: 1px solid var(--line); padding-top: 12px;
+  }
+  .activityHead {
+    display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+  .activityConn {
+    font-size: 11.5px; color: var(--muted);
+    border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px;
+  }
+  .activityConn.err {
+    color: var(--fail); border-color: #5a2727; background: #371a1a;
+  }
+  .kbdLinks { margin-left: auto; display: inline-flex; gap: 8px; }
+  .kbdLinks a { font-size: 11.5px; color: var(--accent); }
+  .actCard {
+    border: 1px solid var(--line); border-radius: 9px; background: var(--panel);
+    padding: 10px 11px; margin-bottom: 8px;
+  }
+  .actGrid {
+    display: grid; grid-template-columns: 140px 1fr; gap: 4px 12px; font-size: 12px;
+  }
+  .actGrid .k { color: var(--faint); }
+  .actGrid .v { color: #cfd5e1; word-break: break-word; }
+  .actGrid .warn { color: var(--blocked); }
+  .actLine {
+    border: 1px solid var(--line); border-left-width: 3px; border-radius: 8px;
+    background: var(--panel); padding: 8px 10px; margin-bottom: 7px;
+  }
+  .actLine .top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .actLine .sum { font-size: 12.5px; color: #d7dcec; margin-top: 3px; white-space: pre-wrap; }
+  .st-active { border-left-color: var(--prog); }
+  .st-blocked { border-left-color: var(--blocked); }
+  .st-verifying { border-left-color: #8b5cf6; }
+  .st-stale { border-left-color: #f97316; }
+  .st-failed { border-left-color: var(--fail); }
+  .st-done { border-left-color: var(--done); }
+  .activityPrivacy { color: var(--faint); font-size: 11.5px; margin-top: 8px; line-height: 1.45; }
+  .liveCards { list-style: none; margin: 0; padding: 0; }
+  .liveCards > li { margin: 0; }
+  .timeline { list-style: none; margin: 0; padding: 0; }
+  .timeline > li { margin: 0; }
 
   /* copy button */
   .copybtn { font-size: 12px; padding: 4px 10px; }
@@ -149,11 +220,11 @@
   #toast.show { opacity: 1; }
 
   /* overlay / refs manager */
-  #overlay, #planOverlay, #fileModal {
+  #overlay, #staffOverlay, #planOverlay, #fileModal {
     position: fixed; inset: 0; background: rgba(0,0,0,.55); display: none;
     align-items: flex-start; justify-content: center; z-index: 40; padding: 6vh 16px;
   }
-  #overlay.show, #planOverlay.show, #fileModal.show { display: flex; }
+  #overlay.show, #staffOverlay.show, #planOverlay.show, #fileModal.show { display: flex; }
   .fileref { display: flex; align-items: center; gap: 8px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 5px; cursor: pointer; background: var(--panel); }
   .fileref:hover { border-color: var(--accent-dim); }
   .fileref .fpath { font-size: 12px; color: #cfd5e1; flex: 1; word-break: break-all; }
@@ -186,6 +257,18 @@
   .ref .del { color: var(--faint); cursor: pointer; border: 0; background: none; font-size: 15px; padding: 0 2px; }
   .ref .del:hover { color: var(--fail); }
   .ref .scope { font-size: 10.5px; color: var(--faint); }
+  .staffrow {
+    display: grid; grid-template-columns: minmax(150px, 1fr) minmax(180px, 1.4fr) auto;
+    gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line);
+  }
+  .staffrow:last-child { border-bottom: 0; }
+  .staffrole { font-weight: 600; }
+  .staffsource { color: var(--faint); font-size: 10.5px; margin-top: 2px; }
+  .staffactions { display: flex; gap: 6px; }
+  .stafferror { color: var(--fail); border: 1px solid #5a2727; background: #371a1a; border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; }
+  .staffcontext { grid-column: 1 / -1; color: var(--muted); font-size: 12px; }
+  .staffcontext summary { cursor: pointer; color: var(--accent); }
+  .staffcontext .body { margin-top: 7px; font-size: 12px; max-height: 240px; overflow: auto; }
 
   /* toggle switch */
   .switch { position: relative; width: 38px; height: 21px; flex: none; cursor: pointer; }
@@ -224,12 +307,14 @@
   .hit .tt { font-weight: 600; flex: 1; }
   .hit .sc { color: var(--faint); font-size: 10.5px; }
   .hit .sn { color: var(--muted); font-size: 12px; margin-top: 3px; }
+
 </style>
 </head>
 <body>
 <header>
   <h1>plan&nbsp;<span>·</span>&nbsp;ledger</h1>
   <select id="projectSel" title="current project"></select>
+  <button id="staffBtn">Staff</button>
   <span class="sub" id="sub">loading…</span>
   <span class="spacer"></span>
   <div class="searchwrap">
@@ -240,13 +325,18 @@
   <button id="newPlanBtn" class="primary">+ New plan</button>
   <button id="refsBtn">⚙ Rules &amp; Tools</button>
   <label class="auto" title="poll for activity, auto-focus the plan/step being worked, refresh in real time"><input type="checkbox" id="live" /> <span class="livewrap"><span class="livedot off"></span> Live</span></label>
+  <label class="auto" title="How long a live-activity run can go without a heartbeat before it is flagged stale">stale after <input type="number" id="staleThresholdInput" min="5" max="3600" step="5" style="width:52px;background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:2px 5px;font:inherit;font-size:12px" aria-label="Stale threshold in seconds" /> s</label>
   <button id="refresh">↻ Refresh</button>
 </header>
 
 <div class="cols">
-  <div class="col" id="plansCol"><h2>Plans</h2><div id="plans"></div></div>
-  <div class="col" id="planCol"><h2>Plan overview</h2><div id="plan"><div class="empty">Select a plan</div></div></div>
-  <div class="col" id="stepCol"><h2>Step detail</h2><div id="step"><div class="empty">Select a step</div></div></div>
+  <div class="col" id="plansCol"><h2 id="plansHeading">Plans</h2><div id="plans"></div></div>
+  <div class="col" id="planCol"><h2 id="planHeading">Plan overview</h2><div id="plan"><div class="empty">Select a plan</div></div></div>
+  <div class="col" id="stepCol">
+    <h2 id="stepHeading">Step detail</h2>
+    <div id="step"><div class="empty">Select a step</div></div>
+    <div id="activity" class="activityPanel" role="region" aria-label="Live activity"></div>
+  </div>
 </div>
 
 <div id="overlay">
@@ -272,7 +362,35 @@
     </div>
   </div>
 </div>
+
+<div id="staffOverlay">
+  <div class="panel" style="width:min(760px,100%)">
+    <div class="head">
+      <h2>Project staff</h2>
+      <span class="spacer"></span>
+      <button id="staffDefaults" class="primary">Apply recommended defaults</button>
+      <button id="closeStaff">✕</button>
+    </div>
+    <div class="hint">These role → model assignments apply project-wide to every plan. Persistent context is user-global and follows the role across projects. <span id="staffModelsSource"></span></div>
+    <div id="staffError"></div>
+    <div class="staffrow" style="padding-top:0">
+      <div class="steplbl" style="margin:0">Role</div>
+      <div class="steplbl" style="margin:0">Model</div>
+      <div></div>
+    </div>
+    <div id="staffList"></div>
+    <div class="form">
+      <div class="row2">
+        <input class="f" id="newStaffRole" placeholder="new role (e.g. security-reviewer)" />
+        <select class="f" id="newStaffModel"></select>
+        <button class="primary" id="addStaff" style="white-space:nowrap">+ Add staff</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
+<div id="activityAnnounce" class="srOnly" role="status" aria-live="polite"></div>
 
 <div id="fileModal">
   <div class="panel" style="width:min(840px,100%)">
@@ -321,7 +439,33 @@ function mdLite(t) {
 function toggleClamp(btn) { const d = btn.previousElementSibling; d.classList.toggle('open'); btn.textContent = d.classList.contains('open') ? '▴ Show less' : '▾ Show more'; }
 window.toggleClamp = toggleClamp;
 const ICONS = { done:'✅', in_progress:'▶', pending:'⬚', failed:'✗', blocked:'⏸', skipped:'⤼' };
-let state = { planId: null, stepId: null };
+let state = { projectId: null, planId: null, stepId: null };
+let boardHealthBadgesEnabled = false;
+const ACTIVITY_POLL_MS = 5000;
+const ACTIVITY_STALE_DEFAULT_MS = 120000;
+const ACTIVITY_STALE_STORAGE_KEY = 'planLedgerActivityStaleMs';
+// Stale threshold is user-configurable (persisted per browser) rather than a
+// fixed constant — the number input in the header is the single source of
+// truth; scopeQuery() sends it to the server on every poll.
+function loadStaleMs() {
+  try {
+    const raw = Number(localStorage.getItem(ACTIVITY_STALE_STORAGE_KEY));
+    return Number.isFinite(raw) && raw >= 5000 && raw <= 3600000 ? raw : ACTIVITY_STALE_DEFAULT_MS;
+  } catch { return ACTIVITY_STALE_DEFAULT_MS; }
+}
+function saveStaleMs(ms) {
+  const bounded = Math.min(3600000, Math.max(5000, Number(ms) || ACTIVITY_STALE_DEFAULT_MS));
+  try { localStorage.setItem(ACTIVITY_STALE_STORAGE_KEY, String(bounded)); } catch {}
+  return bounded;
+}
+let ACTIVITY_STALE_MS = loadStaleMs();
+
+function queryId(name) {
+  const raw = new URLSearchParams(window.location.search).get(name);
+  if (raw == null || raw.trim() === '') return null;
+  const id = Number(raw);
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
 
 async function api(path) {
   const r = await fetch(path);
@@ -329,6 +473,10 @@ async function api(path) {
   return r.json();
 }
 const badge = (s) => `<span class="badge b-${s}">${esc(s)}</span>`;
+const healthBadge = (stateValue) => {
+  const value = String(stateValue || 'healthy');
+  return `<span class="badge b-health-${value}">health: ${esc(value)}</span>`;
+};
 
 async function loadPlans() {
   try {
@@ -369,9 +517,122 @@ async function openPlan(id) {
       <div class="summary md ${(p.summary||'').length>380?'clamp':''}">${mdLite(p.summary)||'<i>no summary</i>'}</div>
       ${(p.summary||'').length>380?'<button class="moreBtn" onclick="toggleClamp(this)">▾ Show more</button>':''}`;
     renderPlanControls(p);
+    renderPlanRoster(p.id);
     renderPlanGraph(p.id);
+    scheduleActivityPoll(0);
   } catch (e) { $('plan').innerHTML = `<div class="empty err">${esc(e.message)}</div>`; }
 }
+
+// Execution roster (v5): plan-level transparency. Shows per-step planned
+// assignment, live re-resolution, actual execution provenance, and drift flags.
+// Draft plans get a "preview until activation" note; active plans get the
+// full snapshotted view.
+async function renderPlanRoster(planId) {
+  let roster;
+  try { roster = await api('/api/plans/' + planId + '/roster'); }
+  catch (e) {
+    $('plan').insertAdjacentHTML('beforeend',
+      `<div class="section"><div class="lbl">Execution roster</div><div class="empty err">${esc(e.message)}</div></div>`);
+    return;
+  }
+  const showUnknown = (v) => v ? esc(String(v)) : '<span class="unknown">unknown</span>';
+  const showBlank = (v) => v ? esc(String(v)) : '<span class="unknown">—</span>';
+  const driftBadges = (drift) => {
+    const flags = [];
+    if (drift.role_tag_changed) flags.push('role tag drift');
+    if (drift.map_resolution_changed) flags.push('role-map re-resolved');
+    if (drift.context_changed) flags.push('context edited post-snapshot');
+    if (drift.execution_diverged) flags.push('actual ≠ planned');
+    return flags.map((f) => `<span class="drift" title="${esc(f)}">⚠ ${esc(f)}</span>`).join(' ');
+  };
+  const revHtml = (assignments) => assignments.map((a, i) => `
+    <div class="rev ${i === 0 ? 'initial' : 'reassigned'}">
+      <b>rev ${a.revision}</b> · ${esc(a.role || '—')} → ${esc(a.agent || 'orchestrator-decides')}${a.model ? ' · ' + esc(a.model) : ''}
+      <span style="color:var(--faint)">· ${esc(a.resolution_source)} · ${esc(a.created_at)}${a.assigned_by ? ' · by ' + esc(a.assigned_by) : ''}</span>
+      ${a.reason ? `<br><span style="color:var(--muted)">reason: ${esc(a.reason)}</span>` : (i === 0 ? '<br><span style="color:var(--faint)">initial snapshot</span>' : '')}
+    </div>`).join('');
+  const policyHtml = (policy) => {
+    if (!policy) return '';
+    const req = (policy.required_capabilities || [])
+      .map((c) => `${esc(c.capability)}(${Number(c.weight || 0)})`).join(', ');
+    const alts = (policy.alternatives || [])
+      .map((a) => `${esc(a.role)} (${Number(a.normalized_score || 0).toFixed(2)})`).join(', ');
+    const warns = (policy.warnings || []).map((w) => `<div class="rev reassigned">⚠ ${esc(w)}</div>`).join('');
+    const score = policy.selected_score?.normalized_score;
+    return `
+      <div class="rev initial" style="margin-top:6px">
+        <b>dispatch policy</b> · selected ${esc(policy.selected_role || 'orchestrator')}
+        <span style="color:var(--faint)">(${esc(policy.selection_mode || 'automatic')}, score ${Number(score || 0).toFixed(2)})</span>
+        ${req ? `<br><span style="color:var(--muted)">required capabilities: ${req}</span>` : ''}
+        ${policy.selected_score?.rationale ? `<br><span style="color:var(--muted)">rationale: ${esc(policy.selected_score.rationale)}</span>` : ''}
+        ${alts ? `<br><span style="color:var(--faint)">alternatives: ${alts}</span>` : ''}
+      </div>
+      ${warns}`;
+  };
+  const cards = roster.steps.map((row) => {
+    const planned = row.planned || row.live;
+    return `
+      <div class="rosterCard">
+        <div class="top">
+          <span class="rname">#${row.idx} · ${esc(row.title)}</span>
+          ${badge(row.status)}
+          ${driftBadges(row.drift)}
+          <span style="flex:1"></span>
+          <button style="font-size:11px;padding:2px 8px" onclick="openStep(${row.step_id})">open →</button>
+        </div>
+        <div class="rgrid">
+          <span class="k">role</span><span class="v">${showBlank(row.role)}</span>
+          <span class="k">agent</span><span class="v ${planned && planned.agent ? '' : 'unknown'}">${showUnknown(planned && planned.agent)}</span>
+          <span class="k">model</span><span class="v ${planned && planned.model ? '' : 'unknown'}">${showUnknown(planned && planned.model)}</span>
+          <span class="k">charter</span><span class="v ${planned && planned.charter ? '' : 'unknown'}">${showUnknown(planned && planned.charter)}</span>
+          <span class="k">source</span><span class="v">${showBlank(planned && planned.resolution_source)}</span>
+          ${row.actual ? `
+            <span class="k">actual</span><span class="v">${showUnknown(row.actual.agent)} · ${showUnknown(row.actual.model)} <span style="color:var(--faint)">(${esc(row.actual.model_source || 'unknown')}${row.actual.session_ref ? ', ' + esc(row.actual.session_ref) : ''})</span></span>
+          ` : `<span class="k">actual</span><span class="v unknown">not yet executed</span>`}
+        </div>
+        ${row.planned_context_preview ? `<div class="ctxPreview">${esc(row.planned_context_preview)}</div>` : ''}
+        ${policyHtml(row.dispatch_policy)}
+        ${row.assignments.length ? `<div style="margin-top:6px">${revHtml(row.assignments)}</div>` : ''}
+        <div class="ctl" style="margin-top:8px">
+          <button style="font-size:11px" onclick="openReassign(${row.step_id})">✎ Reassign</button>
+          <button style="font-size:11px" onclick="openRedo(${row.step_id})">↻ Redo</button>
+        </div>
+      </div>`;
+  }).join('');
+  const preambleNote = roster.snapshotted
+    ? `<div class="meta">Snapshotted at activation. Later edits (role/context) show up as drift and audited revisions.</div>`
+    : `<div class="meta">Plan is still <b>draft</b>. Activate the plan to freeze the initial assignment for every step. The values below are a live preview of what would be captured now.</div>`;
+  $('plan').insertAdjacentHTML('beforeend',
+    `<div class="section"><div class="lbl">Execution roster · planned vs actual</div>${preambleNote}<div class="roster" style="margin-top:8px">${cards || '<div class="empty">No steps yet.</div>'}</div></div>`);
+}
+
+// Reasoned reassignment prompt: append a new assignment revision with the reason
+// and (optionally) a new role tag. The server refuses without a reason.
+async function openReassign(stepId) {
+  const step = await api('/api/steps/' + stepId).catch(() => null);
+  const currentRole = step?.role ?? '';
+  const nextRole = prompt('Reassign step #' + stepId + '\nNew role (leave blank to keep current: "' + currentRole + '"):', currentRole);
+  if (nextRole === null) return; // cancelled
+  const reason = prompt('Why is this reassignment happening? (required — recorded in the audit trail)');
+  if (!reason || !reason.trim()) { toast('reassignment cancelled — reason required'); return; }
+  try {
+    await apiSend('PATCH', '/api/steps/' + stepId + '/assignment',
+      { role: nextRole.trim(), reason: reason.trim(), assigned_by: 'board-user' });
+    toast('reassignment recorded'); refresh();
+  } catch (e) { toast(e.message); }
+}
+// Explicit redo: back to pending + review note, preserves attempts and revisions.
+async function openRedo(stepId) {
+  const reason = prompt('Redo step #' + stepId + '\nWhy does this step need to be redone? (required)');
+  if (!reason || !reason.trim()) { toast('redo cancelled — reason required'); return; }
+  try {
+    await apiSend('POST', '/api/steps/' + stepId + '/redo',
+      { reason: reason.trim(), assigned_by: 'board-user' });
+    toast('step reset to pending'); refresh();
+  } catch (e) { toast(e.message); }
+}
+window.openReassign = openReassign; window.openRedo = openRedo;
+window.renderPlanRoster = renderPlanRoster;
 
 async function renderPlanGraph(id) {
   try {
@@ -389,12 +650,25 @@ async function openStep(id) {
   try {
     const s = await api('/api/steps/'+id);
     const sec = (lbl, html) => `<div class="section"><div class="lbl">${lbl}</div>${html}</div>`;
-    const attempts = s.attempts.length ? s.attempts.map(a => `
+    const attempts = s.attempts.length ? s.attempts.map(a => {
+      // Actual-execution provenance: show what we recorded, mark blanks as "unknown"
+      // rather than fabricating a model. role/executor come from the older path,
+      // agent/model/model_source/session_ref come from v5.
+      const provFields = [
+        ['role', a.role], ['executor', a.executor], ['agent', a.agent],
+        ['model', a.model], ['source', a.model_source], ['session', a.session_ref],
+      ].filter(([, v]) => v || v === 0);
+      const provHtml = provFields.length
+        ? `<div class="prov">${provFields.map(([k, v]) => `<span><span class="k">${k}:</span> ${v ? esc(String(v)) : '<span class="unknown">unknown</span>'}</span>`).join('')}${a.review_rounds ? `<span><span class="k">reviews:</span> ${a.review_rounds}</span>` : ''}</div>`
+        : '';
+      return `
         <div class="attempt v-${a.verdict}">
           <div class="what">${badge(a.verdict==='pass'?'done':a.verdict==='partial'?'blocked':'failed')} ${esc(a.what_tried)}</div>
           ${a.result?`<div class="res">${esc(a.result)}</div>`:''}
+          ${provHtml}
           <div class="ts">${esc(a.created_at)}</div>
-        </div>`).join('') : `<div class="body" style="color:var(--faint)">No attempts logged yet.</div>`;
+        </div>`;
+    }).join('') : `<div class="body" style="color:var(--faint)">No attempts logged yet.</div>`;
     $('step').innerHTML = `
       <div class="row" style="margin-bottom:8px">${badge(s.status)}<span class="meta">step #${s.id} · idx ${s.idx}</span></div>
       <div class="detail"><h3>${esc(s.title)}</h3></div>
@@ -408,6 +682,7 @@ async function openStep(id) {
     renderStepFiles(s);
     renderStepLessons(s.id);
     renderStepGround(s.id);
+    scheduleActivityPoll(0);
   } catch (e) { $('step').innerHTML = `<div class="empty err">${esc(e.message)}</div>`; }
 }
 
@@ -488,37 +763,328 @@ async function refresh() {
   await loadPlans();
   if (state.planId) await openPlan(state.planId);
   if (state.stepId) await openStep(state.stepId);
+  scheduleActivityPoll(0);
 }
 $('refresh').onclick = refresh;
 
-// ---- Live mode: watch activity, auto-focus the plan/step being worked ----
+// ---- Live mode + v7 live activity panel (single bounded loop, no races) ----
 let livePlans = new Set();
-let liveTimer = null, lastRev = null, lastActive = null;
-$('live').onchange = (e) => {
-  clearInterval(liveTimer); lastRev = null; lastActive = null;
-  document.querySelector('.livewrap .livedot').classList.toggle('off', !e.target.checked);
-  if (e.target.checked) { pollActivity(); liveTimer = setInterval(pollActivity, 1500); }
-  else { livePlans = new Set(); loadPlans(); }
+let liveMode = false;
+let liveRev = null;
+let liveActiveStep = null;
+let activityPollTimer = null;
+let activityPollInFlight = false;
+let activityPollToken = 0;
+let activitySnapshot = {
+  current: [],
+  recent: [],
+  rosterByStep: new Map(),
+  rosterByIndex: new Map(),
+  error: '',
+  last_ok_at: '',
+  scope_key: '',
 };
-async function pollActivity() {
-  let a; try { a = await api('/api/activity'); } catch { return; }
-  const act = a.active_steps[0] || null;
-  const actId = act ? act.step_id : null;
-  livePlans = new Set(a.active_steps.map((s) => s.plan_id));
-  if (a.rev === lastRev && actId === lastActive) return; // nothing new
-  const revChanged = a.rev !== lastRev;
-  lastRev = a.rev;
-  if (act && actId !== lastActive) {            // a new step is being worked → focus it
-    lastActive = actId; state.planId = act.plan_id;
-    await loadPlans(); await openPlan(act.plan_id); await openStep(act.step_id);
-    toast('▶ now working: ' + act.step_title);
-  } else {                                       // same focus, data changed → refresh in place
-    lastActive = actId;
-    await loadPlans();
-    if (revChanged && state.planId) await openPlan(state.planId);
-    if (revChanged && state.stepId) await openStep(state.stepId);
+function sanitizeTelemetryText(text) {
+  let out = String(text ?? '');
+  out = out.replace(/<thinking[\s\S]*?<\/thinking>/gi, '[redacted]');
+  out = out.replace(/chain[- ]of[- ]thought/gi, '[redacted]');
+  return out;
+}
+function fmtAge(ms) {
+  const n = Math.max(0, Number(ms) || 0);
+  if (n < 1000) return `${n} ms`;
+  const s = Math.floor(n / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  const rs = s % 60;
+  if (m < 60) return `${m}m ${rs}s`;
+  const h = Math.floor(m / 60);
+  return `${h}h ${m % 60}m`;
+}
+function durationMs(startIso, endIso) {
+  const start = Date.parse(startIso || '');
+  if (!Number.isFinite(start)) return 0;
+  const end = Number.isFinite(Date.parse(endIso || '')) ? Date.parse(endIso || '') : Date.now();
+  return Math.max(0, end - start);
+}
+function deriveUiStatus(run) {
+  if (!run) return 'stale';
+  const status = String(run.status || '');
+  const verify = String(run.verification_state || '');
+  const outcome = String(run.outcome || '');
+  if (run.stale && (status === 'queued' || status === 'in_progress' || status === 'blocked')) return 'stale';
+  if (status === 'blocked' || run.blocker) return 'blocked';
+  if (status === 'failed' || status === 'cancelled' || outcome === 'failed' || outcome === 'cancelled') return 'failed';
+  if (status === 'completed' && verify === 'passed' && outcome === 'success') return 'done';
+  if (verify === 'running' || (run.phase || '').toLowerCase().includes('verify')) return 'verifying';
+  return 'active';
+}
+function statusBadge(status) {
+  const map = {
+    active: ['active', 'b-in_progress'],
+    blocked: ['blocked', 'b-blocked'],
+    verifying: ['verifying', 'b-active'],
+    stale: ['stale', 'b-skipped'],
+    failed: ['failed', 'b-failed'],
+    done: ['done', 'b-done'],
+  };
+  const [label, cls] = map[status] || map.active;
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+function scopeQuery() {
+  const q = new URLSearchParams();
+  if (state.planId) q.set('plan_id', String(state.planId));
+  if (state.stepId) q.set('step_id', String(state.stepId));
+  q.set('stale_after_ms', String(ACTIVITY_STALE_MS));
+  return q;
+}
+function scheduleActivityPoll(delay = ACTIVITY_POLL_MS) {
+  if (activityPollTimer) clearTimeout(activityPollTimer);
+  const raw = Number(delay);
+  const numeric = Number.isFinite(raw) ? raw : ACTIVITY_POLL_MS;
+  const bounded = Math.max(0, Math.min(numeric, ACTIVITY_POLL_MS));
+  activityPollTimer = setTimeout(runActivityPoll, bounded);
+}
+function announceActivity(text) {
+  $('activityAnnounce').textContent = text;
+}
+// One card per live run. Plan-level scope can have several parallel steps
+// in progress at once (the parallel dispatch frontier), so the current-state
+// region renders every entry in activitySnapshot.current, not just the first.
+let lastAnnouncedKey = '';
+function buildActivityCard(run) {
+  const row = activitySnapshot.rosterByStep.get(run.step_id) || null;
+  const uiStatus = deriveUiStatus(run);
+  const elapsed = fmtAge(durationMs(run.started_at, run.ended_at));
+  const heartbeatAge = fmtAge(Date.now() - Date.parse(run.updated_at || ''));
+  const staleWarn = run.stale ? `⚠ stale for ${fmtAge(run.stale_for_ms)}` : 'fresh';
+  const progress = `${run.progress_completed || 0}/${run.progress_total || 0}`;
+  const artifacts = `${run.artifact_count || 0}`;
+  const files = `${run.file_count || 0}`;
+  // Prefer the dispatch policy actually recorded at dispatch time (activity
+  // metadata — carries the real override_reason provenance a human typed in);
+  // fall back to the roster's live re-resolution preview (override_reason is
+  // always blank there — nothing has been overridden yet).
+  const recordedPolicy = run.metadata && typeof run.metadata === 'object' ? run.metadata.dispatch_policy : null;
+  const policy = recordedPolicy || row?.dispatch_policy || null;
+  const policySource = recordedPolicy ? 'as dispatched' : 'live preview';
+  const reassigns = row?.assignments || [];
+  const runHistory = activitySnapshot.recent.filter((x) => x.step_id === run.step_id).map((x) => x.run_id);
+  const retries = new Set(runHistory).size;
+  const latestTerminal = (run.events || []).filter((e) => e.event_type === 'terminal').at(-1)
+    || activitySnapshot.recent.filter((x) => x.step_id === run.step_id).flatMap((x) => x.events || []).filter((e) => e.event_type === 'terminal').at(-1)
+    || null;
+  const policyAlts = (policy?.alternatives || []).map((a) => `${a.role} (${Number(a.normalized_score || 0).toFixed(2)})`).join(', ');
+  const policyWarns = (policy?.warnings || []).map((w) => `<div class="warn">⚠ ${esc(w)}</div>`).join('');
+  const reassignmentText = reassigns.length
+    ? reassigns.map((r) => `rev ${r.revision}: ${r.role || '—'} (${r.reason || 'initial'})`).join(' · ')
+    : 'none';
+  const stepLabel = row?.title ? `${esc(row.title)}${row?.idx ? ` (idx ${row.idx})` : ''}` : `step #${run.step_id}`;
+  // Lease-based operational context: executor identity, deadline countdown,
+  // stale threshold, terminal reason. `execution_lease` is null for legacy
+  // pre-v8 activity rows; we render "unknown" so the card never breaks.
+  const lease = run.execution_lease || null;
+  const leaseExecutor = lease ? `${esc(lease.executor || 'unknown')}${lease.child_pid ? ` (pid ${lease.child_pid})` : ''}` : '<span class="unknown">no lease</span>';
+  const leaseStatus = lease ? `${esc(lease.status)}${lease.outcome ? ` → ${esc(lease.outcome)}` : ''}` : 'unknown';
+  const deadlineText = lease && lease.deadline_at
+    ? (lease.deadline_in_ms != null
+        ? (lease.deadline_in_ms < 0
+            ? `⚠ ${fmtAge(-lease.deadline_in_ms)} past deadline (${esc(lease.deadline_at)})`
+            : `${fmtAge(lease.deadline_in_ms)} until deadline (${esc(lease.deadline_at)})`)
+        : esc(lease.deadline_at))
+    : 'no deadline set';
+  const staleText = lease && lease.stale_countdown_ms != null
+    ? (lease.stale_countdown_ms <= 0
+        ? `⚠ overdue by ${fmtAge(-lease.stale_countdown_ms + 0)}`
+        : `${fmtAge(lease.stale_countdown_ms)} until stale (threshold ${fmtAge(lease.stale_after_ms)})`)
+    : 'no stale threshold';
+  const closeText = lease && lease.close_reason ? esc(sanitizeTelemetryText(lease.close_reason)) : '';
+  // Distinct disposition state — the plan-done gate hinges on this so it must
+  // never be hidden inside "outcome". Colour-cue verified vs unresolved.
+  const disposition = run.step_disposition || '';
+  const dispositionClass = disposition === 'verified' ? 'b-done'
+    : disposition === 'blocked' ? 'b-blocked'
+    : disposition === 'deferred' ? 'b-active'
+    : disposition === 'not_applicable' ? 'b-skipped'
+    : disposition === 'legacy_unknown' ? 'b-skipped'
+    : 'b-in_progress';
+  const dispositionText = disposition
+    ? `<span class="badge ${dispositionClass}">${esc(disposition)}</span>${run.step_disposition_reason ? ` · <span class="meta">${esc(sanitizeTelemetryText(run.step_disposition_reason))}</span>` : ''}`
+    : `<span class="unknown">none</span> <span class="meta">(plan cannot complete until every closed step has a disposition)</span>`;
+  const healthState = String(run.health?.state || 'healthy');
+  const healthReasons = Array.isArray(run.health?.reasons) ? run.health.reasons : [];
+  const healthReasonText = healthReasons.map((r) => r.code || '').filter(Boolean).join(', ') || 'none';
+  return `<div class="actCard st-${uiStatus}">
+      <div class="top">${statusBadge(uiStatus)} ${boardHealthBadgesEnabled ? healthBadge(healthState) : ''} <span class="meta">run ${esc(run.run_id || '—')}${lease ? ` · lease #${lease.id}` : ''}</span>
+      <span style="flex:1"></span><a class="link" href="#" onclick="openPlan(${run.plan_id});return false;">open plan</a> <a class="link" href="#" onclick="openStep(${run.step_id});return false;">open step</a></div>
+      <div class="actGrid" style="margin-top:7px">
+        <span class="k">agent / role</span><span class="v">${esc(run.agent || 'unknown')} / ${esc(run.role || row?.role || 'unknown')}</span>
+        <span class="k">executor / lease</span><span class="v">${leaseExecutor} · ${leaseStatus}</span>
+        <span class="k">model</span><span class="v">requested ${esc(run.requested_model || 'unknown')} · actual ${esc(run.actual_model || 'unknown')} · ${esc(run.model_source || 'unknown')} · ${esc(run.session_ref || 'unknown')}</span>
+        <span class="k">step title / idx / phase</span><span class="v">${stepLabel} · ${esc(run.phase || 'unknown')}</span>
+        <span class="k">safe action / cmd</span><span class="v">${esc(sanitizeTelemetryText(run.action_summary || '—'))} · ${esc(sanitizeTelemetryText(run.command_summary || '—'))}</span>
+        <span class="k">elapsed / heartbeat</span><span class="v">${elapsed} · ${heartbeatAge} (${staleWarn})</span>
+        <span class="k">stale countdown</span><span class="v">${staleText}</span>
+        <span class="k">deadline</span><span class="v">${deadlineText}</span>
+        <span class="k">progress</span><span class="v">${progress}</span>
+        <span class="k">files / artifacts</span><span class="v">${files} files · ${artifacts} artifacts${run.recent_artifacts?.length ? ` · recent: ${esc(run.recent_artifacts.join(', '))}` : ''}</span>
+        <span class="k">blocker / verification</span><span class="v">${esc(sanitizeTelemetryText(run.blocker || 'none'))} · ${esc(run.verification_state || 'pending')}</span>
+        <span class="k">health state / reasons</span><span class="v">${esc(healthState)} · ${esc(healthReasonText)}</span>
+        <span class="k">verification disposition</span><span class="v">${dispositionText}</span>
+        <span class="k">dispatch rationale</span><span class="v">${esc(policy?.selected_score?.rationale || 'n/a')} <span class="meta">(${esc(policySource)})</span></span>
+        <span class="k">dispatch warnings</span><span class="v">${policyWarns || '<span class="unknown">none</span>'}</span>
+        <span class="k">alternatives / override</span><span class="v">${esc(policyAlts || 'none')} · ${esc(policy?.override_reason || 'none')}</span>
+        <span class="k">reassignment / retries</span><span class="v">${esc(reassignmentText)} · retries ${retries}</span>
+        <span class="k">terminal outcome</span><span class="v">${esc(run.outcome || 'pending')} ${run.ended_at ? `(${esc(run.ended_at)})` : ''}${closeText ? ` · reason: ${closeText}` : ''}${latestTerminal ? ` · ${esc(sanitizeTelemetryText(latestTerminal.summary || ''))}` : ''}</span>
+      </div>
+    </div>`;
+}
+function renderActivityPanel() {
+  const scope = state.stepId
+    ? `plan #${state.planId ?? '—'} · step #${state.stepId}`
+    : state.planId
+      ? `plan #${state.planId}`
+      : `project #${state.projectId ?? '—'}`;
+  const conn = activitySnapshot.error
+    ? `<span id="activityConn" class="activityConn err" role="status" aria-live="polite">reconnect: ${esc(activitySnapshot.error)} (showing last data)</span>`
+    : `<span id="activityConn" class="activityConn" role="status" aria-live="polite">connected${activitySnapshot.last_ok_at ? ` · ${esc(activitySnapshot.last_ok_at)}` : ''}</span>`;
+  const head = `<div class="activityHead"><div class="lbl">Live activity · ${esc(scope)}</div>${conn}<span class="kbdLinks"><a href="#planHeading">Plan overview</a><a href="#stepHeading">Step detail</a></span></div>`;
+  // Plan-level current-state region: every active/queued/blocked run in scope,
+  // not just one — a plan can have several parallel steps in flight at once.
+  // Falls back to the single most recent terminal run so the panel is never
+  // blank right after a run finishes.
+  const activeRuns = activitySnapshot.current.length
+    ? activitySnapshot.current
+    : (activitySnapshot.recent[0] ? [activitySnapshot.recent[0]] : []);
+  if (!state.planId && !activeRuns.length) {
+    $('activity').innerHTML = `${head}<div class="empty">Select a plan to scope live activity.</div>`;
+    return;
+  }
+  const cur = activeRuns.length
+    ? `<ul class="liveCards" role="list" aria-label="Current activity">${activeRuns.map((r) => `<li>${buildActivityCard(r)}</li>`).join('')}</ul>`
+    : `<div class="empty">No activity yet for this scope.</div>`;
+  const timeline = activitySnapshot.recent.flatMap((r) => {
+    const status = deriveUiStatus(r);
+    const base = [{
+      created_at: r.updated_at,
+      label: `${r.status} · ${r.phase || 'phase?'}`,
+      summary: sanitizeTelemetryText(r.action_summary || r.command_summary || 'heartbeat'),
+      command_summary: sanitizeTelemetryText(r.command_summary || ''),
+      run_id: r.run_id,
+      status,
+    }];
+    const evs = (r.events || []).map((e) => ({
+      created_at: e.created_at,
+      label: `${e.event_type} · ${e.phase || 'phase?'}`,
+      summary: sanitizeTelemetryText(e.summary || ''),
+      command_summary: sanitizeTelemetryText(e.command_summary || ''),
+      run_id: r.run_id,
+      status,
+    }));
+    return [...base, ...evs];
+  }).sort((a, b) => Date.parse(b.created_at || 0) - Date.parse(a.created_at || 0)).slice(0, 10);
+  const timelineHtml = timeline.length
+    ? `<ol class="timeline" role="list" aria-label="Recent activity timeline">${timeline.map((t) => `<li class="actLine st-${t.status}">
+        <div class="top">${statusBadge(t.status)} <span class="meta">${esc(t.created_at || '')} · run ${esc(t.run_id || '')} · ${esc(t.label)}</span></div>
+        <div class="sum">${esc(t.summary || '—')}${t.command_summary ? `\ncmd: ${esc(t.command_summary)}` : ''}</div>
+      </li>`).join('')}</ol>`
+    : '<div class="empty">No recent timeline events.</div>';
+  const healthLegend = boardHealthBadgesEnabled
+    ? `<div class="meta" style="margin:6px 0 10px">Health legend: healthy | awaiting_artifact | needs_manual_verification | stale_lease</div>`
+    : '';
+  $('activity').innerHTML = `${head}${healthLegend}${cur}<div class="section"><div class="lbl">Recent timeline</div>${timelineHtml}</div>
+    <div class="activityPrivacy">Live Activity shows operational telemetry only — status, safe action/command summaries, progress, files, and dispatch decisions. It never shows the agent's private reasoning or chain-of-thought.</div>`;
+  // Announce material status changes to screen readers without spamming on
+  // every 5s poll tick (only when the primary run's step or status changes).
+  const primary = activeRuns[0] || null;
+  if (primary) {
+    const key = `${primary.step_id}|${deriveUiStatus(primary)}`;
+    if (key !== lastAnnouncedKey) {
+      lastAnnouncedKey = key;
+      const row = activitySnapshot.rosterByStep.get(primary.step_id) || null;
+      announceActivity(`${row?.title ? row.title : 'Step ' + primary.step_id} activity status: ${deriveUiStatus(primary)}.`);
+    }
   }
 }
+async function runActivityPoll() {
+  if (activityPollInFlight) return scheduleActivityPoll(ACTIVITY_POLL_MS);
+  activityPollInFlight = true;
+  const token = ++activityPollToken;
+  try {
+    const q = scopeQuery();
+    q.set('include_events', 'true');
+    q.set('events_limit', '10');
+    q.set('limit', '12');
+    const currentPath = '/api/activity/current?' + q.toString();
+    const recentPath = '/api/activity/recent?' + q.toString();
+    const rosterPath = state.planId ? `/api/plans/${state.planId}/roster` : null;
+    const livePath = liveMode ? '/api/activity' : null;
+    const [current, recent, roster, liveSnapshot] = await Promise.all([
+      api(currentPath),
+      api(recentPath),
+      rosterPath ? api(rosterPath) : Promise.resolve(null),
+      livePath ? api(livePath) : Promise.resolve(null),
+    ]);
+    if (token !== activityPollToken) return;
+    activitySnapshot.current = Array.isArray(current) ? current : [];
+    activitySnapshot.recent = Array.isArray(recent) ? recent : [];
+    activitySnapshot.error = '';
+    activitySnapshot.last_ok_at = new Date().toISOString();
+    activitySnapshot.scope_key = `${state.projectId || ''}|${state.planId || ''}|${state.stepId || ''}`;
+    activitySnapshot.rosterByStep = new Map();
+    activitySnapshot.rosterByIndex = new Map();
+    for (const row of (roster?.steps || [])) {
+      activitySnapshot.rosterByStep.set(row.step_id, row);
+      activitySnapshot.rosterByIndex.set(row.idx, row);
+    }
+    renderActivityPanel();
+    if (liveSnapshot) {
+      const active = liveSnapshot.active_steps?.[0] || null;
+      const activeId = active ? active.step_id : null;
+      livePlans = new Set((liveSnapshot.active_steps || []).map((s) => s.plan_id));
+      const revChanged = liveSnapshot.rev !== liveRev;
+      if (active && activeId !== liveActiveStep) {
+        liveActiveStep = activeId;
+        liveRev = liveSnapshot.rev;
+        state.planId = active.plan_id;
+        await loadPlans(); await openPlan(active.plan_id); await openStep(active.step_id);
+        toast('▶ now working: ' + active.step_title);
+        announceActivity(`Now working step ${active.step_id}: ${active.step_title}`);
+      } else {
+        liveActiveStep = activeId;
+        liveRev = liveSnapshot.rev;
+        await loadPlans();
+        if (revChanged && state.planId) await openPlan(state.planId);
+        if (revChanged && state.stepId) await openStep(state.stepId);
+      }
+    } else if (!liveMode && livePlans.size) {
+      livePlans = new Set();
+      await loadPlans();
+    }
+  } catch (e) {
+    if (token === activityPollToken) {
+      activitySnapshot.error = e.message || 'fetch failed';
+      renderActivityPanel();
+    }
+  } finally {
+    if (token === activityPollToken) activityPollInFlight = false;
+    scheduleActivityPoll(ACTIVITY_POLL_MS);
+  }
+}
+$('live').onchange = (e) => {
+  liveMode = !!e.target.checked;
+  document.querySelector('.livewrap .livedot').classList.toggle('off', !liveMode);
+  if (!liveMode) { liveRev = null; liveActiveStep = null; livePlans = new Set(); }
+  scheduleActivityPoll(0);
+};
+// Stale threshold control lives in the static header (never wiped by the
+// activity panel's innerHTML re-renders), so mid-edit values survive polling.
+$('staleThresholdInput').value = Math.round(ACTIVITY_STALE_MS / 1000);
+$('staleThresholdInput').onchange = (e) => {
+  ACTIVITY_STALE_MS = saveStaleMs(Number(e.target.value) * 1000);
+  e.target.value = Math.round(ACTIVITY_STALE_MS / 1000);
+  scheduleActivityPoll(0);
+};
 
 // ---- clipboard + toast ----
 function toast(msg) {
@@ -619,26 +1185,46 @@ function renderPlanControls(p) {
       <textarea class="f" id="asContext" placeholder="context — self-contained"></textarea>
       <input class="f" id="asAccept" placeholder="acceptance criteria" />
       <input class="f" id="asTools" placeholder="tools (comma-separated)" />
+      <input class="f" id="asRole" placeholder="role — the specialist that should execute this step (e.g. implementer, debugger)" />
+      <div class="meta" style="margin-top:-2px">agent/model/charter resolve from the role map; leave role blank for orchestrator-decides.</div>
       <button class="primary" onclick="addStep(${p.id})">Add step</button>
     </div></div>`);
 }
 async function addStep(planId) {
   const title = $('asTitle').value.trim(); if (!title) { toast('title required'); return; }
   try {
-    await apiSend('POST', `/api/plans/${planId}/steps`, { title, context: $('asContext').value, acceptance_criteria: $('asAccept').value, tools: $('asTools').value.split(',').map(t => t.trim()).filter(Boolean) });
+    await apiSend('POST', `/api/plans/${planId}/steps`, {
+      title,
+      context: $('asContext').value,
+      acceptance_criteria: $('asAccept').value,
+      tools: $('asTools').value.split(',').map(t => t.trim()).filter(Boolean),
+      role: $('asRole').value.trim(),
+    });
     toast('step added'); refresh();
   } catch (e) { toast(e.message); }
 }
 window.addStep = addStep;
 
 function renderStepControls(s) {
+  // hasSnapshot signals whether a role change requires an audit reason. A step
+  // with any prior assignment revision (initial snapshot, past reassignment)
+  // has a locked history — the store enforces "reason required" server-side.
+  const hasSnapshot = Array.isArray(s.assignments) && s.assignments.length > 0;
   $('step').insertAdjacentHTML('beforeend', `<div class="section"><div class="lbl">Step actions</div>
-    <div class="ctl">Status: ${statusSelect('step', s.id, s.status)} <button onclick="toggleForm('editStepForm')">✎ Edit</button> <button onclick="toggleForm('logForm')">＋ Log attempt</button></div>
+    <div class="ctl">Status: ${statusSelect('step', s.id, s.status)}
+      <button onclick="toggleForm('editStepForm')">✎ Edit</button>
+      <button onclick="toggleForm('logForm')">＋ Log attempt</button>
+      <button onclick="openReassign(${s.id})" title="append an audited reassignment revision">⇄ Reassign</button>
+      <button onclick="openRedo(${s.id})" title="send this step back to pending with a reason (preserves attempts)">↻ Redo</button>
+    </div>
     <div id="editStepForm" class="miniform hidden">
       <input class="f" id="esTitle" value="${esc(s.title)}" />
       <textarea class="f" id="esContext" placeholder="context">${esc(s.context)}</textarea>
       <input class="f" id="esAccept" value="${esc(s.acceptance_criteria)}" placeholder="acceptance" />
       <input class="f" id="esTools" value="${esc((s.tools || []).join(', '))}" placeholder="tools" />
+      <input class="f" id="esRole" value="${esc(s.role || '')}" placeholder="role (e.g. implementer)" />
+      <input class="f" id="esReason" placeholder="reason for role change (required when history exists)" />
+      ${hasSnapshot ? `<div class="meta" style="margin-top:-2px">This step has an assignment history — a role change here appends a new audited revision.</div>` : ''}
       <textarea class="f" id="esCarry" placeholder="carry-forward">${esc(s.carry_forward)}</textarea>
       <button class="primary" onclick="saveStep(${s.id})">Save</button>
     </div>
@@ -647,17 +1233,43 @@ function renderStepControls(s) {
       <input class="f" id="laResult" placeholder="result / output" />
       <div class="row2"><select class="f" id="laVerdict" style="max-width:130px"><option value="pass">pass</option><option value="fail">fail</option><option value="partial">partial</option></select>
       <button class="primary" onclick="logAttempt(${s.id})" style="white-space:nowrap">Record</button></div>
+      <div class="row2"><input class="f" id="laAgent" placeholder="agent that actually ran (e.g. general-purpose)" />
+      <input class="f" id="laModel" placeholder="model (e.g. claude-sonnet-4-5) — leave blank if unknown" /></div>
+      <div class="row2"><select class="f" id="laSource" style="max-width:170px" title="provenance of the model field">
+        <option value="">(source unknown)</option>
+        <option value="role-map">role-map</option>
+        <option value="runner-cli">runner-cli</option>
+        <option value="telemetry">telemetry</option>
+        <option value="self-report">self-report</option>
+        <option value="user">user</option>
+      </select>
+      <input class="f" id="laSession" placeholder="session/transcript link (optional)" /></div>
     </div></div>`);
 }
 async function saveStep(id) {
-  try {
-    await apiSend('PATCH', `/api/steps/${id}`, { title: $('esTitle').value, context: $('esContext').value, acceptance_criteria: $('esAccept').value, tools: $('esTools').value.split(',').map(t => t.trim()).filter(Boolean), carry_forward: $('esCarry').value });
-    toast('step saved'); refresh();
-  } catch (e) { toast(e.message); }
+  const payload = {
+    title: $('esTitle').value,
+    context: $('esContext').value,
+    acceptance_criteria: $('esAccept').value,
+    tools: $('esTools').value.split(',').map(t => t.trim()).filter(Boolean),
+    role: $('esRole').value,
+    carry_forward: $('esCarry').value,
+  };
+  const reason = $('esReason').value.trim();
+  if (reason) { payload.reason = reason; payload.assigned_by = 'board-user'; }
+  try { await apiSend('PATCH', `/api/steps/${id}`, payload); toast('step saved'); refresh(); }
+  catch (e) { toast(e.message); }
 }
 async function logAttempt(id) {
   const what_tried = $('laTried').value.trim(); if (!what_tried) { toast('what_tried required'); return; }
-  try { await apiSend('POST', `/api/steps/${id}/attempts`, { what_tried, result: $('laResult').value, verdict: $('laVerdict').value }); toast('attempt recorded'); refresh(); }
+  const payload = { what_tried, result: $('laResult').value, verdict: $('laVerdict').value };
+  const agent = $('laAgent').value.trim(); const model = $('laModel').value.trim();
+  const source = $('laSource').value.trim(); const session = $('laSession').value.trim();
+  if (agent) payload.agent = agent;
+  if (model) payload.model = model;
+  if (source) payload.model_source = source;
+  if (session) payload.session_ref = session;
+  try { await apiSend('POST', `/api/steps/${id}/attempts`, payload); toast('attempt recorded'); refresh(); }
   catch (e) { toast(e.message); }
 }
 window.saveStep = saveStep; window.logAttempt = logAttempt;
@@ -709,19 +1321,113 @@ searchEl.onkeydown = (e) => {
 };
 document.addEventListener('click', (e) => { if (!e.target.closest('.searchwrap')) resultsEl.classList.remove('show'); });
 
+// ---- project staff (role → model, shared by every plan) ----
+const staffOverlay = $('staffOverlay');
+let staffRows = [], staffModels = [];
+function staffModelOptions(selected = '') {
+  const models = selected && !staffModels.includes(selected) ? [selected, ...staffModels] : staffModels;
+  return `<option value="" ${selected ? '' : 'selected'}>(client default)</option>` +
+    models.map((model) => `<option value="${esc(model)}" ${model === selected ? 'selected' : ''}>${esc(model)}</option>`).join('');
+}
+function renderStaff(data) {
+  staffRows = data.roles || [];
+  staffModels = data.models || [];
+  $('staffError').innerHTML = '';
+  $('staffModelsSource').textContent = `Models: ${data.models_source === 'cursor-account' ? 'live from this Cursor account' : data.models_source === 'environment' ? 'configured environment catalog' : 'bundled Cursor catalog (install the agent CLI for live account discovery)'}.`;
+  $('newStaffModel').innerHTML = staffModelOptions('');
+  $('staffList').innerHTML = staffRows.length ? staffRows.map((row, i) => `
+    <div class="staffrow">
+      <div><div class="staffrole">${esc(row.role)}</div><div class="staffsource">${row.configured ? 'project assignment' : `inherited · ${esc(row.source)}`}${row.recommended_model ? ` · recommended: ${esc(row.recommended_model)}` : ''}</div></div>
+      <select class="f" id="staffModel${i}" aria-label="Model for ${esc(row.role)}">${staffModelOptions(row.model)}</select>
+      <div class="staffactions">
+        <button class="primary" onclick="saveStaff(${i})">Save</button>
+        ${row.configured ? `<button onclick="resetStaff(${i})" title="remove this project assignment">Reset</button>` : ''}
+      </div>
+      <details class="staffcontext">
+        <summary>Global rules &amp; context${row.global_charter ? ` · ${esc(row.global_charter)}` : ''}</summary>
+        <div class="body">${esc(row.global_context || 'No persistent context defined for this custom role.')}${row.charter_context ? `\n\nGlobal charter (${esc(row.global_charter)}):\n${esc(row.charter_context)}` : ''}</div>
+      </details>
+    </div>`).join('') : '<div class="empty">No staff defined for this project.</div>';
+}
+function staffFailure(action, error) {
+  console.error(`[Staff:${action}] ${error.message || error}`);
+  $('staffError').innerHTML = `<div class="stafferror">Staff ${esc(action)} failed: ${esc(error.message || error)} <button onclick="loadStaff()">Retry</button></div>`;
+  toast(`Staff ${action} failed`);
+}
+async function loadStaff() {
+  if (!state.projectId) return staffFailure('load', new Error('no current project'));
+  try {
+    const data = await api(`/api/projects/${state.projectId}/staff`);
+    console.log(`[Staff:load] project=${state.projectId} roles=${data.roles.length}`);
+    renderStaff(data);
+  } catch (e) { staffFailure('load', e); }
+}
+async function saveStaff(i) {
+  const row = staffRows[i];
+  if (!row) return;
+  try {
+    const data = await apiSend('PATCH', `/api/projects/${state.projectId}/staff`, {
+      role: row.role, model: $(`staffModel${i}`).value.trim(),
+    });
+    renderStaff(data);
+    if (state.planId) renderPlanRoster(state.planId);
+    toast(`${row.role} assigned`);
+  } catch (e) { staffFailure('save', e); }
+}
+async function resetStaff(i) {
+  const row = staffRows[i];
+  if (!row) return;
+  try {
+    const data = await apiSend('PATCH', `/api/projects/${state.projectId}/staff`, { role: row.role, remove: true });
+    renderStaff(data);
+    if (state.planId) renderPlanRoster(state.planId);
+    toast(`${row.role} reset`);
+  } catch (e) { staffFailure('reset', e); }
+}
+window.loadStaff = loadStaff; window.saveStaff = saveStaff; window.resetStaff = resetStaff;
+$('staffBtn').onclick = () => { staffOverlay.classList.add('show'); loadStaff(); };
+$('closeStaff').onclick = () => staffOverlay.classList.remove('show');
+staffOverlay.onclick = (e) => { if (e.target === staffOverlay) staffOverlay.classList.remove('show'); };
+$('staffDefaults').onclick = async () => {
+  try {
+    const data = await apiSend('POST', `/api/projects/${state.projectId}/staff/defaults`, {});
+    renderStaff(data);
+    if (state.planId) renderPlanRoster(state.planId);
+    toast('Recommended staff models applied');
+  } catch (e) { staffFailure('defaults', e); }
+};
+$('addStaff').onclick = async () => {
+  const role = $('newStaffRole').value.trim();
+  const model = $('newStaffModel').value.trim();
+  if (!role) { toast('role required'); return; }
+  try {
+    const data = await apiSend('PATCH', `/api/projects/${state.projectId}/staff`, { role, model });
+    $('newStaffRole').value = ''; $('newStaffModel').value = '';
+    renderStaff(data);
+    toast(`${role} added`);
+  } catch (e) { staffFailure('add', e); }
+};
+
 // ---- projects (top-level switcher) ----
 async function loadProjects() {
   try {
     const projs = await api('/api/projects');
+    state.projectId = projs.find((p) => p.current)?.id ?? null;
     $('projectSel').innerHTML = projs.map((p) => `<option value="${p.id}" ${p.current ? 'selected' : ''}>${esc(p.name)} · ${p.plans} plan${p.plans === 1 ? '' : 's'}</option>`).join('')
       + '<option value="__new">+ New project…</option>';
-  } catch (e) { /* leave empty */ }
+  } catch (e) {
+    console.error(`[Projects:load] ${e.message || e}`);
+    toast('Project list failed to load');
+  }
+  renderActivityPanel();
 }
 async function switchTo(planNull) {
   state.planId = null; state.stepId = null;
+  staffOverlay.classList.remove('show');
   await loadProjects(); await loadPlans();
   $('plan').innerHTML = '<div class="empty">Select a plan</div>';
   $('step').innerHTML = '<div class="empty">Select a step</div>';
+  scheduleActivityPoll(0);
 }
 $('projectSel').onchange = async (e) => {
   const v = e.target.value;
@@ -730,6 +1436,7 @@ $('projectSel').onchange = async (e) => {
     await loadProjects(); // reset selection
     if (name && name.trim()) {
       const p = await apiSend('POST', '/api/projects', { name: name.trim() });
+      await apiSend('POST', `/api/projects/${p.id}/staff/defaults`, {});
       await apiSend('PATCH', '/api/projects/current', { project_id: p.id });
       await switchTo(); toast('created + switched to ' + name.trim());
     }
@@ -744,8 +1451,94 @@ $('copySetupBtn').onclick = async () => {
   catch (e) { toast(e.message); }
 };
 
-loadProjects();
-loadPlans();
+async function applyInitialDeepLink() {
+  const requestedProjectId = queryId('project_id');
+  let requestedPlanId = queryId('plan_id');
+  let requestedStepId = queryId('step_id');
+
+  if (requestedStepId != null) {
+    try {
+      const step = await api('/api/steps/' + requestedStepId);
+      if (requestedPlanId == null) requestedPlanId = step.plan_id;
+      if (requestedPlanId !== step.plan_id) requestedStepId = null; // reject mismatched step link
+    } catch { requestedStepId = null; } // ignore invalid step id
+  }
+
+  let plan = null;
+  if (requestedPlanId != null) {
+    try { plan = await api('/api/plans/' + requestedPlanId); }
+    catch { requestedPlanId = null; requestedStepId = null; } // ignore invalid plan id
+  }
+
+  const validProjectIds = new Set([...$('projectSel').options]
+    .map((o) => Number(o.value))
+    .filter((n) => Number.isInteger(n) && n > 0));
+
+  let targetProjectId = requestedProjectId;
+  if (plan && Number.isInteger(plan.project_id) && plan.project_id > 0) targetProjectId = plan.project_id;
+  if (targetProjectId != null && !validProjectIds.has(targetProjectId)) targetProjectId = null;
+
+  if (targetProjectId != null && targetProjectId !== state.projectId) {
+    await apiSend('PATCH', '/api/projects/current', { project_id: targetProjectId });
+    await loadProjects();
+  }
+
+  await loadPlans();
+  if (requestedPlanId != null) {
+    await openPlan(requestedPlanId);
+    if (requestedStepId != null) await openStep(requestedStepId);
+  }
+}
+
+async function initializeBoard() {
+  try {
+    const meta = await api('/api/meta');
+    boardHealthBadgesEnabled = String(meta?.board_health_badges || 'off') === 'on';
+  } catch {}
+  await loadProjects();
+  await applyInitialDeepLink();
+  renderActivityPanel();
+  scheduleActivityPoll(0);
+}
+
+// Deterministic test hook: exposes the real internal functions/state so
+// test/live-activity-ui.mjs can drive the actual Live Activity code (not a
+// reimplementation) inside a DOM shim, without affecting production load.
+if (typeof window !== 'undefined' && window.__PLAN_LEDGER_TEST__) {
+  window.__liveActivityTestHooks = {
+    ACTIVITY_POLL_MS,
+    ACTIVITY_STALE_DEFAULT_MS,
+    loadStaleMs,
+    saveStaleMs,
+    sanitizeTelemetryText,
+    fmtAge,
+    durationMs,
+    deriveUiStatus,
+    statusBadge,
+    buildActivityCard,
+    renderActivityPanel,
+    scheduleActivityPoll,
+    runActivityPoll,
+    scopeQuery,
+    initializeBoard,
+    getState: () => state,
+    setState: (patch) => Object.assign(state, patch),
+    getActivitySnapshot: () => activitySnapshot,
+    setActivitySnapshot: (patch) => Object.assign(activitySnapshot, patch),
+    getStaleMs: () => ACTIVITY_STALE_MS,
+    setStaleMs: (ms) => { ACTIVITY_STALE_MS = saveStaleMs(ms); },
+    getBoardHealthBadgesEnabled: () => boardHealthBadgesEnabled,
+    setBoardHealthBadgesEnabled: (value) => { boardHealthBadgesEnabled = !!value; },
+    getActivityPollTimer: () => activityPollTimer,
+    getActivityPollInFlight: () => activityPollInFlight,
+    getLastAnnouncedKey: () => lastAnnouncedKey,
+  };
+} else {
+  initializeBoard().catch((e) => {
+    console.error(`[Init] ${e.message || e}`);
+    toast('Initial load failed');
+  });
+}
 </script>
 </body>
 </html>

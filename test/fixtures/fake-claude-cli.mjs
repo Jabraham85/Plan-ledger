@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // fake-claude-cli.mjs — stub for CLAUDE_BIN in test/runner-unit.mjs's stubbed
 // end-to-end proof. Mimics `claude -p ... --output-format json`'s stdout shape
-// (see scripts/runner.mjs spawnClaude) but ALWAYS claims VERDICT: pass,
+// (see scripts/runner.mjs spawnClaude) but ALWAYS claims completion verdict pass,
 // regardless of the prompt it was given — the point is to prove the runner's
 // VERIFY gate catches a claimed pass that doesn't hold up, not to simulate a
 // real agent. Reached via runner.mjs's resolveClaude() testability hook:
@@ -11,7 +11,7 @@
 const args = process.argv.slice(2);
 process.stdout.write(JSON.stringify({
   is_error: false,
-  result: 'did the step (stub agent)\nVERDICT: pass — stub always claims pass',
+  result: 'did the step (stub agent)\nCOMPLETION_JSON: {"contract_version":1,"verdict":"pass","summary":"stub always claims pass","outputs":["stub output"],"artifacts":[],"commands":[{"command":"stub noop","exit_code":0}],"unresolved_gaps":[],"session_id":"stub-session-1"}',
   total_cost_usd: 0.0123,
   num_turns: 2,
   usage: { input_tokens: 111, output_tokens: 22, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },

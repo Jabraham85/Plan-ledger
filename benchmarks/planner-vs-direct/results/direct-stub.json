@@ -1,0 +1,123 @@
+{
+  "overallScore": 86.68,
+  "feasibilityPoints": 44.9,
+  "qualityPoints": 41.78,
+  "feasibilityFraction": 0.898,
+  "qualityFraction": 0.8356,
+  "mathematicalCeiling": {
+    "maxOverallScore": 98.43,
+    "maxQualityFraction": 0.9686,
+    "note": "Proven safe upper bound (possibly not tight): quality uses the theoretical lower bound, and the calibration case has a proven integrality gap (LB=2, optimum=3). An optimum solver may score below this bound."
+  },
+  "failureDecomposition": {
+    "totalInvalid": 5,
+    "timeout": 5,
+    "threw": 0,
+    "validation": 0,
+    "nondeterministic": 0,
+    "inputMutated": 0,
+    "worker": 0,
+    "otherInvalid": 0
+  },
+  "groupBreakdown": {
+    "chains": {
+      "cases": 12,
+      "feasible": 12,
+      "avgQualityAllCases": 1,
+      "avgQualityFeasibleCases": 1
+    },
+    "forks": {
+      "cases": 12,
+      "feasible": 12,
+      "avgQualityAllCases": 0.9495,
+      "avgQualityFeasibleCases": 0.9495
+    },
+    "packing": {
+      "cases": 12,
+      "feasible": 8,
+      "avgQualityAllCases": 0.6591,
+      "avgQualityFeasibleCases": 0.9886
+    },
+    "mixed-dag": {
+      "cases": 8,
+      "feasible": 7,
+      "avgQualityAllCases": 0.7908,
+      "avgQualityFeasibleCases": 0.9038
+    },
+    "adversarial": {
+      "cases": 4,
+      "feasible": 4,
+      "avgQualityAllCases": 0.8304,
+      "avgQualityFeasibleCases": 0.8304
+    },
+    "calibration": {
+      "cases": 1,
+      "feasible": 1,
+      "avgQualityAllCases": 0.6667,
+      "avgQualityFeasibleCases": 0.6667
+    }
+  },
+  "invalidCases": [
+    {
+      "id": "packing-02",
+      "group": "packing",
+      "failureKind": "timeout",
+      "timedOut": true,
+      "errors": [
+        "combined solve budget exceeded 400ms (worker terminated)"
+      ]
+    },
+    {
+      "id": "packing-04",
+      "group": "packing",
+      "failureKind": "timeout",
+      "timedOut": true,
+      "errors": [
+        "combined solve budget exceeded 400ms (worker terminated)"
+      ]
+    },
+    {
+      "id": "packing-05",
+      "group": "packing",
+      "failureKind": "timeout",
+      "timedOut": true,
+      "errors": [
+        "combined solve budget exceeded 400ms (worker terminated)"
+      ]
+    },
+    {
+      "id": "packing-08",
+      "group": "packing",
+      "failureKind": "timeout",
+      "timedOut": true,
+      "errors": [
+        "combined solve budget exceeded 400ms (worker terminated)"
+      ]
+    },
+    {
+      "id": "mixed-dag-02",
+      "group": "mixed-dag",
+      "failureKind": "timeout",
+      "timedOut": true,
+      "errors": [
+        "combined solve calls took 409.2ms > 400ms"
+      ]
+    }
+  ],
+  "runtime": {
+    "totalMs": 4519.43,
+    "averageMs": 59.792,
+    "p95Ms": 400,
+    "perCaseBudgetMs": 400
+  },
+  "metadata": {
+    "benchmark": "planner-vs-direct",
+    "seed": 1347174734,
+    "caseCount": 49,
+    "gradedAt": "2026-07-16T16:27:31.534Z",
+    "node": "v22.20.0",
+    "root": "C:\\Users\\Jose.Abraham\\Projects\\Plan-ledger\\benchmarks\\planner-vs-direct\\arms\\direct",
+    "nRunsPerArm": 1,
+    "nRunsNote": "Single run per arm (n=1); outcomes are indicative, not statistically conclusive."
+  }
+}

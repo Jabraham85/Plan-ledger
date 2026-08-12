@@ -1,0 +1,341 @@
+{
+  "audit_schema_version": 1,
+  "generated_at": "2026-08-12T02:20:30.000Z",
+  "role": "test-engineer",
+  "plan_scope": {
+    "from_plan_id": 1,
+    "to_plan_id": 16,
+    "excluded_current_plan_id": 17
+  },
+  "sources": [
+    "C:/Users/Jose.Abraham/Projects/Plan-ledger/docs/audits/plan-ledger-cross-plan-census.json",
+    "C:/Users/Jose.Abraham/Projects/Plan-ledger/docs/audits/plan-ledger-cross-plan-census.md"
+  ],
+  "classifications": [
+    {
+      "plan_id": 1,
+      "title": "Cursor integration smoke test",
+      "ledger_status": "done",
+      "classification": "claim-not-supported",
+      "summary": "Ledger attempts claim smoke-test success but include no concrete file refs, commit IDs, test outputs, or external identifiers.",
+      "artifacts": [],
+      "checks": [
+        {
+          "command": "ReadFile docs/audits/plan-ledger-cross-plan-census.md (Plan #1 step evidence table)",
+          "exit_code": 0,
+          "output": "| #3 (1) | done | legacy_unknown | 1 / pass | 0 | 0 | 0 | 0 |\\n| #1 (2) | done | legacy_unknown | 1 / pass | 0 | 0 | 0 | 0 |\\n| #2 (3) | done | legacy_unknown | 1 / pass | 0 | 0 | 0 | 0 |"
+        }
+      ]
+    },
+    {
+      "plan_id": 2,
+      "title": "Solve scheduling benchmark with visible specialist chats",
+      "ledger_status": "active",
+      "classification": "partially-implemented",
+      "summary": "All four steps remain pending with no attempts.",
+      "artifacts": [],
+      "checks": [
+        {
+          "command": "ReadFile docs/audits/plan-ledger-cross-plan-census.md (Plan #2 step evidence table)",
+          "exit_code": 0,
+          "output": "| #4 (1) | pending | unknown | 0 / unknown | 0 | 0 | 0 | 0 |\\n| #5 (2) | pending | unknown | 0 / unknown | 0 | 0 | 0 | 0 |\\n| #6 (3) | pending | unknown | 0 / unknown | 0 | 0 | 0 | 0 |\\n| #7 (4) | pending | unknown | 0 / unknown | 0 | 0 | 0 | 0 |"
+        }
+      ]
+    },
+    {
+      "plan_id": 3,
+      "title": "Audit and republish the Diagon Depot user guide",
+      "ledger_status": "done",
+      "classification": "implemented-and-verified",
+      "summary": "Artifacts and referenced baseline commit are present and inspectable.",
+      "artifacts": [
+        "C:/Users/Jose.Abraham/Documents/DiagonDepot/user-guide.html",
+        "C:/Users/Jose.Abraham/Documents/DiagonDepot/user-journeys-audit.md",
+        "tool-hub commit 67adf27a8376dd99eb435a6f2892cd4a46fee087"
+      ],
+      "checks": [
+        {
+          "command": "git -C \"C:/Users/Jose.Abraham/tool-hub\" rev-parse --verify 67adf27",
+          "exit_code": 0,
+          "output": "67adf27a8376dd99eb435a6f2892cd4a46fee087"
+        },
+        {
+          "command": "PowerShell Test-Path for user-guide and user-journeys artifacts",
+          "exit_code": 0,
+          "output": "C:/Users/Jose.Abraham/Documents/DiagonDepot/user-guide.html\\tTrue\\nC:/Users/Jose.Abraham/Documents/DiagonDepot/user-journeys-audit.md\\tTrue"
+        }
+      ]
+    },
+    {
+      "plan_id": 4,
+      "title": "Design a secure user-installed app runtime for Diagon Depot",
+      "ledger_status": "done",
+      "classification": "implemented-and-verified",
+      "summary": "Design and schema artifacts exist and the manifest validator passes.",
+      "artifacts": [
+        "C:/Users/Jose.Abraham/dd-secure-app-runtime/docs/secure-app-runtime/01-architecture-discovery.md",
+        "C:/Users/Jose.Abraham/dd-secure-app-runtime/docs/secure-app-runtime/schema/validate-manifest.mjs"
+      ],
+      "checks": [
+        {
+          "command": "node \"C:/Users/Jose.Abraham/dd-secure-app-runtime/docs/secure-app-runtime/schema/validate-manifest.mjs\"",
+          "exit_code": 0,
+          "output": "Host API version: 1.3.0\\nSchema: C:\\\\Users\\\\Jose.Abraham\\\\dd-secure-app-runtime\\\\docs\\\\secure-app-runtime\\\\schema\\\\app-manifest.schema.json\\n\\nValid examples (must PASS):\\nPASS  valid-remote-web-app.json\\nPASS  valid-static-microfrontend.json\\nPASS  valid-worker-script.json\\n\\nInvalid fixtures (must be REJECTED for the expected reason):\\nPASS  invalid-incompatible-api-version.json -> rejected: [INCOMPATIBLE_API_VERSION] (want INCOMPATIBLE_API_VERSION)\\nPASS  invalid-missing-runtime.json -> rejected: [MISSING_RUNTIME] (want MISSING_RUNTIME)\\nPASS  invalid-undeclared-capability.json -> rejected: [UNDECLARED_CAPABILITY] (want UNDECLARED_CAPABILITY)\\n\\nOK — 0 unmet expectation(s)."
+        }
+      ]
+    },
+    {
+      "plan_id": 5,
+      "title": "Planner v2 enforcement, prior-plan recall, and live observability",
+      "ledger_status": "done",
+      "classification": "implemented-and-verified",
+      "summary": "Named regression tests for prior-plan recall and activity store both pass in the Plan-ledger repo.",
+      "artifacts": [
+        "C:/Users/Jose.Abraham/Projects/Plan-ledger/test/prior-plan-recall.mjs",
+        "C:/Users/Jose.Abraham/Projects/Plan-ledger/test/activity-store.mjs"
+      ],
+      "checks": [
+        {
+          "command": "node test/prior-plan-recall.mjs",
+          "exit_code": 0,
+          "output": "prior-plan-recall regression OK (15 checks)"
+        },
+        {
+          "command": "node test/activity-store.mjs",
+          "exit_code": 0,
+          "output": "17 activity-store checks passed."
+        }
+      ]
+    },
+    {
+      "plan_id": 6,
+      "title": "Audit the complete LWADB update request backlog and current implementation",
+      "ledger_status": "done",
+      "classification": "implemented-and-verified",
+      "summary": "The claimed audit matrix exists in the cited GrudgeDB audit directory.",
+      "artifacts": [
+        "C:/Users/Jose.Abraham/Documents/GrudgeDB/docs/audits/lwadb-1.5.21-full-audit/requirements-matrix.md"
+      ],
+      "checks": [
+        {
+          "command": "PowerShell Test-Path for LWADB audit artifacts",
+          "exit_code": 0,
+          "output": "C:/Users/Jose.Abraham/Documents/GrudgeDB/docs/audits/lwadb-1.5.21-full-audit/requirements-matrix.md\\tTrue"
+        }
+      ]
+    },
+    {
+      "plan_id": 7,
+      "title": "Vendor goals for Milestones 18 and 19",
+      "ledger_status": "draft",
+      "classification": "partially-implemented",
+      "summary": "Draft plan with pending steps and no attempts.",
+      "artifacts": [],
+      "checks": [
+        {
+          "command": "ReadFile docs/audits/plan-ledger-cross-plan-census.md (Plan #7 step evidence table)",
+          "exit_code": 0,
+          "output": "| #38 (1) | pending | unknown | 0 / unknown | 0 | 0 | 0 | 0 |\\n| #39 (2) | pending | unknown | 0 / unknown | 0 | 0 | 0 | 0 |\\n| #40 (3) | pending | unknown | 0 / unknown | 0 | 0 | 0 | 0 |\\n| #41 (4) | pending | unknown | 0 / unknown | 0 | 0 | 0 | 0 |"
+        }
+      ]
+    },
+    {
+      "plan_id": 8,
+      "title": "Build global Cursor conversation tracker",
+      "ledger_status": "active",
+      "classification": "implemented-and-verified",
+      "summary": "Hook artifacts and tests are present and pass.",
+      "artifacts": [
+        "C:/Users/Jose.Abraham/.cursor/hooks/conversation-tracker/DESIGN.md",
+        "C:/Users/Jose.Abraham/.cursor/hooks/conversation-tracker/tests"
+      ],
+      "checks": [
+        {
+          "command": "python -m pytest \"C:/Users/Jose.Abraham/.cursor/hooks/conversation-tracker/tests\" -q",
+          "exit_code": 0,
+          "output": "35 passed, 1 skipped in 2.70s"
+        }
+      ]
+    },
+    {
+      "plan_id": 9,
+      "title": "Build Nya Data Workspace with evidence-first analysis",
+      "ledger_status": "done",
+      "classification": "implemented-and-verified",
+      "summary": "Workspace artifacts exist and full test suite passes when run from the workspace root.",
+      "artifacts": [
+        "C:/Users/Jose.Abraham/Projects/Nya-Data-Workspace/README.md",
+        "C:/Users/Jose.Abraham/Projects/Nya-Data-Workspace/tests"
+      ],
+      "checks": [
+        {
+          "command": "python -m pytest tests -q (cwd C:/Users/Jose.Abraham/Projects/Nya-Data-Workspace)",
+          "exit_code": 0,
+          "output": "47 passed in 29.92s"
+        }
+      ]
+    },
+    {
+      "plan_id": 10,
+      "title": "Harden real-world spreadsheet functionality",
+      "ledger_status": "done",
+      "classification": "implemented-and-verified",
+      "summary": "Spreadsheet-focused regressions are included in the passing Nya workspace suite.",
+      "artifacts": [
+        "C:/Users/Jose.Abraham/Projects/Nya-Data-Workspace/tests/test_reconcile_excel_support.py",
+        "C:/Users/Jose.Abraham/Projects/Nya-Data-Workspace/tests/test_reconcile_toolkit.py"
+      ],
+      "checks": [
+        {
+          "command": "python -m pytest tests -q (cwd C:/Users/Jose.Abraham/Projects/Nya-Data-Workspace)",
+          "exit_code": 0,
+          "output": "47 passed in 29.92s"
+        }
+      ]
+    },
+    {
+      "plan_id": 11,
+      "title": "Package Nya Data Workspace for sharing",
+      "ledger_status": "active",
+      "classification": "partially-implemented",
+      "summary": "Three of four steps are done, with packaging completion step still in progress.",
+      "artifacts": [],
+      "checks": [
+        {
+          "command": "ReadFile docs/audits/plan-ledger-cross-plan-census.md (Plan #11 step evidence table)",
+          "exit_code": 0,
+          "output": "| #60 (1) | done | legacy_unknown | 1 / pass | 1 | 0 | 0 | 0 |\\n| #61 (2) | done | legacy_unknown | 1 / pass | 0 | 0 | 0 | 0 |\\n| #62 (3) | done | legacy_unknown | 1 / pass | 1 | 0 | 0 | 0 |\\n| #63 (4) | in_progress | unknown | 0 / unknown | 0 | 0 | 0 | 0 |"
+        }
+      ]
+    },
+    {
+      "plan_id": 12,
+      "title": "Build standalone Diagon RAG service",
+      "ledger_status": "done",
+      "classification": "implemented-and-verified",
+      "summary": "RAG contract artifacts exist and the contract validator passes.",
+      "artifacts": [
+        "C:/Users/Jose.Abraham/dd-diagon-rag/docs/rfc-diagon-rag.md",
+        "C:/Users/Jose.Abraham/dd-diagon-rag/docs/diagon-rag/validate-contracts.mjs"
+      ],
+      "checks": [
+        {
+          "command": "node \"C:/Users/Jose.Abraham/dd-diagon-rag/docs/diagon-rag/validate-contracts.mjs\"",
+          "exit_code": 0,
+          "output": "Diagon RAG contracts valid: 8 schemas, 5 document events, Luna envelope, 2 lifecycle batches, 6 declared negative fixtures, current/archive/key/activation invariants, and artifact hygiene."
+        }
+      ]
+    },
+    {
+      "plan_id": 13,
+      "title": "Release UI feedback improvements to Diagon Depot production",
+      "ledger_status": "done",
+      "classification": "unverifiable",
+      "summary": "Local commit evidence exists, but production release/deploy claims require remote CI/CD and deployment telemetry not available in this read-only local audit.",
+      "artifacts": [
+        "dd-ui-nitpicks commit 10a3fd3a1b7411a8138ec6ce3aa36fcea35047f1"
+      ],
+      "checks": [
+        {
+          "command": "git -C \"C:/Users/Jose.Abraham/dd-ui-nitpicks\" rev-parse --verify 10a3fd3",
+          "exit_code": 0,
+          "output": "10a3fd3a1b7411a8138ec6ce3aa36fcea35047f1"
+        }
+      ]
+    },
+    {
+      "plan_id": 14,
+      "title": "Add ghost-pose animation coverage to StationPlacer previews",
+      "ledger_status": "active",
+      "classification": "unverifiable",
+      "summary": "Claims are centered on Perforce changelist and Unreal runtime behavior; local replay requires external editor/runtime state not reconstructed in this audit run.",
+      "artifacts": [
+        "Perforce changelist reference: CL 1982379 (from carry-forward)"
+      ],
+      "checks": [
+        {
+          "command": "ReadFile docs/audits/plan-ledger-cross-plan-census.json (Plan #14 carry_forward/attempt text)",
+          "exit_code": 0,
+          "output": "Carry-forward explicitly references \"CL 1982379\" and focused preview automation evidence."
+        }
+      ]
+    },
+    {
+      "plan_id": 15,
+      "title": "Deliver three broadcast-quality Cursor capability videos cut to CURSOR_VO_3",
+      "ledger_status": "active",
+      "classification": "implemented-and-verified",
+      "summary": "Final media deliverables and recipe docs exist with expected filenames and non-zero sizes.",
+      "artifacts": [
+        "C:/Users/Jose.Abraham/Documents/cursor-showcase/out/deliver/cursor-reel.mov",
+        "C:/Users/Jose.Abraham/Documents/cursor-showcase/out/deliver/cursor-B-everyday.mov",
+        "C:/Users/Jose.Abraham/Documents/cursor-showcase/out/deliver/cursor-C-unreal.mov",
+        "C:/Users/Jose.Abraham/Documents/cursor-showcase/out/deliver/cursor-showcase.zip",
+        "C:/Users/Jose.Abraham/Documents/cursor-showcase/docs/scenerig-recipe.md"
+      ],
+      "checks": [
+        {
+          "command": "PowerShell Test-Path for deliverables and recipe doc",
+          "exit_code": 0,
+          "output": "C:/Users/Jose.Abraham/Documents/cursor-showcase/out/deliver/cursor-reel.mov\\tTrue\\nC:/Users/Jose.Abraham/Documents/cursor-showcase/out/deliver/cursor-B-everyday.mov\\tTrue\\nC:/Users/Jose.Abraham/Documents/cursor-showcase/out/deliver/cursor-C-unreal.mov\\tTrue\\nC:/Users/Jose.Abraham/Documents/cursor-showcase/out/deliver/cursor-showcase.zip\\tTrue\\nC:/Users/Jose.Abraham/Documents/cursor-showcase/docs/scenerig-recipe.md\\tTrue"
+        },
+        {
+          "command": "PowerShell Get-Item metadata for delivered MOV files",
+          "exit_code": 0,
+          "output": "C:\\\\Users\\\\Jose.Abraham\\\\Documents\\\\cursor-showcase\\\\out\\\\deliver\\\\cursor-reel.mov\\t10782760\\t2026-08-07T03:11:30\\nC:\\\\Users\\\\Jose.Abraham\\\\Documents\\\\cursor-showcase\\\\out\\\\deliver\\\\cursor-B-everyday.mov\\t7021197\\t2026-08-07T03:11:48\\nC:\\\\Users\\\\Jose.Abraham\\\\Documents\\\\cursor-showcase\\\\out\\\\deliver\\\\cursor-C-unreal.mov\\t4232580\\t2026-08-07T03:11:52"
+        }
+      ]
+    },
+    {
+      "plan_id": 16,
+      "title": "Ship Cursor rules and a prompt that build a beautiful Unreal 5.8 stage with a spline camera reveal on the fly",
+      "ledger_status": "active",
+      "classification": "implemented-and-verified",
+      "summary": "All asserted rule, skill, reference, validation, and gate-measure artifacts exist under D:/sun-dev/.cursor; each inspected text artifact is ASCII-only and Perforce pending changelist 2008178 contains the expected deliverables and image proofs.",
+      "artifacts": [
+        "D:/sun-dev/.cursor/rules/unreal-stage-composition.mdc",
+        "D:/sun-dev/.cursor/rules/unreal-stage-mcp-workflow.mdc",
+        "D:/sun-dev/.cursor/skills/build-unreal-stage/SKILL.md",
+        "D:/sun-dev/.cursor/skills/build-unreal-stage/prompt.md",
+        "D:/sun-dev/.cursor/skills/build-unreal-stage/reference/mcp-surface.md",
+        "D:/sun-dev/.cursor/skills/build-unreal-stage/reference/stage-doctrine.md",
+        "D:/sun-dev/.cursor/skills/build-unreal-stage/reference/camera-rail.md",
+        "D:/sun-dev/.cursor/skills/build-unreal-stage/reference/validation-run.md",
+        "D:/sun-dev/.cursor/skills/build-unreal-stage/reference/gate-measure.py",
+        "Perforce pending changelist 2008178"
+      ],
+      "checks": [
+        {
+          "command": "PowerShell Test-Path/Get-Item for all asserted Plan #16 artifact paths",
+          "exit_code": 0,
+          "output": "D:/sun-dev/.cursor/rules/unreal-stage-composition.mdc\\tTrue\\t13223\\nD:/sun-dev/.cursor/rules/unreal-stage-mcp-workflow.mdc\\tTrue\\t16623\\nD:/sun-dev/.cursor/skills/build-unreal-stage/SKILL.md\\tTrue\\t14087\\nD:/sun-dev/.cursor/skills/build-unreal-stage/prompt.md\\tTrue\\t26239\\nD:/sun-dev/.cursor/skills/build-unreal-stage/reference/mcp-surface.md\\tTrue\\t25635\\nD:/sun-dev/.cursor/skills/build-unreal-stage/reference/stage-doctrine.md\\tTrue\\t23680\\nD:/sun-dev/.cursor/skills/build-unreal-stage/reference/camera-rail.md\\tTrue\\t36067\\nD:/sun-dev/.cursor/skills/build-unreal-stage/reference/validation-run.md\\tTrue\\t33627\\nD:/sun-dev/.cursor/skills/build-unreal-stage/reference/gate-measure.py\\tTrue\\t16200"
+        },
+        {
+          "command": "PowerShell byte inspection for asserted Plan #16 text artifacts",
+          "exit_code": 0,
+          "output": "All nine asserted text artifacts reported non_ascii=0."
+        },
+        {
+          "command": "p4 -c sun-dev opened -c 2008178",
+          "exit_code": 0,
+          "output": "16 pending files: the two rules, SKILL.md, prompt.md, five text references, gate-measure.py, and seven image proofs."
+        }
+      ]
+    }
+  ],
+  "classification_counts": {
+    "implemented-and-verified": 10,
+    "implemented-but-regressed": 0,
+    "partially-implemented": 3,
+    "claim-not-supported": 1,
+    "unverifiable": 2
+  },
+  "notable_contradictions": [
+    "Plans #8, #14, #15, and #16 are still 'active' despite all steps marked done."
+  ],
+  "limitations": [
+    "Remote CI/CD, production deploy state, and external service telemetry were not queried in this read-only local audit.",
+    "Initial Plan #16 inspection incorrectly added a Sundance project root; corrected verification used the exact D:/sun-dev/.cursor paths asserted by plan context and carry-forward.",
+    "One Nya test invocation from outside the workspace root failed module import collection; rerun from workspace root succeeded and was used for classification evidence."
+  ]
+}

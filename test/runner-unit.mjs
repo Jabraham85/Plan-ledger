@@ -124,11 +124,13 @@ console.log(`\n${pass} unit checks passed.\n`);
   const fakeCli = join(__dirname, 'fixtures', 'fake-claude-cli.mjs');
   check('fake CLI fixture exists', existsSync(fakeCli));
 
+  // Pass --model so the runner records the OBSERVED CLI-selected model on the
+  // attempt (v5 provenance). Without --model there's nothing to record.
   const out = execFileSync(process.execPath, [
     runnerPath, '--plan', String(plan.id), '--live', '--inject',
-    '--max-attempts', '1', '--allowedTools', 'Write,Read',
+    '--max-attempts', '1', '--allowedTools', 'Write,Read', '--model', 'stub-model-x',
   ], {
-    env: { ...process.env, CLAUDE_BIN: fakeCli, PLAN_LEDGER_DB: dbPath },
+    env: { ...process.env, CLAUDE_BIN: fakeCli, PLAN_LEDGER_DB: dbPath, PLAN_LEDGER_CURSOR_MODELS: 'stub-model-x' },
     encoding: 'utf8',
   });
   console.log(out);
@@ -140,6 +142,8 @@ console.log(`\n${pass} unit checks passed.\n`);
   check('e2e: override attempt recorded by runner-inject', lastAttempt.executor === 'runner-inject' && lastAttempt.verdict === 'fail');
   check('e2e: override attempt result carries the VERIFY output tail', lastAttempt.result.includes('E2E-VERIFY-FAILED-MARKER'));
   check('e2e: override attempt result carries the usage line', /usage: in=\d+ out=\d+ cost=\$[\d.]+ turns=\d+ model=\w+/.test(lastAttempt.result));
+  check('e2e: attempt persists observed model + runner-cli provenance (v5)',
+    lastAttempt.model === 'stub-model-x' && lastAttempt.model_source === 'runner-cli');
   verify.close();
 
   for (const suf of ['', '-wal', '-shm']) rmSync(dbPath + suf, { force: true });
@@ -181,11 +185,22 @@ console.log(`\n${pass} unit checks passed.\n`);
     out.includes('usage line skipped — no new attempt recorded'));
   check('MCP e2e: VERIFY was never claimed to run (step never reached done)',
     !out.includes('VERIFY override') && !out.includes('VERIFY passed'));
+  // Lease-based lifecycle: when no attempt lands, closeExecutionLease closes the
+  // lease as `abandoned` and hands the step back to pending; the runner then
+  // exhausts its per-step attempt budget on the retry. The plan must NEVER be
+  // marked complete on this path, and the runner must announce the pause.
+  check('MCP e2e: active work is not falsely reported as plan complete',
+    !out.includes('✅ plan complete') && /(plan is not complete|pausing for a human|unresolved after)/.test(out));
 
   const verify = new Store(dbPath);
   const finalStep = verify.getStep(step.id);
-  check('MCP e2e: step left pending (agent never called record_attempt)', finalStep.status === 'pending');
+  check('MCP e2e: step left retryable (pending) after abandoned lease',
+    finalStep.status === 'pending' || finalStep.status === 'failed');
   check('MCP e2e: no attempts were fabricated', finalStep.attempts.length === 0);
+  check('MCP e2e: runner did not mark a plan done while its step was active',
+    verify.openPlan(plan.id).status !== 'done');
+  const openLeases = verify.listExecutionLeases({ plan_id: plan.id, status: 'open' });
+  check('MCP e2e: no lease is left open after the runner exits', openLeases.length === 0);
   verify.close();
 
   for (const suf of ['', '-wal', '-shm']) rmSync(dbPath + suf, { force: true });

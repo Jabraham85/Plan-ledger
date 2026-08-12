@@ -1,0 +1,601 @@
+{
+  "schema_version": 1,
+  "plan_id": 17,
+  "step_id": 105,
+  "title": "Plan-ledger evidence-ranked improvement roadmap",
+  "generated_at": "2026-08-12T03:05:00.000Z",
+  "required_evidence_inputs": [
+    "docs/audits/plan-ledger-cross-plan-census.json",
+    "docs/audits/plan-ledger-cross-plan-census.md",
+    "docs/audits/plan-ledger-retrospective.json",
+    "docs/audits/plan-ledger-retrospective.md",
+    "docs/audits/plan-ledger-artifact-verification.json",
+    "docs/audits/plan-ledger-artifact-verification.md",
+    "docs/audits/plan-ledger-performance-results.json",
+    "docs/audits/plan-ledger-performance.md"
+  ],
+  "headline_evidence": {
+    "retrospective_counts": {
+      "worked_as_designed": 1,
+      "worked_after_correction": 8,
+      "partial": 2,
+      "stale": 5
+    },
+    "artifact_verification_counts": {
+      "implemented_and_verified": 10,
+      "partially_implemented": 3,
+      "claim_not_supported": 1,
+      "unverifiable": 2
+    },
+    "performance_local_ms": {
+      "board_server_startup_p50": 103.76,
+      "board_server_startup_p95": 117.28,
+      "cli_roundtrip_list_plans_warm_p50": 73.04,
+      "cli_roundtrip_list_plans_warm_p95": 76.88,
+      "get_plan_roster_local_p50": 14.54,
+      "get_plan_roster_local_p95": 16.31
+    },
+    "performance_external_ms": {
+      "cursor_cli_version_noop_p50": 1016.91,
+      "list_cursor_models_external_agent_cli_p50": 1378.01,
+      "runner_preflight_default_external_p50": 1382.44
+    },
+    "historical_handoff_ms": {
+      "time_to_first_attempt_p50": 2332838,
+      "verification_handoff_p50": 81342013
+    }
+  },
+  "scoring_formula": {
+    "scale": "Each factor is scored 1-5 (higher is better except effort and migration risk).",
+    "weights": {
+      "observed_frequency": 0.2,
+      "user_impact": 0.2,
+      "risk_reduction": 0.2,
+      "measured_time_saved": 0.15,
+      "implementation_effort_inverse": 0.1,
+      "migration_risk_inverse": 0.1,
+      "confidence": 0.05
+    },
+    "calculation": "score_0_to_100 = 20 * (0.2*F + 0.2*I + 0.2*R + 0.15*T + 0.1*(6-E) + 0.1*(6-M) + 0.05*C)",
+    "notes": [
+      "F=observed_frequency, I=user_impact, R=risk_reduction, T=measured_time_saved, E=implementation_effort, M=migration_risk, C=confidence.",
+      "Effort and migration risk are inverted so lower effort/risk raises the score.",
+      "External model/agent latency remains separate and is not counted as local product latency gains."
+    ]
+  },
+  "candidates": [
+    {
+      "id": "C1-evidence-gate",
+      "area": "evidence and review gates",
+      "name": "Enforce machine-checkable completion contract before acceptance",
+      "rank": 1,
+      "selected_for_first_release": true,
+      "score_inputs": {
+        "observed_frequency": 5,
+        "user_impact": 5,
+        "risk_reduction": 5,
+        "measured_time_saved": 4,
+        "implementation_effort": 3,
+        "migration_risk": 2,
+        "confidence": 5
+      },
+      "composite_score": 91,
+      "measured_time_saved_estimate": {
+        "value": 150,
+        "unit": "minutes_per_16_historical_plans",
+        "basis": "10 documented evidence-contract failures in retrospective pitfalls; estimate 15 minutes review/rework avoided per failure by pre-acceptance validator gate."
+      },
+      "evidence": [
+        {
+          "path": "docs/audits/plan-ledger-retrospective.json",
+          "pointer": "#/pitfalls/0",
+          "fact": "Completion-contract/evidence omissions occurred in 10 documented failed or partial attempts."
+        },
+        {
+          "path": "docs/audits/plan-ledger-retrospective.md",
+          "pointer": "## Common pitfalls",
+          "fact": "Missing COMPLETION_JSON, missing terminal output, and absent acceptance items are repeatedly cited."
+        },
+        {
+          "path": "docs/audits/plan-ledger-performance-results.json",
+          "pointer": "#/analysis/historical_handoff",
+          "fact": "Historical verification handoff p50 is 81,342,013 ms, so reducing avoidable review loops matters."
+        }
+      ],
+      "target_behavior": "A step cannot transition to accepted/done unless completion payload, evidence refs, acceptance checklist, and terminal report all validate against a deterministic schema.",
+      "contracts_and_api_changes": [
+        "Add `completion_payload_v2` schema with required `outcome`, `artifacts[]`, `commands[]`, and `limitations[]`.",
+        "Add validator API `validateCompletionPayload(stepId, payload)` returning `{ ok, errors[], normalizedPayload }`.",
+        "Require non-empty command output snippets or explicit `output_redacted=true` marker for each reported command."
+      ],
+      "schema_changes": [
+        "Add `steps.completion_payload_json` TEXT (JSON payload) and `steps.completion_validated_at` DATETIME.",
+        "Add `attempts.validation_status` ENUM(`pass`,`fail`,`legacy_unknown`) and `attempts.validation_errors_json` TEXT."
+      ],
+      "migration_and_backfill": [
+        "Backfill historical rows with missing machine-checkable payloads to `validation_status='legacy_unknown'` (not `fail`).",
+        "Do not alter historical evidence content; only annotate validation status.",
+        "Expose backfill summary in audit command output."
+      ],
+      "tests": [
+        {
+          "name": "validator-rejects-missing-completion-json",
+          "type": "unit",
+          "measurable_acceptance": "Given missing completion payload fields, validator returns `ok=false` with >=1 explicit error code."
+        },
+        {
+          "name": "step-cannot-terminalize-on-failed-validation",
+          "type": "integration",
+          "measurable_acceptance": "Attempting to mark step done with invalid payload returns non-zero exit and leaves step status unchanged."
+        },
+        {
+          "name": "legacy-missing-payload-backfill-is-unknown-not-fail",
+          "type": "integration",
+          "measurable_acceptance": "Given legacy rows with no payload, backfill sets 100% of those rows to `legacy_unknown` and 0 rows to `fail`."
+        },
+        {
+          "name": "validator-runtime-budget",
+          "type": "performance",
+          "measurable_acceptance": "Validation path p95 <= 2 ms per payload over 1,000 local iterations."
+        }
+      ],
+      "rollout": [
+        "Ship validator in warn-only mode for one release.",
+        "Promote to hard-fail mode after zero false positives across 20 internal step completions.",
+        "Publish migration report in docs/audits."
+      ],
+      "rollback": [
+        "Feature flag `PLAN_LEDGER_COMPLETION_GATE=enforce|warn|off` defaults to `warn` during rollout.",
+        "If blockage occurs, switch to `warn` without schema rollback."
+      ],
+      "performance_budget": {
+        "local_latency": "Validation adds <=2 ms p95 to step terminalization.",
+        "board_impact": "No additional board startup work; startup remains <=120 ms p95.",
+        "external_latency_policy": "No external model call in validation path."
+      },
+      "risks": [
+        "False-negative payload checks could block valid completions if schema is too strict.",
+        "If historical rows are misclassified during backfill, analysts may overstate failure rates; validator guard must enforce `legacy_unknown` semantics."
+      ],
+      "dependencies": [
+        "Needs C4 telemetry event emission for validation failures.",
+        "Needs CLI and runner writers to emit completion payload v2."
+      ],
+      "non_goals": [
+        "Retroactively proving historical artifact existence.",
+        "Changing user-authored narrative content in old records."
+      ]
+    },
+    {
+      "id": "C2-terminalization-integrity",
+      "area": "data/state integrity and automatic terminalization",
+      "name": "Auto-terminalize and reconcile stale active/draft plans",
+      "rank": 2,
+      "selected_for_first_release": true,
+      "score_inputs": {
+        "observed_frequency": 4,
+        "user_impact": 5,
+        "risk_reduction": 5,
+        "measured_time_saved": 3,
+        "implementation_effort": 3,
+        "migration_risk": 2,
+        "confidence": 5
+      },
+      "composite_score": 84,
+      "measured_time_saved_estimate": {
+        "value": 50,
+        "unit": "minutes_per_16_historical_plans",
+        "basis": "5 stale plans observed in retrospective headline counts; estimate 10 minutes operator triage avoided per stale plan."
+      },
+      "evidence": [
+        {
+          "path": "docs/audits/plan-ledger-retrospective.json",
+          "pointer": "#/headline_counts/stale",
+          "fact": "5 out of 16 historical plans are stale."
+        },
+        {
+          "path": "docs/audits/plan-ledger-cross-plan-census.md",
+          "pointer": "## Plan inventory",
+          "fact": "Plans #8, #14, #15, and #16 are active despite all steps done; plan #11 is active with dormant in-progress final step."
+        },
+        {
+          "path": "docs/audits/plan-ledger-artifact-verification.md",
+          "pointer": "## Notable contradictions",
+          "fact": "Explicitly repeats active status contradiction for done-step plans."
+        }
+      ],
+      "target_behavior": "Whenever a step enters a terminal state, the owning plan is automatically re-evaluated and terminalized (or flagged partial) within the same transaction boundary.",
+      "contracts_and_api_changes": [
+        "Introduce `reconcilePlanTerminalState(planId)` and call it on every terminal step mutation.",
+        "Add terminal-state reason enum: `done`, `partial_due_to_deferred_gate`, `blocked`, `stale_dormant`.",
+        "Expose reconciliation summary in CLI and board APIs."
+      ],
+      "schema_changes": [
+        "Add `plans.terminal_state_reason` TEXT nullable.",
+        "Add `plans.terminalized_at` DATETIME nullable.",
+        "Add `plans.state_integrity_version` INTEGER default 1."
+      ],
+      "migration_and_backfill": [
+        "Run one-shot reconciliation over plans #1-16 to set terminal metadata without rewriting step history.",
+        "Mark unresolved active+dormant plans as `stale_dormant` instead of forced done."
+      ],
+      "tests": [
+        {
+          "name": "active-plan-all-steps-done-autoterminalizes",
+          "type": "integration",
+          "measurable_acceptance": "After final step completion, plan status becomes done within same operation and contradiction count remains zero."
+        },
+        {
+          "name": "deferred-gate-plan-marked-partial",
+          "type": "integration",
+          "measurable_acceptance": "If >=1 done step has deferred manual gate, plan status is `partial` and reason is `partial_due_to_deferred_gate`."
+        },
+        {
+          "name": "reconcile-performance-budget",
+          "type": "performance",
+          "measurable_acceptance": "Reconciliation adds <=5 ms p95 for plans up to 100 steps."
+        }
+      ],
+      "rollout": [
+        "Enable reconciliation in shadow mode and log old/new state decisions.",
+        "Flip to enforcing mode after validating no status regressions on seeded fixtures.",
+        "Run backfill once and capture before/after contradiction counts."
+      ],
+      "rollback": [
+        "Gate with `PLAN_LEDGER_AUTO_TERMINALIZE=on|off`.",
+        "If incorrect transitions occur, disable gate and retain recorded diagnostics."
+      ],
+      "performance_budget": {
+        "local_latency": "Plan reconciliation mutation path <=5 ms p95.",
+        "board_impact": "Board plan query remains <=1 ms p95 for API-level status fields.",
+        "external_latency_policy": "No external model calls in reconciliation."
+      },
+      "risks": [
+        "Incorrect partial-vs-done inference if deferred metadata is inconsistent.",
+        "Backfill may surface latent inconsistencies that require manual review."
+      ],
+      "dependencies": [
+        "Requires clear deferred/manual gate semantics from C1 contract payload.",
+        "Needs board badges from C4 for operator visibility."
+      ],
+      "non_goals": [
+        "Changing intent of draft plans with zero execution evidence.",
+        "Auto-resolving business-domain acceptance criteria."
+      ]
+    },
+    {
+      "id": "C3-dispatch-lease-recovery",
+      "area": "execution leases and stale recovery; runner/dispatch and role/model resolution",
+      "name": "Policy-based dispatch with lease SLA and stale-step reassignment",
+      "rank": 3,
+      "selected_for_first_release": true,
+      "score_inputs": {
+        "observed_frequency": 4,
+        "user_impact": 4,
+        "risk_reduction": 5,
+        "measured_time_saved": 3,
+        "implementation_effort": 3,
+        "migration_risk": 3,
+        "confidence": 4
+      },
+      "composite_score": 77,
+      "measured_time_saved_estimate": {
+        "value": 49,
+        "unit": "minutes_per_16_historical_plans",
+        "basis": "5 role-mismatch recoveries; historical time_to_first_attempt p50 is 38.88 minutes, assume 25% reduction through task-fit dispatch and automatic stale reassignment."
+      },
+      "evidence": [
+        {
+          "path": "docs/audits/plan-ledger-retrospective.json",
+          "pointer": "#/pitfalls/1",
+          "fact": "Role/model mismatch or stalled specialist dispatch appears in 5 documented recoveries."
+        },
+        {
+          "path": "docs/audits/plan-ledger-performance-results.json",
+          "pointer": "#/run_results/0/historical_handoff/time_to_first_attempt_ms/stats/p50",
+          "fact": "Historical p50 time to first attempt is 2,332,838 ms."
+        },
+        {
+          "path": "docs/audits/plan-ledger-cross-plan-census.md",
+          "pointer": "### Plan #5 and ### Plan #10 step evidence",
+          "fact": "Representative mismatches recovered after reassignment: #5/#24, #5/#28, #10/#58."
+        }
+      ],
+      "target_behavior": "Dispatcher selects executor role/model using task modality evidence, opens a lease with heartbeat SLA, and auto-reassigns steps when lease heartbeats or first artifact deadlines are missed.",
+      "contracts_and_api_changes": [
+        "Add dispatch policy input contract `{ task_modality, required_artifact_type, preferred_role, fallback_roles[] }`.",
+        "Add lease policy contract `{ first_artifact_deadline_ms, heartbeat_interval_ms, stale_after_ms, max_auto_reassignments }`.",
+        "Emit reassignment reason codes (`role_mismatch`, `lease_timeout`, `artifact_deadline_miss`)."
+      ],
+      "schema_changes": [
+        "Add `step_assignments.dispatch_policy_json` TEXT.",
+        "Add `execution_leases.stale_reason` TEXT nullable.",
+        "Add `steps.auto_reassignment_count` INTEGER default 0."
+      ],
+      "migration_and_backfill": [
+        "Backfill `auto_reassignment_count=0` for all historical steps.",
+        "No mutation of past assignment records; only append future reason-coded reassignments."
+      ],
+      "tests": [
+        {
+          "name": "dispatch-prefers-task-fit-role",
+          "type": "unit",
+          "measurable_acceptance": "Given implementation-modality workload with equal confidence inputs, implementer role score is >=1 point above architect role score."
+        },
+        {
+          "name": "stale-lease-auto-reassignment",
+          "type": "integration",
+          "measurable_acceptance": "When heartbeat exceeds stale_after_ms, lease closes and next assignment emits `lease_timeout` reason."
+        },
+        {
+          "name": "lease-path-performance-budget",
+          "type": "performance",
+          "measurable_acceptance": "Lease open/heartbeat/close p95 remain <=2.5 ms each across 30 local samples."
+        }
+      ],
+      "rollout": [
+        "Start with advisory dispatch scoring logs while preserving current behavior.",
+        "Enable auto-reassignment for one plan cohort with max_auto_reassignments=1.",
+        "Expand after no regression in completion success rate for 20 consecutive steps."
+      ],
+      "rollback": [
+        "Disable auto-reassignment and revert to manual dispatch if false positives appear.",
+        "Keep lease telemetry for diagnosis even when automation is off."
+      ],
+      "performance_budget": {
+        "local_latency": "Policy evaluation <=1 ms p95; lease operations <=2.5 ms p95.",
+        "board_impact": "No board startup regression beyond current 117.28 ms p95 budget.",
+        "external_latency_policy": "External model startup (about 1.0-1.4 seconds) is tracked separately and not treated as local regression."
+      },
+      "risks": [
+        "Incorrect policy features can over-bias toward one role.",
+        "Auto-reassignment can cause churn if stale thresholds are too aggressive."
+      ],
+      "dependencies": [
+        "Needs C4 telemetry to calibrate stale thresholds.",
+        "Benefits from C1 completion contract to detect artifact deadline misses."
+      ],
+      "non_goals": [
+        "Automatic quality judgment of finished artifacts.",
+        "Cross-workspace role ontology redesign."
+      ]
+    },
+    {
+      "id": "C4-telemetry-board-observability",
+      "area": "board and telemetry",
+      "name": "Record execution activity and surface recovery status on board",
+      "rank": 4,
+      "selected_for_first_release": true,
+      "score_inputs": {
+        "observed_frequency": 5,
+        "user_impact": 4,
+        "risk_reduction": 4,
+        "measured_time_saved": 3,
+        "implementation_effort": 3,
+        "migration_risk": 2,
+        "confidence": 4
+      },
+      "composite_score": 79,
+      "measured_time_saved_estimate": {
+        "value": 100,
+        "unit": "minutes_per_16_historical_plans",
+        "basis": "0 activity records across 101 steps; estimate 10 minutes diagnosis saved for each of 10 correction episodes when timeline telemetry exists."
+      },
+      "evidence": [
+        {
+          "path": "docs/audits/plan-ledger-retrospective.json",
+          "pointer": "#/pitfalls/4",
+          "fact": "Activity/lease observability gap: 0 activity records across 101 steps."
+        },
+        {
+          "path": "docs/audits/plan-ledger-cross-plan-census.md",
+          "pointer": "## Plan inventory",
+          "fact": "Activity column is zero for all plans."
+        },
+        {
+          "path": "docs/audits/plan-ledger-performance-results.json",
+          "pointer": "#/analysis/top_three_local_bottlenecks",
+          "fact": "Board startup is the top local bottleneck; observability changes must stay within budget."
+        }
+      ],
+      "target_behavior": "Every assignment lifecycle emits activity start/heartbeat/failure/reassignment/completion events and the board renders concise status badges with drill-down history.",
+      "contracts_and_api_changes": [
+        "Define activity event schema with required `event_type`, `step_id`, `assignment_id`, `timestamp`, and `metadata`.",
+        "Add board API endpoint `/api/activity/latest` with plan and step scope filters.",
+        "Expose derived status badge states: `healthy`, `awaiting_artifact`, `stale_lease`, `needs_manual_verification`."
+      ],
+      "schema_changes": [
+        "Ensure `activity_runs` creation on assignment start is mandatory.",
+        "Add index on `(step_id, started_at)` for activity query speed."
+      ],
+      "migration_and_backfill": [
+        "Backfill synthetic `activity_backfill_missing` event for historical steps with no activity rows.",
+        "Do not fabricate detailed historical timelines."
+      ],
+      "tests": [
+        {
+          "name": "activity-events-emitted-for-lifecycle",
+          "type": "integration",
+          "measurable_acceptance": "Assignment start->completion emits >=4 ordered events with non-null timestamps."
+        },
+        {
+          "name": "board-shows-stale-badge",
+          "type": "integration",
+          "measurable_acceptance": "Within <=1 refresh cycle, a step with stale lease appears with `stale_lease` badge in board API and UI rendering."
+        },
+        {
+          "name": "telemetry-path-performance-budget",
+          "type": "performance",
+          "measurable_acceptance": "activity_append_event remains <=1 ms p95 and board startup remains <=120 ms p95."
+        }
+      ],
+      "rollout": [
+        "Enable event writes first, then enable board badge reads.",
+        "Audit event volume and index hit rates before default-on UI exposure.",
+        "Keep badge rendering behind feature flag for first release candidate."
+      ],
+      "rollback": [
+        "Disable badge rendering independently from event writes.",
+        "If write pressure rises, switch to sampled activity emission."
+      ],
+      "performance_budget": {
+        "local_latency": "Event append <=1 ms p95; board meta/plans/detail endpoints stay <=1 ms p95.",
+        "board_impact": "Board server startup must not exceed 120 ms p95.",
+        "external_latency_policy": "No dependence on external model calls for board telemetry."
+      },
+      "risks": [
+        "Event volume can increase storage churn without retention policy.",
+        "Badge semantics may confuse users without concise legend text."
+      ],
+      "dependencies": [
+        "Needs C3 lease reason codes for stale badge accuracy.",
+        "Needs C1 validation failure event type for evidence-gate visibility."
+      ],
+      "non_goals": [
+        "Building a full observability analytics warehouse.",
+        "Real-time websocket streaming in first release."
+      ]
+    },
+    {
+      "id": "C5-recovery-carry-forward",
+      "area": "recovery and carry-forward",
+      "name": "Typed carry-forward fields and required next-owner summary",
+      "rank": 5,
+      "selected_for_first_release": false,
+      "score_inputs": {
+        "observed_frequency": 2,
+        "user_impact": 3,
+        "risk_reduction": 3,
+        "measured_time_saved": 2,
+        "implementation_effort": 2,
+        "migration_risk": 1,
+        "confidence": 3
+      },
+      "composite_score": 59,
+      "measured_time_saved_estimate": {
+        "value": 12,
+        "unit": "minutes_per_16_historical_plans",
+        "basis": "One explicit malformed carry-forward value (`undefined`) plus broader handoff hygiene issues."
+      },
+      "evidence": [
+        {
+          "path": "docs/audits/plan-ledger-retrospective.json",
+          "pointer": "#/pitfalls/6",
+          "fact": "Carry-forward hygiene pitfall cites malformed value and schema-validation need."
+        }
+      ]
+    },
+    {
+      "id": "C6-legacy-verification-backfill",
+      "area": "evidence and review gates",
+      "name": "Legacy verification provenance labeling and confidence downgrades",
+      "rank": 6,
+      "selected_for_first_release": false,
+      "score_inputs": {
+        "observed_frequency": 5,
+        "user_impact": 3,
+        "risk_reduction": 4,
+        "measured_time_saved": 2,
+        "implementation_effort": 4,
+        "migration_risk": 3,
+        "confidence": 3
+      },
+      "composite_score": 67,
+      "measured_time_saved_estimate": {
+        "value": 20,
+        "unit": "minutes_per_16_historical_plans",
+        "basis": "54 legacy_unknown completed steps and 101/101 zero claimed artifacts increase audit ambiguity."
+      },
+      "evidence": [
+        {
+          "path": "docs/audits/plan-ledger-retrospective.json",
+          "pointer": "#/pitfalls/3",
+          "fact": "Legacy verification/artifact provenance gap documents 54 legacy_unknown done steps and zero claimed artifacts."
+        }
+      ]
+    },
+    {
+      "id": "C7-cli-bridge-architecture",
+      "area": "CLI/bridge architecture",
+      "name": "Long-lived JSON bridge process to amortize startup overhead",
+      "rank": 7,
+      "selected_for_first_release": false,
+      "score_inputs": {
+        "observed_frequency": 3,
+        "user_impact": 3,
+        "risk_reduction": 2,
+        "measured_time_saved": 3,
+        "implementation_effort": 4,
+        "migration_risk": 3,
+        "confidence": 3
+      },
+      "composite_score": 54,
+      "measured_time_saved_estimate": {
+        "value": 15.18,
+        "unit": "ms_per_cli_roundtrip_p50",
+        "basis": "Performance analysis fixed overhead estimates implied CLI work overhead at 15.18 ms p50."
+      },
+      "evidence": [
+        {
+          "path": "docs/audits/plan-ledger-performance-results.json",
+          "pointer": "#/analysis/fixed_overhead/implied_cli_work_overhead_p50_ms",
+          "fact": "Warm round-trip still carries measurable fixed overhead."
+        }
+      ]
+    },
+    {
+      "id": "C8-local-latency-tuning",
+      "area": "latency",
+      "name": "Board startup and roster query tuning with explicit guardrails",
+      "rank": 8,
+      "selected_for_first_release": false,
+      "score_inputs": {
+        "observed_frequency": 3,
+        "user_impact": 2,
+        "risk_reduction": 2,
+        "measured_time_saved": 3,
+        "implementation_effort": 3,
+        "migration_risk": 2,
+        "confidence": 4
+      },
+      "composite_score": 55,
+      "measured_time_saved_estimate": {
+        "value": 43.76,
+        "unit": "ms_per_board_startup_p50",
+        "basis": "Performance analysis estimates board startup has 43.76 ms p50 potential savings."
+      },
+      "evidence": [
+        {
+          "path": "docs/audits/plan-ledger-performance-results.json",
+          "pointer": "#/analysis/top_three_local_bottlenecks/0",
+          "fact": "Board startup is currently top local bottleneck at 103.76/117.28 ms p50/p95."
+        },
+        {
+          "path": "docs/audits/plan-ledger-performance-results.json",
+          "pointer": "#/analysis/external_latency_separated",
+          "fact": "External model startup remains approximately 1.0-1.4 s and is tracked separately."
+        }
+      ]
+    }
+  ],
+  "first_release": {
+    "name": "R1 governance-and-recovery foundation",
+    "selected_candidate_ids": [
+      "C1-evidence-gate",
+      "C2-terminalization-integrity",
+      "C3-dispatch-lease-recovery",
+      "C4-telemetry-board-observability"
+    ],
+    "coherence_rationale": "These four items jointly prevent incomplete acceptance, auto-correct stale state, recover stalled execution, and make failures visible. They address the repeated high-frequency evidence and state pitfalls before lower-yield latency tuning.",
+    "release_non_goals": [
+      "No product-domain feature additions.",
+      "No historical ledger content rewriting.",
+      "No dependence on external model startup optimization."
+    ]
+  },
+  "limitations": [
+    "This roadmap is based on supplied audit artifacts and benchmark outputs only.",
+    "Time-saved estimates are directional planning inputs, not guarantees.",
+    "Historical handoff timings include human and external-agent delays and are intentionally separated from local product latency."
+  ]
+}

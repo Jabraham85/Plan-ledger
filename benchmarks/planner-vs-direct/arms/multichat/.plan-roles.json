@@ -1,0 +1,24 @@
+{
+  "roles": {
+    "architect": {
+      "charter": "../../specialists/scheduling-architect.md",
+      "model": "gpt-5-mini",
+      "note": "Select GPT-5 Mini visibly in a new top-level Cursor chat."
+    },
+    "implementer": {
+      "charter": "../../specialists/scheduler-implementer.md",
+      "model": "gpt-5.3-codex",
+      "note": "Select GPT-5.3 Codex visibly in a new top-level Cursor chat."
+    },
+    "test-engineer": {
+      "charter": "../../specialists/schedule-test-engineer.md",
+      "model": "gpt-5-mini",
+      "note": "Select GPT-5 Mini visibly in a new top-level Cursor chat."
+    },
+    "perf-engineer": {
+      "charter": "../../specialists/scheduler-perf-engineer.md",
+      "model": "gpt-5.3-codex",
+      "note": "Open only when measured test evidence requires it."
+    }
+  }
+}

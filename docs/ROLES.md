@@ -40,6 +40,23 @@ resolver: `../src/roles.mjs`):
   section. `PLAN_LEDGER_ROLES=<path>` replaces this file's path (tests use it so they
   never touch your real config — same pattern as `PLAN_LEDGER_DB`).
 
+The web board's **Staff** page edits the current project's role → model assignments.
+Those assignments apply to every plan in that plan-ledger project and are stored in
+`projects.<project name>.roles` in the user role map. A blank model means the client
+chooses its default model. Custom roles can be added there; resetting a row removes
+only the project override. The model picker uses the account-scoped
+`agent --list-models` catalog when Cursor's Agent CLI is available, with a bundled
+catalog fallback when it is not. **Apply recommended defaults** fills only unassigned
+roles, preserving deliberate project choices.
+
+Each Staff row also exposes its non-project-specific **Global rules & context**. The
+built-in context defines the role's default operating discipline; a user-global
+`roles.<role>.context` value can replace it. If a global charter exists at
+`~/.claude/agents/<role>.md` (or is declared by the global role entry), its path and
+contents are shown too. This persistent context is included in runner prompts and MCP
+dispatch directives, so the Staff view reflects instructions the executor actually
+receives rather than display-only metadata.
+
 ```json
 {
   "roles": {
@@ -138,6 +155,43 @@ flag on the runner command wins). The map's `agent` field is unused headless —
 adopt-by-reading is the whole mechanism. Disabled/unknown/charterless roles fall back
 to the untagged prompt.
 
+## Deterministic dispatch policy (v7)
+
+Before role resolution/dispatch, the runner and roster surfaces evaluate step intent
+through the deterministic policy in `../src/dispatch-policy.mjs`.
+
+- `deriveRequiredCapabilities` inspects `title + context + acceptance_criteria + tools`
+  and derives weighted capability requirements:
+  `behavioral_ux`, `visual_composition`, `deterministic_browser_automation`,
+  `screenshot_capture`, `server_lifecycle`, `build_deploy`, `verification`,
+  `publishing`, `data_security`, `implementation`.
+- `ROLE_CAPABILITY_MAP` documents how each Staff role scores (0..3) against those
+  capabilities; scoring is deterministic and explainable (required capability list,
+  normalized score, rationale, alternatives).
+- Explicit step/plan role assignments remain authoritative, but a **material mismatch**
+  emits warnings and requires an audited override reason before runner dispatch.
+- Automatic role selection is allowed only for unassigned steps (`role=''`).
+- Regression guard: browser automation/screenshot/server work recommends
+  `test-engineer` or `build-devops`, while visual composition/review remains
+  `ui-designer`.
+
+### Dispatch override + correction policy
+
+- Material mismatch (`requires_override_reason`) must include a deterministic
+  override reason (`--dispatch-override-reason`) before dispatch starts.
+- Completion governance uses final-line `COMPLETION_JSON` evidence; unsupported
+  pass claims are rejected.
+- Noncompliance gets one correction cycle; repeated noncompliance recommends
+  reassignment to a different role/agent instead of repeated resume loops.
+- Transient runner operations may retry with bounded backoff; partial publish
+  outcomes are atomic failures (never half-success).
+
+### Live telemetry privacy boundary
+
+Live activity and chat updates carry operational telemetry only: phase, status,
+progress, commands, files/artifacts, blockers, verification state, and dispatch
+rationale. Never persist or emit private reasoning/chain-of-thought.
+
 Run headless (per `/plan`'s project loop):
 
 ```sh
@@ -153,6 +207,45 @@ node scripts/runner.mjs --plan <id>
 
 Expected output includes the plan's pending steps and, for a role-tagged step, the
 `Adopt the "<role>" role: read <absolute charter path> FIRST …` line.
+
+## Transparent execution roster (v5)
+
+`step.role` names *what* discipline should execute the step. The **execution
+roster** captures the concrete dispatch (role, agent, model, charter,
+resolution source, and a preview of the step context) — separately from what
+actually served each attempt. Two rules make it usable:
+
+1. **Snapshot at activation.** When a plan transitions to `active`, every step
+   without a prior assignment revision gets one written from `resolveRole()`
+   (`../src/roles.mjs`). Adding a step to an already-active plan snapshots
+   immediately. Re-activating a plan is idempotent — history is never
+   overwritten. Draft plans expose a `snapshotted:false` preview instead.
+2. **Audited reassignment.** Changing `steps.role` via `update_step` or
+   `assign_step` on a snapshotted step appends a new revision. `reason` is
+   REQUIRED (server-side), `assigned_by` is recorded, and prior revisions +
+   attempts are preserved. `redo_step` returns the step to `pending` with a
+   review note explaining why.
+
+`get_plan_roster(plan_id)` (MCP tool + `GET /api/plans/:id/roster`) returns per
+step:
+
+- `initial`: revision 1 — what was frozen at activation.
+- `planned`: the latest revision — the current dispatch intent.
+- `live`: what `resolveRole()` would return **right now** (with the caller's
+  `cwd`). The board passes `process.cwd()` so a repo-local `.plan-roles.json`
+  applies; the MCP server passes `null`.
+- `actual`: provenance from the latest attempt — `agent`, `model`,
+  `model_source`, `executor`, `session_ref`.
+- `drift`: booleans for role-tag drift, role-map re-resolution, context edits
+  after the snapshot, and actual-vs-planned execution divergence.
+
+**Actual-execution provenance** lives on `attempts`: `agent`, `model`,
+`model_source`, `session_ref`. `record_attempt` accepts these directly, so
+whoever writes the attempt is responsible for filling them in. Do not fabricate
+a model — a blank field is rendered as *unknown* in the UI, which is the
+truthful outcome when we did not observe the routing. The runner
+(`../scripts/runner.mjs`) writes `model_source=runner-cli` whenever it observed
+the CLI-selected model, and leaves it blank otherwise.
 
 ## Adding or editing a role
 

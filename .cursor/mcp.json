@@ -1,10 +1,13 @@
 {
-  "_note": "plan-ledger MCP server for Cursor 3.x. The server registers 42+ tools (growing toward ~47); Cursor 2.4+ dropped the old 40-tool cap and lazy-loads MCP tools, so the full surface works with no clipping. Copy this into ~/.cursor/mcp.json (all projects) or a project .cursor/mcp.json (this repo); adjust the path in args to where plan-ledger is installed. '_note' is an inert annotation Cursor ignores — delete it if a strict JSON parser ever complains. See docs/CURSOR.md.",
+  "_note": "plan-ledger MCP server for Cursor 3.x — 53 tools registered (47 ledger + 6 RAG sidecar). Cursor 2.4+ dropped the 40-tool cap and lazy-loads MCP tools, so the full surface works with no clipping. This file (a repo-local .cursor/mcp.json) targets THIS checkout via ${workspaceFolder}; for a global install, copy the server entry into ~/.cursor/mcp.json and hard-code the absolute path there. '_note' is an inert annotation Cursor ignores — delete it if a strict JSON parser ever complains. See docs/CURSOR.md.",
   "mcpServers": {
     "plan-ledger": {
       "type": "stdio",
       "command": "node",
-      "args": ["${userHome}/Documents/plan-ledger/src/server.mjs"]
+      "args": ["${workspaceFolder}/src/server.mjs"],
+      "env": {
+        "_docs": "PLAN_LEDGER_DB defaults to ~/Documents/plan-ledger/data/plan-ledger.db (the store shares that path across every entry point). Uncomment PLAN_LEDGER_DB below to pin a workspace-local ledger instead, and PLAN_LEDGER_RAG_DB to isolate the disposable RAG sidecar."
+      }
     }
   }
 }

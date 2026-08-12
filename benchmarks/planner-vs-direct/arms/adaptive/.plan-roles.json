@@ -1,0 +1,28 @@
+{
+  "roles": {
+    "scheduling-architect": {
+      "agent": "generalPurpose",
+      "charter": "../../specialists/scheduling-architect.md",
+      "model": "gpt-5-mini",
+      "note": "Short read-only design pass."
+    },
+    "scheduler-implementer": {
+      "agent": "generalPurpose",
+      "charter": "../../specialists/scheduler-implementer.md",
+      "model": "gpt-5.3-codex",
+      "note": "Code-specialized implementation and correction rounds."
+    },
+    "schedule-test-engineer": {
+      "agent": "generalPurpose",
+      "charter": "../../specialists/schedule-test-engineer.md",
+      "model": "gpt-5-mini",
+      "note": "Read-only black-box contract audit."
+    },
+    "scheduler-perf-engineer": {
+      "agent": "generalPurpose",
+      "charter": "../../specialists/scheduler-perf-engineer.md",
+      "model": "gpt-5.3-codex",
+      "note": "Conditional: dispatch only from measured test evidence."
+    }
+  }
+}

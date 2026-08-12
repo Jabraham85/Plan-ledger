@@ -1,0 +1,11 @@
+{
+  "projectId": 2,
+  "planId": 2,
+  "armRoot": "C:\\Users\\Jose.Abraham\\Projects\\Plan-ledger\\benchmarks\\planner-vs-direct\\arms\\multichat",
+  "steps": {
+    "architect": 4,
+    "implementer": 5,
+    "tester": 6,
+    "performance": 7
+  }
+}

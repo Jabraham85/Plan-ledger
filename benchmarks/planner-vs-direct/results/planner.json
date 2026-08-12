@@ -1,0 +1,77 @@
+{
+  "overallScore": 95.95,
+  "feasibilityPoints": 50,
+  "qualityPoints": 45.95,
+  "feasibilityFraction": 1,
+  "qualityFraction": 0.919,
+  "mathematicalCeiling": {
+    "maxOverallScore": 98.43,
+    "maxQualityFraction": 0.9686,
+    "note": "Proven safe upper bound (possibly not tight): quality uses the theoretical lower bound, and the calibration case has a proven integrality gap (LB=2, optimum=3). An optimum solver may score below this bound."
+  },
+  "failureDecomposition": {
+    "totalInvalid": 0,
+    "timeout": 0,
+    "threw": 0,
+    "validation": 0,
+    "nondeterministic": 0,
+    "inputMutated": 0,
+    "worker": 0,
+    "otherInvalid": 0
+  },
+  "groupBreakdown": {
+    "chains": {
+      "cases": 12,
+      "feasible": 12,
+      "avgQualityAllCases": 1,
+      "avgQualityFeasibleCases": 1
+    },
+    "forks": {
+      "cases": 12,
+      "feasible": 12,
+      "avgQualityAllCases": 0.9495,
+      "avgQualityFeasibleCases": 0.9495
+    },
+    "packing": {
+      "cases": 12,
+      "feasible": 12,
+      "avgQualityAllCases": 0.9582,
+      "avgQualityFeasibleCases": 0.9582
+    },
+    "mixed-dag": {
+      "cases": 8,
+      "feasible": 8,
+      "avgQualityAllCases": 0.895,
+      "avgQualityFeasibleCases": 0.895
+    },
+    "adversarial": {
+      "cases": 4,
+      "feasible": 4,
+      "avgQualityAllCases": 0.8304,
+      "avgQualityFeasibleCases": 0.8304
+    },
+    "calibration": {
+      "cases": 1,
+      "feasible": 1,
+      "avgQualityAllCases": 0.6667,
+      "avgQualityFeasibleCases": 0.6667
+    }
+  },
+  "invalidCases": [],
+  "runtime": {
+    "totalMs": 2393.51,
+    "averageMs": 16.404,
+    "p95Ms": 117.475,
+    "perCaseBudgetMs": 400
+  },
+  "metadata": {
+    "benchmark": "planner-vs-direct",
+    "seed": 1347174734,
+    "caseCount": 49,
+    "gradedAt": "2026-07-16T16:29:00.702Z",
+    "node": "v22.20.0",
+    "root": "C:\\Users\\Jose.Abraham\\Projects\\Plan-ledger\\benchmarks\\planner-vs-direct\\arms\\planner",
+    "nRunsPerArm": 1,
+    "nRunsNote": "Single run per arm (n=1); outcomes are indicative, not statistically conclusive."
+  }
+}

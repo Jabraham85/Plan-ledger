@@ -6,7 +6,7 @@
 // tools, acceptance criteria, carry-forward notes, and a failure log so past
 // pitfalls aren't repeated.
 //
-// DB location: $PLAN_LEDGER_DB, else ./data/plan-ledger.db next to this file.
+// DB location: $PLAN_LEDGER_DB, else ~/Documents/plan-ledger/data/plan-ledger.db.
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -15,7 +15,9 @@ import { join } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { Store, defaultDbPath } from './db.mjs';
+import { reapLoop } from './supervisor.mjs';
 import { resolveRole } from './roles.mjs';
+import { evaluateDispatchPolicy } from './dispatch-policy.mjs';
 import { buildPlanContext, buildProjectContext, groundSlice, stepTerms } from './context.mjs';
 import { extractRepo } from './extract.mjs';
 import { RagStore, defaultRagDbPath } from './rag/store.mjs';
@@ -43,6 +45,11 @@ const roleWarning = (step) => {
     ? `role "${step.role}" is disabled in the role map — dispatch will fall back to orchestrator-decides`
     : `no charter file for role "${step.role}" at ${join(homedir(), '.claude', 'agents', `${step.role}.md`)} and no role-map entry — dispatch will fall back to a generic agent (check for a typo)` };
 };
+
+const dispatchPolicyForStep = (step) => evaluateDispatchPolicy({
+  step,
+  explicit_role: step.role ?? '',
+});
 
 // Mutation acks are SLIM: the caller just wrote the payload, so echoing the full
 // level-2 step back (context + attempts + links + file_refs) only burns context.
@@ -133,30 +140,61 @@ tool('next_step', {
   description:
     'Driver primitive for auto-progression. Returns the lowest-idx WORKABLE step, WITH full context — blocked ' +
     'steps AND steps whose builds_on/blocks-linked dependency steps are not yet done are skipped (reported in ' +
-    'skipped_blocked_steps with a reason). Three shapes: a step → work it; {all_blocked} → everything left waits ' +
-    'on the user or a dependency; {complete} → plan done. After finishing a step (record_attempt) call this to advance.',
-  inputSchema: { plan_id: z.number().int() },
-}, ({ plan_id }) => {
-  const step = store.nextStep(plan_id);
+    'skipped_blocked_steps with a reason). Four shapes: a step → work it; {all_blocked} → everything left waits ' +
+    'on the user or a dependency; {all_in_progress} → another executor owns every remaining step; {complete} → plan ' +
+    'done. After finishing a step (record_attempt) call this to advance. ' +
+    'Pass claim:true to atomically flip the returned step to in_progress in one transaction — required when several ' +
+    'autonomous dispatchers (runners, parallel Task calls) share the ledger, so two callers can never receive the ' +
+    'same step. Default false preserves idempotent peek semantics.',
+  inputSchema: {
+    plan_id: z.number().int(),
+    claim: z.boolean().optional().describe('atomically CAS the returned step to in_progress (default false = peek only)'),
+    executor: z.string().optional().describe('tag stamped on the claim for observability (e.g. "runner-mcp", "cursor")'),
+  },
+}, ({ plan_id, claim, executor }) => {
+  const plan = store.openPlan(plan_id);
+  if (plan.status === 'draft') return {
+    awaiting_approval: true,
+    plan,
+    directive:
+      `Plan #${plan_id} is draft and MUST NOT execute. Present the complete plan to the user and ask ` +
+      `"Approve plan #${plan_id} to begin execution?" Only after explicit approval call ` +
+      `set_plan_status(${plan_id}, "active"), then resume next_step.`,
+  };
+  const step = store.nextStep(plan_id, { claim: !!claim, executor: executor ?? '' });
   if (step === null) return {
     complete: true,
     directive:
       `Plan #${plan_id} is complete. set_plan_status(${plan_id}, "done"), then call next_plan() and keep working ` +
       'the plan it returns — do not stop unless nothing is workable or the user scoped this run.',
   };
+  if (step.all_in_progress) return {
+    ...step,
+    directive:
+      `Plan #${plan_id} is NOT complete: every remaining step is already in_progress ` +
+      `(${step.active_steps.map((s) => `#${s.id}`).join(', ')}). Do not mark the plan done or dispatch duplicates; ` +
+      'wait for those executors, inspect their status, or recover an orphan before retrying next_step.',
+  };
   if (step.all_blocked) return {
     ...step,
     directive:
-      `Every remaining step in plan #${plan_id} waits on the user. set_plan_status(${plan_id}, "blocked"), then ` +
+      `Every remaining step in plan #${plan_id} is blocked or waiting on a dependency. ` +
+      `set_plan_status(${plan_id}, "blocked"), then ` +
       'call next_plan() and continue with the plan it returns — do not stop here.',
   };
   // Resolve the role through the role map (user-file layers only: an MCP server's
   // cwd is not reliably the working repo, so the directive tells the client that a
   // repo-local .plan-roles.json — which the client CAN see — still overrides).
-  const r = resolveRole(step.role, { cwd: null, projectName: store.projectNameForPlan(plan_id) });
+  const policy = step.dispatch_policy || dispatchPolicyForStep(step);
+  const dispatchRole = policy.selected_role || step.role || '';
+  const r = resolveRole(dispatchRole, { cwd: null, projectName: store.projectNameForPlan(plan_id) });
   const dispatch = r.mode === 'dispatch'
     ? `DISPATCH to the "${r.agent}" agent (Claude Code: Agent tool subagent_type "${r.agent}"` +
-      (r.model ? `, model "${r.model}"` : '') + `; Cursor: invoke the /${r.agent} subagent or Task tool; ` +
+      (r.model ? `, model "${r.model}"` : '') +
+      `; Cursor: launch a fresh full agent CLI session with \`agent -p --output-format json` +
+      (r.model ? ` --model "${r.model}"` : '') +
+      ` --trust --force --workspace "<repo>" "<brief>"\`, then record its returned session_id and model_source "cursor-cli"; ` +
+      (r.global_context ? `give it these persistent cross-project role rules: ${r.global_context}; ` : '') +
       (r.charter
         ? `no subagents available: read ${r.charter} and adopt it yourself, then self-review against its ` +
           `Definition of done before recording`
@@ -172,11 +210,17 @@ tool('next_step', {
       ? 'work it (or dispatch to the best-fit role agent), '
       : `work it (role "${step.role}" is ${r.reason === 'disabled' ? 'disabled in the role map' : 'not in the roster or role map'} — ` +
         `pick the best-fit role from docs/ROLES.md yourself, or update_step(${step.id}, role: "<name>")), `;
+  const claimPrefix = step.claimed
+    ? `Step #${step.id} was atomically claimed for you (status is already in_progress). Read attempts + lessons FIRST `
+    : `Work this step now: set_step_status(${step.id}, "in_progress"), read attempts + lessons FIRST `;
   return {
     ...step,
+    dispatch_policy: policy,
     directive:
-      `Work this step now: set_step_status(${step.id}, "in_progress"), read attempts + lessons FIRST (never repeat ` +
-      `a failed approach), ${dispatch}then record_attempt(${step.id}, ...) noting the role + review rounds. After ` +
+      `${claimPrefix}(never repeat ` +
+      `a failed approach), dispatch policy selected "${dispatchRole || 'orchestrator'}" (${policy.selection_mode})` +
+      `${policy.warnings?.length ? ` with warnings: ${policy.warnings.join(' | ')}` : ''}; ${dispatch}` +
+      `then record_attempt(${step.id}, ...) noting the role + review rounds. After ` +
       `that, call next_step(${plan_id}) again — do not end your turn while workable steps remain.`,
   };
 });
@@ -184,18 +228,37 @@ tool('next_step', {
 tool('ready_steps', {
   title: 'Get the concurrently-launchable frontier',
   description:
-    'Return EVERY pending, non-blocked step in a plan whose builds_on/blocks dependencies are already satisfied ' +
-    '(done or skipped) — the full set that could be dispatched RIGHT NOW, not just the lowest-idx one. Uses the ' +
+    'Return pending or failed retryable steps in a plan whose builds_on/blocks dependencies are already satisfied ' +
+    '(done or skipped) — the frontier that could be dispatched RIGHT NOW, not just the lowest-idx one. Uses the ' +
     'same dependency gate as next_step, so the two always agree on what is workable. Steps not listed are either ' +
-    'blocked, waiting on a dependency, or already done/in_progress/failed.',
-  inputSchema: { plan_id: z.number().int() },
-}, ({ plan_id }) => {
-  const steps = store.readySteps(plan_id).map((s) => roleWarning(s));
+    'blocked, waiting on a dependency, already done, or in_progress. Peek first, apply worker-slot and path-conflict ' +
+    'limits, then claim only the selected steps. Failed retryable steps are included in the returned frontier.',
+  inputSchema: {
+    plan_id: z.number().int(),
+    claim: z.boolean().optional().describe('atomically claim returned steps (default false = peek only)'),
+    limit: z.number().int().positive().optional().describe('maximum steps to return or claim'),
+    executor: z.string().optional().describe('tag returned on each claim (e.g. "cursor-interactive")'),
+  },
+}, ({ plan_id, claim, limit, executor }) => {
+  const plan = store.openPlan(plan_id);
+  if (plan.status === 'draft') return {
+    awaiting_approval: true,
+    plan,
+    steps: [],
+    directive:
+      `Plan #${plan_id} is draft. Do not claim or dispatch its steps; present the complete plan and wait for explicit approval.`,
+  };
+  const steps = store.readySteps(plan_id, {
+    claim: !!claim,
+    limit,
+    executor: executor ?? '',
+  }).map((s) => roleWarning(s));
   return {
     steps,
     directive: steps.length
-      ? `These ${steps.length} step(s) are independent and ready — dispatch them CONCURRENTLY (one agent per ` +
-        'step in a single batch), then review each. Steps not listed wait on a dependency or the user.'
+      ? `${claim ? 'These steps are already atomically claimed for this run. ' : 'Apply worker-slot and path-conflict limits before claiming. '}` +
+        `These ${steps.length} step(s) are ready for continuous-refill dispatch. Claim only available, ` +
+        'non-conflicting slots; refill each slot as its agent finishes.'
       : 'Nothing is ready right now — every remaining step is blocked, mid-flight, or waiting on a dependency. ' +
         'Call next_step for the detailed reason.',
   };
@@ -218,7 +281,10 @@ tool('next_plan', {
   };
   return {
     ...plan,
-    directive: `Work plan #${plan.id} ("${plan.title}") now: call next_step(${plan.id}) and keep going — do not stop.`,
+    ...(plan.status === 'draft' ? { awaiting_approval: true } : {}),
+    directive: plan.status === 'draft'
+      ? `Plan #${plan.id} ("${plan.title}") is draft. Present its complete step board and wait for explicit user approval; do not execute it.`
+      : `Work plan #${plan.id} ("${plan.title}") now: call next_step(${plan.id}) and keep going — do not stop.`,
   };
 });
 
@@ -226,14 +292,38 @@ tool('next_plan', {
 
 tool('create_plan', {
   title: 'Create a plan',
-  description: 'Create a new plan. Keep the summary to a tight "what + why"; put execution detail in steps.',
+  description:
+    'Create a new plan. Keep the summary to a tight "what + why"; put execution detail in steps. ' +
+    'Optional consulted_plan_ids records durable prior-plan provenance at creation.',
   inputSchema: {
     title: z.string().describe('short, searchable title'),
     keywords: z.array(z.string()).optional().describe('surface keywords used for matching in list_plans'),
     summary: z.string().optional().describe('one-paragraph what/why, shown when the plan is opened'),
     project_id: z.number().int().optional().describe('owning project (default: current project)'),
+    consulted_plan_ids: z.array(z.number().int()).optional().describe('prior plan ids consulted while drafting this plan'),
+    consulted_keywords: z.array(z.string()).optional().describe('keyword set used to discover consulted plans'),
+    consulted_goal: z.string().optional().describe('planning goal text associated with consultation'),
+    consulted_note: z.string().optional(),
   },
-}, ({ title, keywords, summary, project_id }) => store.createPlan({ title, keywords, summary, project_id }));
+}, ({ title, keywords, summary, project_id, consulted_plan_ids, consulted_keywords, consulted_goal, consulted_note }) =>
+  store.createPlan({ title, keywords, summary, project_id, consulted_plan_ids, consulted_keywords, consulted_goal, consulted_note }));
+
+tool('update_plan', {
+  title: 'Update a plan',
+  description:
+    'Edit mutable plan metadata (title/keywords/summary) and optionally append/refresh consulted prior plans. ' +
+    'Status transitions stay on set_plan_status.',
+  inputSchema: {
+    plan_id: z.number().int(),
+    title: z.string().optional(),
+    keywords: z.array(z.string()).optional(),
+    summary: z.string().optional(),
+    consulted_plan_ids: z.array(z.number().int()).optional().describe('prior plan ids consulted while refining this draft'),
+    consulted_keywords: z.array(z.string()).optional(),
+    consulted_goal: z.string().optional(),
+    consulted_note: z.string().optional(),
+  },
+}, ({ plan_id, ...fields }) => store.updatePlan(plan_id, fields));
 
 tool('add_step', {
   title: 'Add a step to a plan',
@@ -254,7 +344,10 @@ tool('add_step', {
 
 tool('update_step', {
   title: 'Update a step',
-  description: 'Edit a step\'s fields (title/context/tools/role/acceptance_criteria/carry_forward/idx). Only pass what changes.',
+  description:
+    'Edit a step\'s fields (title/context/tools/role/acceptance_criteria/carry_forward/idx). Only pass what changes. ' +
+    'Changing the `role` on a step that already has a plan-time assignment appends an audited revision — `reason` ' +
+    'is REQUIRED then (post-initial reassignment). Optional `assigned_by` tags who made the change (default: user).',
   inputSchema: {
     step_id: z.number().int(),
     title: z.string().optional(),
@@ -264,8 +357,357 @@ tool('update_step', {
     acceptance_criteria: z.string().optional(),
     carry_forward: z.string().optional(),
     idx: z.number().int().optional(),
+    reason: z.string().optional().describe('required when changing `role` on a step with a prior assignment revision'),
+    assigned_by: z.string().max(64).optional().describe('who made the reassignment (default: user)'),
   },
 }, ({ step_id, ...fields }) => slimStep(roleWarning(store.updateStep(step_id, fields))));
+
+tool('assign_step', {
+  title: 'Reassign the specialist that executes a step (audited)',
+  description:
+    'Explicit reassignment path — append a new step-assignment revision with a required reason. Use this from UIs ' +
+    'and reviewers whenever the specialist selection changes (or needs to be re-resolved after a role-map edit). ' +
+    'Preserves attempts and prior assignment revisions.',
+  inputSchema: {
+    step_id: z.number().int(),
+    role: z.string().max(64).optional().describe('new role tag (defaults to current)'),
+    reason: z.string().describe('why this dispatch is changing — required'),
+    assigned_by: z.string().max(64).optional().describe('who is making the change (default: user)'),
+    dispatch_policy: z.object({
+      task_modality: z.string().optional(),
+      required_artifact_type: z.string().optional(),
+      preferred_role: z.string().optional(),
+      fallback_roles: z.array(z.string()).optional(),
+    }).optional(),
+    override_reason: z.string().max(400).optional(),
+  },
+}, ({
+  step_id, role, reason, assigned_by, dispatch_policy, override_reason,
+}) => slimStep(roleWarning(store.assignStep(step_id, {
+  role, reason, assigned_by, dispatch_policy, override_reason,
+}))));
+
+tool('redo_step', {
+  title: 'Send a step back to pending with a reason',
+  description:
+    'Explicit redo action: reset a step to pending, append a note capturing the correction reason, and preserve ' +
+    'every attempt + assignment revision. Use this from a reviewer flow instead of raw set_step_status when the ' +
+    'work should visibly be retried (the note lets the next executor see WHY it is being redone).',
+  inputSchema: {
+    step_id: z.number().int(),
+    reason: z.string().describe('why the step needs to be redone — required'),
+    assigned_by: z.string().max(64).optional().describe('who is requesting the redo (default: user)'),
+  },
+}, ({ step_id, reason, assigned_by }) => slimStep(store.redoStep(step_id, { reason, assigned_by })));
+
+tool('get_plan_roster', {
+  title: 'Get a plan\'s execution roster (planned vs actual)',
+  description:
+    'Return per-step transparency for a plan: initial plan-time assignment, current planned dispatch (latest ' +
+    'revision), the live role-map resolution now, the last observed execution provenance (agent/model/source), ' +
+    'assignment revision history, and drift flags between them. Read-only.',
+  inputSchema: { plan_id: z.number().int() },
+}, ({ plan_id }) => store.getPlanRoster(plan_id, { cwd: null }));
+
+tool('start_activity', {
+  title: 'Start durable step activity',
+  description:
+    'Create a durable live execution activity record keyed by plan/step/run/session. Stores structured run telemetry ' +
+    '(role/agent/model/session/phase/progress/artifacts/verification/blockers/status/outcome/metadata) without chain-of-thought.',
+  inputSchema: {
+    plan_id: z.number().int(),
+    step_id: z.number().int(),
+    run_id: z.string().min(1).max(96),
+    session_ref: z.string().min(1).max(256),
+    role: z.string().max(64).optional(),
+    agent: z.string().max(128).optional(),
+    requested_model: z.string().max(128).optional(),
+    actual_model: z.string().max(128).optional(),
+    model_source: z.string().max(64).optional(),
+    phase: z.string().max(96).optional(),
+    action_summary: z.string().max(500).optional(),
+    command_summary: z.string().max(280).optional(),
+    status: z.enum(['queued', 'in_progress', 'blocked', 'completed', 'failed', 'cancelled']).optional(),
+    outcome: z.enum(['success', 'failed', 'partial', 'blocked', 'cancelled', 'unknown']).optional(),
+    verification_state: z.enum(['pending', 'running', 'passed', 'failed', 'skipped', 'not_applicable']).optional(),
+    blocker: z.string().max(500).optional(),
+    progress_completed: z.number().int().min(0).optional(),
+    progress_total: z.number().int().min(0).optional(),
+    file_count: z.number().int().min(0).optional(),
+    artifact_count: z.number().int().min(0).optional(),
+    recent_artifacts: z.array(z.string()).max(30).optional(),
+    metadata: z.record(z.any()).optional(),
+  },
+}, (args) => store.startActivity(args));
+
+tool('heartbeat_activity', {
+  title: 'Upsert activity heartbeat',
+  description:
+    'Atomically upsert a heartbeat on the plan/step/run/session activity key. Safe for concurrent writers; updates status, phase, progress, counters, models, verification and metadata.',
+  inputSchema: {
+    plan_id: z.number().int(),
+    step_id: z.number().int(),
+    run_id: z.string().min(1).max(96),
+    session_ref: z.string().min(1).max(256),
+    role: z.string().max(64).optional(),
+    agent: z.string().max(128).optional(),
+    requested_model: z.string().max(128).optional(),
+    actual_model: z.string().max(128).optional(),
+    model_source: z.string().max(64).optional(),
+    phase: z.string().max(96).optional(),
+    action_summary: z.string().max(500).optional(),
+    command_summary: z.string().max(280).optional(),
+    status: z.enum(['queued', 'in_progress', 'blocked', 'completed', 'failed', 'cancelled']).optional(),
+    outcome: z.enum(['success', 'failed', 'partial', 'blocked', 'cancelled', 'unknown']).optional(),
+    verification_state: z.enum(['pending', 'running', 'passed', 'failed', 'skipped', 'not_applicable']).optional(),
+    blocker: z.string().max(500).optional(),
+    progress_completed: z.number().int().min(0).optional(),
+    progress_total: z.number().int().min(0).optional(),
+    file_count: z.number().int().min(0).optional(),
+    artifact_count: z.number().int().min(0).optional(),
+    recent_artifacts: z.array(z.string()).max(30).optional(),
+    metadata: z.record(z.any()).optional(),
+  },
+}, (args) => store.upsertActivityHeartbeat(args));
+
+tool('append_activity_event', {
+  title: 'Append timeline or terminal event',
+  description:
+    'Append an event to an existing activity run. timeline events are compacted by retention policy; terminal events are preserved.',
+  inputSchema: {
+    plan_id: z.number().int(),
+    step_id: z.number().int(),
+    run_id: z.string().min(1).max(96),
+    session_ref: z.string().min(1).max(256),
+    event_type: z.enum(['timeline', 'terminal']).optional(),
+    phase: z.string().max(96).optional(),
+    summary: z.string().max(500).optional(),
+    command_summary: z.string().max(280).optional(),
+    status: z.enum(['queued', 'in_progress', 'blocked', 'completed', 'failed', 'cancelled']).optional(),
+    metadata: z.record(z.any()).optional(),
+  },
+}, (args) => store.appendActivityEvent(args));
+
+tool('list_current_activity', {
+  title: 'List current live activity',
+  description:
+    'List currently active activity runs (queued/in_progress/blocked) with derived stale status at read time. Optional event expansion.',
+  inputSchema: {
+    project_id: z.number().int().optional(),
+    plan_id: z.number().int().optional(),
+    step_id: z.number().int().optional(),
+    stale_after_ms: z.number().int().min(1000).max(86_400_000).optional(),
+    include_events: z.boolean().optional(),
+    events_limit: z.number().int().min(1).max(200).optional(),
+    limit: z.number().int().min(1).max(500).optional(),
+  },
+}, (args) => store.listCurrentActivity(args));
+
+tool('list_recent_activity', {
+  title: 'List recent activity history',
+  description:
+    'List recent activity runs (active and completed) ordered by newest heartbeat/update, with derived stale status and optional event expansion.',
+  inputSchema: {
+    project_id: z.number().int().optional(),
+    plan_id: z.number().int().optional(),
+    step_id: z.number().int().optional(),
+    stale_after_ms: z.number().int().min(1000).max(86_400_000).optional(),
+    include_events: z.boolean().optional(),
+    events_limit: z.number().int().min(1).max(200).optional(),
+    limit: z.number().int().min(1).max(500).optional(),
+  },
+}, (args) => store.listRecentActivity(args));
+
+// ---- execution leases (unavoidable lifecycle primitive) --------------------
+
+tool('open_execution_lease', {
+  title: 'Open a supervised execution lease on a step',
+  description:
+    'Atomically claim a step (pending/failed → in_progress), create the paired activity run, and open an ' +
+    'execution lease so the runner/MCP/CLI/board execution surfaces terminalize the same way. Refused when the ' +
+    'step is not claimable or another lease is already open. Callers must heartbeat_execution_lease periodically ' +
+    'and close_execution_lease when the step terminalizes; reap_stale_leases handles supervisor death.',
+  inputSchema: {
+    plan_id: z.number().int(),
+    step_id: z.number().int(),
+    executor: z.string().max(64).optional(),
+    run_id: z.string().max(96).optional(),
+    session_ref: z.string().max(256).optional(),
+    role: z.string().max(64).optional(),
+    agent: z.string().max(128).optional(),
+    requested_model: z.string().max(128).optional(),
+    actual_model: z.string().max(128).optional(),
+    model_source: z.string().max(64).optional(),
+    child_pid: z.number().int().nullable().optional(),
+    deadline_ms: z.number().int().positive().max(24 * 3600 * 1000).optional(),
+    stale_after_ms: z.number().int().min(5000).max(24 * 3600 * 1000).optional(),
+    dispatch_policy: z.object({
+      task_modality: z.string().optional(),
+      required_artifact_type: z.string().optional(),
+      preferred_role: z.string().optional(),
+      fallback_roles: z.array(z.string()).optional(),
+    }).optional(),
+    lease_policy: z.object({
+      first_artifact_deadline_ms: z.number().int().positive().optional(),
+      heartbeat_interval_ms: z.number().int().positive().optional(),
+      stale_after_ms: z.number().int().positive().optional(),
+      max_auto_reassignments: z.number().int().min(0).optional(),
+    }).optional(),
+    override_reason: z.string().max(400).optional(),
+    phase: z.string().max(96).optional(),
+    action_summary: z.string().max(500).optional(),
+    progress_total: z.number().int().min(0).optional(),
+    progress_completed: z.number().int().min(0).optional(),
+    metadata: z.record(z.any()).optional(),
+  },
+}, (args) => store.openExecutionLease(args));
+
+tool('heartbeat_execution_lease', {
+  title: 'Heartbeat an open execution lease',
+  description:
+    'Bump the lease clock and upsert the paired activity in one call. Rejects heartbeat on a closed/cancelled lease.',
+  inputSchema: {
+    lease_id: z.number().int(),
+    role: z.string().max(64).optional(),
+    agent: z.string().max(128).optional(),
+    actual_model: z.string().max(128).optional(),
+    model_source: z.string().max(64).optional(),
+    child_pid: z.number().int().nullable().optional(),
+    phase: z.string().max(96).optional(),
+    action_summary: z.string().max(500).optional(),
+    command_summary: z.string().max(280).optional(),
+    status: z.enum(['queued', 'in_progress', 'blocked']).optional(),
+    verification_state: z.enum(['pending', 'running', 'passed', 'failed', 'skipped', 'not_applicable']).optional(),
+    blocker: z.string().max(500).optional(),
+    progress_completed: z.number().int().min(0).optional(),
+    progress_total: z.number().int().min(0).optional(),
+    file_count: z.number().int().min(0).optional(),
+    artifact_count: z.number().int().min(0).optional(),
+    recent_artifacts: z.array(z.string()).max(30).optional(),
+    metadata: z.record(z.any()).optional(),
+    deadline_ms: z.number().int().positive().max(24 * 3600 * 1000).optional(),
+  },
+}, ({ lease_id, ...patch }) => store.heartbeatExecutionLease(lease_id, patch));
+
+tool('close_execution_lease', {
+  title: 'Terminalize an execution lease',
+  description:
+    'Atomically append a `terminal` activity event, upsert the activity to a terminal status, optionally record an ' +
+    'attempt with a verdict, and (for pass) require a verification disposition (verified|not_applicable). Idempotent ' +
+    'on an already-closed lease. Non-success closes without an attempt reset the step to failed so it stays retryable.',
+  inputSchema: {
+    lease_id: z.number().int(),
+    outcome: z.enum(['success', 'failed', 'partial', 'blocked', 'cancelled']).optional(),
+    close_reason: z.string().max(200).optional(),
+    terminal_summary: z.string().max(500).optional(),
+    terminal_phase: z.string().max(96).optional(),
+    terminal_metadata: z.record(z.any()).optional(),
+    verification_state: z.enum(['pending', 'running', 'passed', 'failed', 'skipped', 'not_applicable']).optional(),
+    step_verdict: z.enum(['pass', 'fail', 'partial', 'blocked']).optional(),
+    attempt: z.object({
+      what_tried: z.string(),
+      result: z.string().optional(),
+      role: z.string().optional(),
+      executor: z.string().optional(),
+      agent: z.string().optional(),
+      model: z.string().optional(),
+      model_source: z.string().optional(),
+      session_ref: z.string().optional(),
+      completion_payload: z.any().optional(),
+    }).optional(),
+    completion_payload: z.any().optional(),
+    disposition: z.enum(['verified', 'not_applicable', 'deferred', 'blocked', 'legacy_unknown']).optional(),
+    disposition_reason: z.string().max(400).optional(),
+  },
+}, ({ lease_id, ...rest }) => store.closeExecutionLease(lease_id, rest));
+
+tool('reap_stale_leases', {
+  title: 'Reap stale/deadline-breached execution leases',
+  description:
+    'Sweep open leases whose deadline has passed or that have been silent longer than stale_after_ms. Each reaped ' +
+    'lease is cancelled with a terminal event, and its step drops back to failed so a fresh supervisor can retry it.',
+  inputSchema: {
+    plan_id: z.number().int().optional(),
+    grace_ms: z.number().int().min(0).max(24 * 3600 * 1000).optional(),
+    dispatch_policy: z.object({
+      task_modality: z.string().optional(),
+      required_artifact_type: z.string().optional(),
+      preferred_role: z.string().optional(),
+      fallback_roles: z.array(z.string()).optional(),
+    }).optional(),
+    lease_policy: z.object({
+      first_artifact_deadline_ms: z.number().int().positive().optional(),
+      heartbeat_interval_ms: z.number().int().positive().optional(),
+      stale_after_ms: z.number().int().positive().optional(),
+      max_auto_reassignments: z.number().int().min(0).optional(),
+    }).optional(),
+    override_reason: z.string().max(400).optional(),
+  },
+}, (args) => store.reapStaleLeases(args ?? {}));
+
+tool('list_execution_leases', {
+  title: 'List execution leases (open or all)',
+  description: 'Read-only listing with optional filters (plan/step/status). Newest first.',
+  inputSchema: {
+    plan_id: z.number().int().optional(),
+    step_id: z.number().int().optional(),
+    status: z.enum(['open', 'closed', 'cancelled']).optional(),
+  },
+}, (args) => store.listExecutionLeases(args ?? {}));
+
+tool('get_execution_lease', {
+  title: 'Get an execution lease',
+  description: 'Read-only detail for a single lease id.',
+  inputSchema: { lease_id: z.number().int() },
+}, ({ lease_id }) => store.getExecutionLease(lease_id));
+
+tool('set_step_disposition', {
+  title: 'Set a step\'s verification disposition (audited)',
+  description:
+    'Record the closure decision for a step: verified | not_applicable | deferred | blocked | legacy_unknown. ' +
+    'deferred / blocked / not_applicable require a reason. Verified is auto-set by record_attempt(pass); this ' +
+    'tool is for admin/UI reconciliation of steps closed outside the normal record_attempt path.',
+  inputSchema: {
+    step_id: z.number().int(),
+    disposition: z.enum(['verified', 'not_applicable', 'deferred', 'blocked', 'legacy_unknown']),
+    reason: z.string().optional(),
+  },
+}, ({ step_id, disposition, reason }) => store.setStepDisposition(step_id, { disposition, reason }));
+
+tool('assess_plan_terminalization', {
+  title: 'Dry-run the plan-done gate',
+  description:
+    'Read-only: explain exactly which invariants would block setPlanStatus(done) right now (active steps, missing ' +
+    'dispositions, open leases, non-terminal activity). Useful for UIs before offering "close plan".',
+  inputSchema: { plan_id: z.number().int() },
+}, ({ plan_id }) => store.assessPlanTerminalization(plan_id));
+
+tool('assess_plan_reconciliation', {
+  title: 'Read terminalization reconciliation state',
+  description:
+    'Read-only: summarize whether an active plan is contradiction-eligible (all strict blockers cleared) and how ' +
+    'auto-terminalization would classify it under the current PLAN_LEDGER_AUTO_TERMINALIZE mode.',
+  inputSchema: {
+    plan_id: z.number().int(),
+    source: z.string().max(120).optional(),
+    strict: z.boolean().optional(),
+  },
+}, ({ plan_id, source, strict }) => store.assessPlanReconciliation(plan_id, { source, strict }));
+
+tool('assess_completion_backfill', {
+  title: 'Read completion-validation backfill summary',
+  description:
+    'Read-only summary of completion validation states across attempts (pass|fail|legacy_unknown), ' +
+    'including legacy missing-payload counts. Does not rewrite historical data.',
+  inputSchema: {},
+}, () => store.assessCompletionBackfill());
+
+tool('assess_activity_backfill', {
+  title: 'Read activity backfill summary',
+  description:
+    'Read-only summary of synthetic activity_backfill_missing markers for historical steps with no activity history.',
+  inputSchema: {},
+}, () => store.assessActivityBackfill());
 
 // ---- the working loop -----------------------------------------------------
 
@@ -273,7 +715,9 @@ tool('record_attempt', {
   title: 'Record an attempt on a step',
   description:
     'Log what you tried and how it went. verdict=pass marks the step done; fail/partial marks it failed (still ' +
-    'retryable) and is preserved in the failure log so the approach is not repeated. ALWAYS record failures.',
+    'retryable) and is preserved in the failure log so the approach is not repeated. ALWAYS record failures. ' +
+    'Optional provenance fields (agent/model/model_source/session_ref) capture WHAT actually served the call, ' +
+    'separate from the step\'s PLANNED assignment — leave blank when unknown (never fabricate a model).',
   inputSchema: {
     step_id: z.number().int(),
     what_tried: z.string().describe('the approach taken — specific enough that "do not repeat" is actionable'),
@@ -282,6 +726,12 @@ tool('record_attempt', {
     role: z.string().max(64).optional().describe('subagent role that executed the attempt (e.g. implementer)'),
     review_rounds: z.number().int().min(0).optional().describe('orchestrator send-back rounds before acceptance'),
     executor: z.string().max(64).optional().describe('who drove the attempt (e.g. runner-mcp, runner-inject, orchestrator)'),
+    agent: z.string().max(128).optional().describe('concrete agent that actually ran (e.g. general-purpose, cursor-top-level)'),
+    model: z.string().max(128).optional().describe('concrete model that actually served the call (e.g. claude-sonnet-4-5)'),
+    model_source: z.enum(['role-map', 'runner-cli', 'telemetry', 'self-report', 'user', 'unknown']).optional()
+      .describe('provenance of the model field (default unknown; use runner-cli/telemetry when observed programmatically)'),
+    session_ref: z.string().max(256).optional().describe('optional link to the chat transcript or session id'),
+    completion_payload: z.any().optional().describe('machine-checkable completion_payload_v2 evidence payload'),
     layman: z.string().optional().describe('plain-English "what was done + thoughts" for this step (distinct from what_tried) — set/overwrites the step\'s layman box'),
   },
 }, ({ step_id, ...rest }) => {
@@ -530,6 +980,40 @@ tool('recall', {
   },
 }, ({ query, limit, all }) => store.recall(query, limit ?? 8, all));
 
+tool('planner_start', {
+  title: 'Planning preflight: discover relevant prior plans',
+  description:
+    'Run BEFORE decomposing a new goal into steps. Extracts (or accepts) a bounded keyword set and runs ONE ' +
+    'cross-project keyword search over plan SURFACE metadata (title + keywords + summary — never step bodies). ' +
+    'Returns ranked matches split into `completed` (status done — usable as finished evidence) and ' +
+    '`related_active` (still in flight — NOT completed evidence), each with plan id/title/project/keywords/status/' +
+    'updated_at and only short relevant carry-forward/lesson snippets. Pass draft_plan_id to durably record which ' +
+    'prior plans informed the draft (surfaced later by open_plan as consulted_plans).',
+  inputSchema: {
+    goal: z.string().optional().describe('the new goal text; keywords are extracted from it when `keywords` is omitted'),
+    keywords: z.array(z.string()).optional().describe('explicit bounded keyword set (overrides extraction)'),
+    limit: z.number().int().positive().optional().describe('max matches per bucket (default 5)'),
+    max_keywords: z.number().int().min(1).max(8).optional().describe('cap on the keyword set size (max 8; default 8)'),
+    draft_plan_id: z.number().int().optional().describe('if set, record the discovered matches as provenance on this draft'),
+  },
+}, ({ goal, keywords, limit, max_keywords, draft_plan_id }) =>
+  store.plannerStart({ goal, keywords, limit, max_keywords, draft_plan_id }));
+
+tool('record_plan_consultation', {
+  title: 'Record prior plans a draft consulted',
+  description:
+    'Durably attach prior-plan provenance to a (usually draft) plan: which already-existing plans informed it, the ' +
+    'status each had when consulted (frozen), and the keywords that surfaced them. Deduped per (draft, prior) pair. ' +
+    'Surfaced by open_plan as `consulted_plans`. planner_start(draft_plan_id) calls this for you.',
+  inputSchema: {
+    plan_id: z.number().int().describe('the draft plan that consulted prior work'),
+    consulted_plan_ids: z.array(z.number().int()).describe('prior plan ids that informed the draft'),
+    keywords: z.array(z.string()).optional().describe('the keyword set used during discovery'),
+    goal: z.string().optional().describe('the goal text (stored as the consultation note when note is omitted)'),
+    note: z.string().optional(),
+  },
+}, ({ plan_id, ...rest }) => store.recordPlanConsultation(plan_id, rest));
+
 // ---- templates (reusable plan skeletons) -----------------------------------
 
 tool('list_templates', {
@@ -638,10 +1122,18 @@ tool('suggest_file_refs', {
 
 tool('set_plan_status', {
   title: 'Set plan status',
-  description: 'draft | active | done | abandoned | blocked (blocked = every remaining step waits on the user; skipped by autonomous runs).',
-  inputSchema: { plan_id: z.number().int(), status: z.enum(['draft', 'active', 'done', 'abandoned', 'blocked']) },
-}, ({ plan_id, status }) => {
-  const plan = store.setPlanStatus(plan_id, status);
+  description: 'draft | active | done | abandoned | blocked (blocked = every remaining step waits on the user; ' +
+    'skipped by autonomous runs). `done` is now GATED: rejected while any step is active, any execution lease is ' +
+    'open, any activity run is non-terminal, or any closed step lacks a verification disposition. Pass ' +
+    'force:true with reason to record an audited forced closure (completion_lock).',
+  inputSchema: {
+    plan_id: z.number().int(),
+    status: z.enum(['draft', 'active', 'done', 'abandoned', 'blocked']),
+    force: z.boolean().optional().describe('bypass the done-gate; requires reason'),
+    reason: z.string().optional().describe('required when force:true — recorded as plans.completion_lock audit trail'),
+  },
+}, ({ plan_id, status, force, reason }) => {
+  const plan = store.setPlanStatus(plan_id, status, { force: !!force, reason: reason ?? '' });
   if (status === 'done' || status === 'blocked') return {
     ...plan,
     directive:
@@ -675,6 +1167,20 @@ registerRagTools(server, ragStore);
 
 // ---- boot -----------------------------------------------------------------
 
+// Boot a bounded reaper so any lease left orphaned by a caller that
+// crashed mid-tool (agent exited before close_execution_lease) closes as
+// `cancelled` within one interval — this is how MCP callers get the same
+// stale-recovery contract the board already runs.
+const reapInterval = Math.max(5_000, Number(process.env.PLAN_LEDGER_REAP_INTERVAL_MS) || 60_000);
+const reapStale = Math.max(5_000, Number(process.env.PLAN_LEDGER_REAP_STALE_MS) || 120_000);
+const reaper = reapLoop(store, {
+  interval_ms: reapInterval,
+  stale_after_ms: reapStale,
+  logger: (msg) => console.error(`[plan-ledger] ${msg}`),
+});
+process.on('SIGINT', () => { reaper.stop(); try { store.close(); } catch {} process.exit(0); });
+process.on('exit', () => { reaper.stop(); try { store.close(); } catch {} });
+
 const transport = new StdioServerTransport();
 await server.connect(transport);
-console.error(`[plan-ledger] up — db: ${dbPath}`);
+console.error(`[plan-ledger] up — db: ${dbPath} — reap every ${reaper.interval_ms}ms (stale=${reaper.stale_after_ms}ms)`);

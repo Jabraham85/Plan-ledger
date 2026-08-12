@@ -30,29 +30,34 @@
 // Per-step usage logging (improvement #4): every attempt this runner records also gets
 // a "usage: in=… out=… cost=$… turns=… model=…" line appended to its result field.
 //
-// PARALLEL FRONTIER (plan-ledger step 554, not yet wired into this runner): the
-// store gained readySteps(planId) — the full set of pending, non-blocked steps
-// whose builds_on/blocks deps are already satisfied (same gate as nextStep, so
-// the two always agree) — and the MCP tool ready_steps exposes it for an agent
-// to dispatch a batch concurrently. This file's own concurrency (spawns.get,
-// markInProgress/sweepOrphans, budgetOrLimitStop, the retry-on-limit sleep loop)
-// is single-step-at-a-time and load-bearing; Promise.all'ing runAgent over a
-// readySteps() batch here needs those to become per-step-safe (shared usage
-// counters, orphan sweep keyed correctly under concurrent in_progress marks,
-// a global stopAll that doesn't half-apply mid-batch) before it's safe to flip
-// on. Left as a documented follow-up rather than risking the existing sequential
-// path: a future `--parallel` flag should keep sequential as the DEFAULT and,
-// per plan, pull readySteps(), Promise.all runAgent (or runInjected) over the
-// batch, then re-pull once the batch settles.
+// PARALLEL MODE (--parallel): continuous-refill dispatch via runParallelSupervisor.
+// Peeks readySteps(), claims non-conflicting steps up to --max-workers, refills
+// each slot immediately on completion (never waits for a whole batch). Sequential
+// mode remains the default single-step path below.
 
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import net from 'node:net';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { randomUUID } from 'node:crypto';
 import { Store, defaultDbPath } from '../src/db.mjs';
-import { resolveRole } from '../src/roles.mjs';
-import { parseVerdict, parseVerify, applyVerifyGate, formatUsageLine, appendUsageToLatestAttempt } from './runner-lib.mjs';
+import { reapLoop } from '../src/supervisor.mjs';
+import { runParallelSupervisor, clampMaxWorkers } from '../src/parallel-supervisor.mjs';
+import { DEFAULT_STAFF_ROLES, resolveRole, listCursorModels } from '../src/roles.mjs';
+import { evaluateDispatchPolicy } from '../src/dispatch-policy.mjs';
+import { parseVerify, applyVerifyGate, formatUsageLine, appendUsageToLatestAttempt } from './runner-lib.mjs';
+import {
+  runDispatchPreflight,
+  parseGovernanceHints,
+  parseCompletionContract,
+  evaluateCompletionContract,
+  detectNoncomplianceEscalation,
+  safeActivitySummary,
+} from './execution-governance.mjs';
+import { createWorktreePool, defaultWorktreeBase } from './worktree-pool.mjs';
+import { createParallelStepRunner } from './runner-step.mjs';
 
 // Resolve a directly-spawnable claude binary. On Windows the PATH `claude` is a
 // .cmd shim that Node's spawn can't launch without a shell — but it wraps a real
@@ -94,27 +99,36 @@ const retryOnLimit = flag('--retry-on-limit'); // on a usage/rate-limit stop, sl
 const retryMinutes = Number(val('--retry-minutes', 30)) || 30;
 const maxRetries = Number(val('--max-retries', 48)) || 48; // safety cap (48 × 30min ≈ 24h)
 const model = val('--model');
+const dispatchOverrideReason = val('--dispatch-override-reason', process.env.PLAN_LEDGER_DISPATCH_OVERRIDE_REASON || '').trim();
 const permissionMode = val('--permission-mode', 'acceptEdits');
 const allowedTools = val('--allowed-tools') || val('--allowedTools'); // comma/space list; scopes what agents may do
 const budgetUsd = val('--budget'); // per-agent USD cap (claude --max-budget-usd)
 const inject = flag('--inject'); // inject step context into a DIRECT prompt (no MCP in agent); runner records + tracks usage
 const lean = flag('--lean'); // spawn agents with --strict-mcp-config so they skip the workspace's MCP/tool baggage (only the step's own tools)
+const heartbeatMs = Math.min(60_000, Math.max(1_000, Number(val('--heartbeat-ms', process.env.PLAN_LEDGER_HEARTBEAT_MS || 60_000)) || 60_000));
+const parallel = flag('--parallel');
+const maxWorkers = clampMaxWorkers(Number(val('--max-workers', 2)));
+const repoRoot = val('--repo-root', process.cwd());
+const worktreeBase = val('--worktree-base', defaultWorktreeBase(repoRoot));
+const skipWorktrees = flag('--skip-worktrees');
 const usage = { cost: 0, in: 0, out: 0, turns: 0, agents: 0 };
+const cursorModelCatalog = listCursorModels();
 
-if (!planId && !projectId) { console.error('usage: runner.mjs (--plan <id> | --project <id>) [--live] [--inject] [--lean] [--max-plans N] [--max-steps N] [--budget USD] [--model NAME]'); process.exit(2); }
+if (!planId && !projectId) { console.error('usage: runner.mjs (--plan <id> | --project <id>) [--live] [--parallel] [--max-workers N] [--repo-root PATH] [--worktree-base PATH] [--skip-worktrees] [--inject] [--lean] [--max-plans N] [--max-steps N] [--budget USD] [--model NAME] [--dispatch-override-reason "..."]'); process.exit(2); }
+if (parallel && projectId) { console.error('--parallel requires --plan (not --project continuous mode)'); process.exit(2); }
 
 const dbPath = defaultDbPath();
 const store = new Store(dbPath);
 
-// Orphan sweep: steps THIS RUN marked in_progress whose agent never recorded an
+// Orphan sweep: steps THIS RUN claimed in_progress whose agent never recorded an
 // attempt get reset to pending on pause/stop, so a dead agent doesn't leave the
-// step wedged "running" on the board. Only ids we marked are touched — other
+// step wedged "running" on the board. Only ids we claimed are touched — other
 // concurrent runs' in_progress steps are left alone.
-const markedInProgress = new Map(); // step_id -> attempts count at mark time (this run only)
-function markInProgress(step) {
+const markedInProgress = new Map(); // step_id -> attempts count at claim time (this run only)
+function trackClaim(step) {
   markedInProgress.set(step.id, step.attempts?.length ?? 0);
-  store.setStepStatus(step.id, 'in_progress');
 }
+const executorId = inject ? 'runner-inject' : 'runner-mcp';
 function sweepOrphans() {
   for (const [id, n] of markedInProgress) {
     try {
@@ -128,22 +142,88 @@ function sweepOrphans() {
   markedInProgress.clear();
 }
 sweepOrphans(); // startup: nothing tracked yet (a fresh run never resets other runs' steps)
-process.on('SIGINT', () => { try { sweepOrphans(); } catch {} store.close(); process.exit(130); });
 
-// Role-tagged steps: resolve through the role map (src/roles.mjs — repo
-// .plan-roles.json / ~/.claude/plan-roles.json / default charter chain). A headless
-// -p agent can't be spawned AS a subagent type, so the prompt tells it to read +
-// inhabit the RESOLVED charter file (absolute path — the agent expands nothing).
-// The map's `agent` field is intentionally unused here; adopt-by-reading is the
-// whole mechanism. Disabled/unknown/charterless roles → today's untagged prompt.
-function resolveStepRole(step) {
-  return resolveRole(step.role, { cwd: process.cwd(), projectName: store.projectNameForPlan(step.plan_id) });
+// Boot the same bounded reaper the board/MCP use so orphan execution leases
+// (from a previous crashed runner, an agent that died between open/close, or
+// a deadline breach mid-run) close as `cancelled` within one interval and
+// stop blocking plan-done invariants. Tick once at startup and then run in
+// the background for the lifetime of this run.
+const reapInterval = Math.max(5_000, Number(process.env.PLAN_LEDGER_REAP_INTERVAL_MS) || 60_000);
+const reapStale = Math.max(5_000, Number(process.env.PLAN_LEDGER_REAP_STALE_MS) || 120_000);
+const reaper = reapLoop(store, {
+  interval_ms: reapInterval,
+  stale_after_ms: reapStale,
+  logger: (msg) => console.log(`  ${msg}`),
+  onReap: (res) => {
+    for (const r of (res.reaped || [])) {
+      console.log(`  ♻ reaped stale lease #${r.lease_id} (plan #${r.plan_id}, step #${r.step_id}): ${r.reason}`);
+    }
+  },
+});
+const leasePolicyTemplate = {
+  first_artifact_deadline_ms: 30 * 60 * 1000,
+  heartbeat_interval_ms: heartbeatMs,
+  stale_after_ms: Math.max(30_000, heartbeatMs * 3),
+  max_auto_reassignments: Math.max(0, Number(process.env.PLAN_LEDGER_MAX_AUTO_REASSIGNMENTS ?? 1) || 0),
+};
+process.on('SIGINT', () => {
+  try { reaper.stop(); } catch {}
+  try { sweepOrphans(); } catch {}
+  store.close();
+  process.exit(130);
+});
+
+function dispatchPlanForStep(step) {
+  const explicitRole = String(step.role ?? '').trim();
+  const policy = evaluateDispatchPolicy({
+    step,
+    explicit_role: explicitRole,
+    candidate_roles: DEFAULT_STAFF_ROLES,
+    resolved_model: '',
+    available_models: cursorModelCatalog.models || [],
+  });
+  const dispatchRole = explicitRole || policy.selected_role || '';
+  const roleResolution = resolveRole(dispatchRole, { cwd: process.cwd(), projectName: store.projectNameForPlan(step.plan_id) });
+  const requestedModel = model ?? (roleResolution.mode === 'dispatch' ? (roleResolution.model || '') : '');
+  const resolvedPolicy = evaluateDispatchPolicy({
+    step,
+    explicit_role: explicitRole,
+    candidate_roles: DEFAULT_STAFF_ROLES,
+    resolved_model: requestedModel,
+    available_models: cursorModelCatalog.models || [],
+  });
+  return { policy: resolvedPolicy, dispatchRole, roleResolution, requestedModel };
 }
-function roleLines(r) {
-  return r.mode === 'dispatch' && r.charter
-    ? [`Adopt the "${r.role}" role: read ${r.charter} FIRST and follow its operating ` +
-       `principles, evidence rules, and Definition of done as your own. Your report must use its Report format.`]
-    : [];
+
+function roleLines(r, policy = null) {
+  if (r.mode !== 'dispatch') return [];
+  const lines = [];
+  if (policy?.required_capabilities?.length) {
+    lines.push(`Dispatch policy required capabilities: ${policy.required_capabilities.map((c) => `${c.capability}(${c.weight})`).join(', ')}`);
+    lines.push(`Dispatch policy selected role: ${policy.selected_role} (${policy.selection_mode})`);
+  }
+  if (r.global_context) lines.push(`Persistent "${r.role}" rules (apply across projects): ${r.global_context}`);
+  if (r.charter) lines.push(`Adopt the "${r.role}" role: read ${r.charter} FIRST and follow its operating ` +
+    `principles, evidence rules, and Definition of done as your own. Your report must use its Report format.`);
+  return lines;
+}
+
+function checkPortReady(port, timeoutMs = 800) {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    let done = false;
+    const finish = (ok) => {
+      if (done) return;
+      done = true;
+      try { socket.destroy(); } catch {}
+      resolve(ok);
+    };
+    socket.setTimeout(timeoutMs);
+    socket.once('connect', () => finish(true));
+    socket.once('timeout', () => finish(false));
+    socket.once('error', () => finish(false));
+    socket.connect(port, '127.0.0.1');
+  });
 }
 
 // Compact inlines for the step payload the runner already holds (nextStep embeds
@@ -164,11 +244,13 @@ function fileRefLines(step) {
     : [];
 }
 
-function buildPrompt(step, r = resolveStepRole(step)) {
+function buildPrompt(step, dispatch) {
+  const r = dispatch.roleResolution;
+  const dispatchRole = dispatch.dispatchRole;
   return [
     `You are executing exactly ONE step of a plan, using the plan-ledger MCP tools. Do only this step, then stop.`,
     `Plan #${step.plan_id}, step #${step.id} (position ${step.idx}): "${step.title}".`,
-    ...roleLines(r),
+    ...roleLines(r, dispatch.policy),
     ``,
     ...lessonLines(step),
     ...fileRefLines(step),
@@ -177,7 +259,7 @@ function buildPrompt(step, r = resolveStepRole(step)) {
     `2. Read the attempts and lessons FIRST — do NOT repeat an approach already marked failed.`,
     `3. Do the work to satisfy the acceptance criteria, using only this step's context and tools.`,
     `4. Call record_attempt(${step.id}, …): verdict "pass" on success, "fail"/"partial" otherwise, with a specific what_tried.`,
-    `   Always include executor: "runner-mcp"${step.role ? ` and role: "${step.role}"` : ''} in the record_attempt arguments.`,
+    `   Always include executor: "runner-mcp"${dispatchRole ? ` and role: "${dispatchRole}"` : ''} in the record_attempt arguments.`,
     `5. If anything must reach the next step, call write_carry_forward.`,
     `Keep your context small — do not load other plans or steps.`,
   ].join('\n');
@@ -188,19 +270,38 @@ function buildPrompt(step, r = resolveStepRole(step)) {
 // to null (judge by DB state only, record_attempt already ran in-agent), inject
 // mode falls back to an explicit error-shaped result (the RUNNER must record a
 // fail attempt, so it needs a real object).
-function spawnClaude(args, fallback = null) {
+function spawnClaude(args, fallback = null, hooks = {}) {
+  const spawnOpts = { stdio: ['ignore', 'pipe', 'inherit'] };
+  if (hooks.cwd) spawnOpts.cwd = hooks.cwd;
   return new Promise((resolve) => {
     let out = '';
-    const child = spawn(claudeResolved.cmd, [...claudeResolved.prependArgs, ...args], { stdio: ['ignore', 'pipe', 'inherit'] });
+    const started = Date.now();
+    const child = spawn(claudeResolved.cmd, [...claudeResolved.prependArgs, ...args], spawnOpts);
+    let hb = null;
+    if (hooks.onStart) hooks.onStart({ pid: child.pid });
+    if (hooks.onHeartbeat) {
+      hb = setInterval(() => {
+        hooks.onHeartbeat({
+          elapsed_ms: Date.now() - started,
+          output_chars: out.length,
+        });
+      }, hooks.heartbeat_ms || heartbeatMs);
+    }
     child.stdout.on('data', (d) => { out += d; });
     child.on('close', () => {
+      if (hb) clearInterval(hb);
+      if (hooks.onClose) hooks.onClose({ elapsed_ms: Date.now() - started });
       try {
         const r = JSON.parse(out), u = r.usage || {};
         resolve({ isError: !!r.is_error, apiErrorStatus: r.api_error_status || null, stopReason: r.stop_reason || '', result: r.result || '', cost: r.total_cost_usd || 0, turns: r.num_turns || 0,
           tin: (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0), tout: u.output_tokens || 0 });
       } catch { resolve(fallback); }
     });
-    child.on('error', (e) => { console.error('  spawn error:', e.message); resolve(fallback); });
+    child.on('error', (e) => {
+      if (hb) clearInterval(hb);
+      console.error('  spawn error:', e.message);
+      resolve(fallback);
+    });
   });
 }
 
@@ -209,25 +310,26 @@ function spawnClaude(args, fallback = null) {
 // too. Before this, only --inject mode could detect a 429/limit, so the default
 // mode burned max-attempts on limit errors and "paused for a human" instead of
 // sleeping and retrying.
-function runAgent(step) {
-  const r = resolveStepRole(step); // once per step: prompt line + model override share it
-  const args = ['-p', buildPrompt(step, r), '--output-format', 'json', '--permission-mode', permissionMode];
+function runAgent(step, dispatch, hooks = {}) {
+  const r = dispatch.roleResolution; // one deterministic policy pass per step
+  const args = ['-p', buildPrompt(step, dispatch), '--output-format', 'json', '--permission-mode', permissionMode];
   if (lean) args.push('--strict-mcp-config'); // note: non-inject mode needs plan-ledger MCP, so --lean suits --inject
   if (allowedTools) args.push('--allowedTools', allowedTools);
   if (budgetUsd) args.push('--max-budget-usd', budgetUsd);
-  const m = model ?? (r.mode === 'dispatch' ? r.model : null); // CLI --model beats the map's per-role model
+  const m = dispatch.requestedModel || null; // CLI --model beats role-map model
   if (m) args.push('--model', m);
-  return spawnClaude(args, null).then((res) => res && { ...res, model: m }); // unparseable/empty → judge by DB state only, as before
+  return spawnClaude(args, null, hooks).then((res) => res && { ...res, model: m }); // unparseable/empty → judge by DB state only, as before
 }
 
 // INJECTION MODE — give the agent its task DIRECTLY (no MCP, no get_step/record_attempt
 // plumbing) and let the RUNNER record the outcome from the agent's JSON. Removes the
 // per-agent MCP tool-schema overhead and the indirection that makes cold agents fumble.
-function buildDirectPrompt(step, r = resolveStepRole(step)) {
+function buildDirectPrompt(step, dispatch) {
+  const r = dispatch.roleResolution;
   const verifyCmd = parseVerify(step.context);
   return [
     step.title, '',
-    ...roleLines(r),
+    ...roleLines(r, dispatch.policy),
     step.context,
     step.acceptance_criteria ? `\nAcceptance: ${step.acceptance_criteria}` : '',
     step.carry_forward ? `\nCarried context: ${step.carry_forward}` : '',
@@ -241,21 +343,20 @@ function buildDirectPrompt(step, r = resolveStepRole(step)) {
     verifyCmd ? `\nThis step will be VERIFIED after you finish by running: \`${verifyCmd}\` (in this working ` +
       `directory) — it must exit 0. A "VERDICT: pass" is OVERRIDDEN to "fail" if that command fails, so make ` +
       `sure it actually passes before you report pass.` : '',
-    `The FINAL LINE of your output MUST be exactly:`,
-    `VERDICT: pass|fail|partial — <one-line summary of what you tried>`,
-    `(pick ONE verdict; e.g. "VERDICT: pass — wrote the parser and verified the sample round-trips").`,
+    `The FINAL LINE of your output MUST be exactly one machine-checkable JSON contract:`,
+    `COMPLETION_JSON: {"contract_version":1,"verdict":"pass|fail|partial|blocked","summary":"<short user-facing summary>","outputs":["<key output>"],"artifacts":[{"path":"<relative-or-absolute-path>","kind":"file","note":"<why it matters>"}],"commands":[{"command":"<important command you ran>","exit_code":0}],"unresolved_gaps":["<gap>"],"session_id":"<if known>"}`,
+    `Do not add text after COMPLETION_JSON. Unsupported pass claims are rejected by governance gates.`,
   ].filter(Boolean).join('\n');
 }
 
-function runInjected(step) {
-  const r = resolveStepRole(step); // once per step: prompt line + model override share it
-  const args = ['-p', buildDirectPrompt(step, r), '--output-format', 'json',
+function runInjected(step, dispatch, hooks = {}) {
+  const args = ['-p', buildDirectPrompt(step, dispatch), '--output-format', 'json',
     '--permission-mode', permissionMode, '--allowedTools', allowedTools || 'Write,Read'];
   if (lean) args.push('--strict-mcp-config'); // inject mode needs no MCP → truly lean per-step agent
   if (budgetUsd) args.push('--max-budget-usd', budgetUsd);
-  const m = model ?? (r.mode === 'dispatch' ? r.model : null); // CLI --model beats the map's per-role model
+  const m = dispatch.requestedModel || null; // CLI --model beats role-map model
   if (m) args.push('--model', m);
-  return spawnClaude(args, { isError: true, apiErrorStatus: null, stopReason: '', result: '', cost: 0, turns: 0, tin: 0, tout: 0 })
+  return spawnClaude(args, { isError: true, apiErrorStatus: null, stopReason: '', result: '', cost: 0, turns: 0, tin: 0, tout: 0 }, hooks)
     .then((res) => ({ ...res, model: m }));
 }
 
@@ -283,14 +384,23 @@ function budgetOrLimitStop(res) {
 }
 
 // Work one plan, one step at a time (each step = a fresh agent process = true context
-// reset / "/clear"). Returns 'complete' (all steps done) or 'paused' (needs a human).
+// reset / "/clear"). Returns 'complete' (all steps done), 'paused' (needs a
+// human), or 'busy' (remaining work is already owned by another executor).
 let ran = 0;
 async function workPlan(pid) {
   if (stopAll) return 'paused';
   const spawns = new Map();
   while (ran < maxSteps) {
-    const step = store.nextStep(pid); // lowest WORKABLE step (blocked skipped), with lessons embedded
+    // Atomic claim: pick the lowest workable step AND CAS its status to
+    // in_progress in one transaction. Two concurrent runners on the same DB can
+    // never receive the same step this way. The peek path (claim:false) stays
+    // available to agents that want to inspect without claiming.
+    const step = store.nextStep(pid, { claim: true, executor: executorId });
     if (!step) return 'complete';
+    if (step.all_in_progress) {
+      console.log(`  ⏳ plan is not complete — remaining step(s) already in progress (${step.active_steps.map((s) => `#${s.id}`).join(', ')}).`);
+      return 'busy';
+    }
     if (step.all_blocked) {
       console.log(`  ⏸ every remaining step is blocked (${step.blocked_steps.map((b) => `#${b.id}`).join(', ')}) — needs a human.`);
       return 'paused';
@@ -299,29 +409,217 @@ async function workPlan(pid) {
     spawns.set(step.id, n);
     if (n > maxAttempts) { console.log(`  ⏸ step #${step.id} unresolved after ${maxAttempts} attempt(s) — pausing for a human.`); return 'paused'; }
     console.log(`\n  ▶ step ${step.idx} (#${step.id}) attempt ${n}: ${step.title}`);
-    markInProgress(step); // so the board's Live mode focuses it while it runs (tracked for the orphan sweep)
-    if (inject) {
-      const res = await runInjected(step);
-      usage.cost += res.cost; usage.in += res.tin; usage.out += res.tout; usage.turns += res.turns; usage.agents++;
-      // gate: the agent must end with a VERDICT line; missing marker or an errored run → fail → retry
-      const v = res.isError ? { verdict: 'fail', what_tried: null } : parseVerdict(res.result);
-      const baseResult = v.what_tried ? `agent verdict: ${v.verdict}` : (res.isError ? 'agent errored' : 'agent output had no VERDICT line');
-      // VERIFY gate: a claimed "pass" is re-checked against the step's own VERIFY
-      // command (if any) and downgraded to "fail" — with the command's output
-      // tail — when it doesn't actually exit 0. No-op when there's no VERIFY
-      // line or the agent didn't claim pass in the first place.
-      const verifyCmd = parseVerify(step.context);
-      const gated = applyVerifyGate(v.verdict, baseResult, verifyCmd, { cwd: process.cwd() });
-      if (gated.verified === false) console.log(`  ⛔ VERIFY override: step #${step.id} claimed pass but \`${verifyCmd}\` failed — recorded as fail.`);
-      else if (gated.verified === true) console.log(`  ✓ VERIFY passed: \`${verifyCmd}\``);
-      const usageStr = formatUsageLine({ tin: res.tin, tout: res.tout, cost: res.cost, turns: res.turns, model: res.model });
-      store.recordAttempt(step.id, {
-        what_tried: `[orchestrator:inject] ${(v.what_tried || res.result || '(no output)').replace(/\s+/g, ' ').slice(0, 200)}`,
-        result: `${gated.resultText}\n${usageStr}`,
-        verdict: gated.verdict,
-        role: step.role || '',
-        executor: 'runner-inject',
+    trackClaim(step); // orphan sweep bookkeeping — status already in_progress via the atomic claim
+    const dispatch = dispatchPlanForStep(step);
+    const roleR = dispatch.roleResolution;
+    const requestedModel = dispatch.requestedModel;
+    const dispatchWarnings = [...(dispatch.policy.warnings || [])];
+    if (dispatchWarnings.length) console.log(`  ⚠ dispatch policy: ${dispatchWarnings.join(' | ')}`);
+    if (dispatch.policy.requires_override_reason) {
+      if (!dispatchOverrideReason) {
+        const summary = `Dispatch policy mismatch for explicit role "${dispatch.policy.explicit_role}" — override reason required.`;
+        store.recordAttempt(step.id, {
+          what_tried: '[dispatch-policy] blocked before dispatch (override reason missing)',
+          result: `${summary}\nBest fit: ${dispatch.policy.best_match?.role || 'n/a'}\nWarnings: ${dispatchWarnings.join(' | ')}`,
+          verdict: 'fail',
+          role: dispatch.dispatchRole || '',
+          executor: inject ? 'runner-inject' : 'runner-mcp',
+          agent: roleR.mode === 'dispatch' ? (roleR.agent || dispatch.dispatchRole || '') : (dispatch.dispatchRole || ''),
+          model: requestedModel,
+          model_source: requestedModel ? 'runner-cli' : '',
+        });
+        console.log(`  ⛔ ${summary} Re-run with --dispatch-override-reason "...".`);
+        return 'paused';
+      }
+      dispatch.policy.override_reason = dispatchOverrideReason;
+      console.log(`  ⚠ override accepted: ${dispatchOverrideReason}`);
+    }
+    const runId = `run-${step.id}-${n}-${randomUUID().slice(0, 8)}`;
+    // Step was already CAS-claimed by nextStep({claim:true}); adopt it into an
+    // execution lease so the runner path uses the same unified lifecycle as
+    // MCP/CLI/board callers. Failure to open (partial index collision, other
+    // supervisor holds it) means somebody else already owns the step — we
+    // release the claim by moving the step back to pending and treat this as
+    // a busy race.
+    let lease;
+    try {
+      const opened = store.openExecutionLease({
+        plan_id: pid, step_id: step.id, run_id: runId,
+        session_ref: `pending-${runId}`,
+        executor: executorId,
+        role: dispatch.dispatchRole || '',
+        agent: roleR.mode === 'dispatch' ? (roleR.agent || dispatch.dispatchRole || '') : (dispatch.dispatchRole || ''),
+        requested_model: requestedModel,
+        actual_model: requestedModel,
+        model_source: requestedModel ? 'runner-cli' : '',
+        phase: 'preflight',
+        action_summary: 'Running dispatch preflight checks.',
+        progress_completed: 0,
+        progress_total: 4,
+        stale_after_ms: leasePolicyTemplate.stale_after_ms,
+        deadline_ms: 30 * 60 * 1000, // 30-minute hard cap per attempt; reaped on breach
+        dispatch_policy: dispatch.policy.dispatch_policy,
+        lease_policy: leasePolicyTemplate,
+        override_reason: dispatch.policy.override_reason || '',
+        metadata: {
+          dispatch_policy: dispatch.policy,
+          lease_policy: leasePolicyTemplate,
+          warnings: dispatchWarnings,
+        },
       });
+      lease = opened.lease;
+    } catch (e) {
+      console.log(`  ⚠ could not open execution lease for step #${step.id}: ${e.message}`);
+      // Someone else races us — release the claim and skip.
+      try { store.setStepStatus(step.id, 'pending'); } catch {}
+      continue;
+    }
+    const activityKey = { plan_id: pid, step_id: step.id, run_id: runId, session_ref: `pending-${runId}` };
+    // The remaining per-step work runs under this try/finally so an
+    // unexpected throw always terminalizes the lease — an open lease means
+    // reap_stale_leases eventually cancels the step; we want a clean close
+    // whenever possible so telemetry stays accurate. Success paths call
+    // closeExecutionLease explicitly with the observed outcome; the finally
+    // is only a safety net for uncaught errors.
+    let leaseAlreadyClosed = false;
+    const closeLease = (opts) => {
+      if (leaseAlreadyClosed) return;
+      try { store.closeExecutionLease(lease.id, opts); leaseAlreadyClosed = true; }
+      catch (e) { console.log(`  ⚠ close_execution_lease failed for lease #${lease.id}: ${e.message}`); }
+    };
+    try {
+    const preflight = await runDispatchPreflight({
+      cwd: process.cwd(),
+      requested_model: requestedModel,
+      context: step.context,
+      acceptance: step.acceptance_criteria,
+      model_catalog: cursorModelCatalog,
+      check_port: checkPortReady,
+    });
+    if (!preflight.ok) {
+      const summary = safeActivitySummary(`Preflight failed: ${preflight.summary}`);
+      store.upsertActivityHeartbeat({
+        ...activityKey,
+        phase: 'preflight',
+        status: 'failed',
+        outcome: 'failed',
+        verification_state: 'failed',
+        action_summary: summary,
+        blocker: summary,
+      });
+      store.appendActivityEvent({
+        ...activityKey,
+        event_type: 'terminal',
+        phase: 'preflight',
+        summary,
+        status: 'failed',
+        metadata: { checks: preflight.checks },
+      });
+      store.recordAttempt(step.id, {
+        what_tried: `[governance:preflight] ${summary}`,
+        result: preflight.checks.map((c) => `${c.ok ? 'ok' : 'fail'} ${c.name}: ${c.detail}`).join('\n'),
+        verdict: 'fail',
+        role: dispatch.dispatchRole || '',
+        executor: inject ? 'runner-inject' : 'runner-mcp',
+        agent: roleR.mode === 'dispatch' ? (roleR.agent || dispatch.dispatchRole || '') : (dispatch.dispatchRole || ''),
+        model: requestedModel,
+        model_source: requestedModel ? 'runner-cli' : '',
+        session_ref: activityKey.session_ref,
+      });
+      closeLease({ outcome: 'failed', close_reason: 'preflight failed', terminal_phase: 'preflight', terminal_summary: summary });
+      const after = store.getStep(step.id);
+      console.log(`  ⛔ preflight failed: ${preflight.summary}`);
+      console.log(`  → status: ${after.status}`);
+      ran++;
+      if (after.status === 'failed' && n >= maxAttempts) { console.log(`  ⏸ step #${step.id} failed ${n}× — pausing for a human.`); return 'paused'; }
+      continue;
+    }
+    if (inject) {
+      const hints = parseGovernanceHints({ context: step.context, acceptance: step.acceptance_criteria });
+      const res = await runInjected(step, dispatch, {
+        heartbeat_ms: heartbeatMs,
+        onHeartbeat: ({ elapsed_ms }) => {
+          store.upsertActivityHeartbeat({
+            ...activityKey,
+            phase: 'execute',
+            status: 'in_progress',
+            action_summary: safeActivitySummary(`dispatch running (${Math.round(elapsed_ms / 1000)}s elapsed)`),
+            progress_completed: 1,
+            progress_total: 4,
+            artifact_count: 0,
+            file_count: 0,
+            metadata: { elapsed_ms },
+          });
+        },
+      });
+      usage.cost += res.cost; usage.in += res.tin; usage.out += res.tout; usage.turns += res.turns; usage.agents++;
+      const completion = parseCompletionContract(res.result);
+      const evaluated = evaluateCompletionContract({
+        completion_parse: completion,
+        required_artifacts: hints.required_artifacts,
+        verify_commands: hints.declared_verify,
+        cwd: process.cwd(),
+      });
+      const escalation = detectNoncomplianceEscalation({
+        attempts: store.getStep(step.id).attempts,
+        nextNoncompliant: !completion.ok,
+      });
+      const finalVerdict = escalation.escalate ? 'fail' : evaluated.verdict;
+      const summary = escalation.escalate
+        ? `${evaluated.summary} | ${escalation.recommendation}`
+        : evaluated.summary;
+      const usageStr = formatUsageLine({ tin: res.tin, tout: res.tout, cost: res.cost, turns: res.turns, model: res.model });
+      const chosenAgent = roleR.mode === 'dispatch' ? (roleR.agent || dispatch.dispatchRole || '') : (dispatch.dispatchRole || '');
+      const chosenModel = res.model || '';
+      const modelSource = chosenModel ? 'runner-cli' : '';
+      store.recordAttempt(step.id, {
+        what_tried: completion.ok
+          ? `[orchestrator:inject] ${safeActivitySummary(summary, 200)}`
+          : `[governance:noncompliance] ${safeActivitySummary(summary, 200)}`,
+        result: `${safeActivitySummary(summary, 360)}\n${usageStr}`,
+        verdict: finalVerdict,
+        role: dispatch.dispatchRole || '',
+        executor: 'runner-inject',
+        agent: chosenAgent,
+        model: chosenModel,
+        model_source: modelSource,
+        session_ref: completion.ok ? (completion.contract.session_id || activityKey.session_ref) : activityKey.session_ref,
+      });
+      const terminalStatus = finalVerdict === 'pass' ? 'completed' : (finalVerdict === 'blocked' ? 'blocked' : 'failed');
+      store.upsertActivityHeartbeat({
+        ...activityKey,
+        phase: 'review',
+        status: terminalStatus,
+        outcome: finalVerdict === 'pass' ? 'success' : (finalVerdict === 'partial' ? 'partial' : 'failed'),
+        verification_state: finalVerdict === 'pass' ? 'passed' : 'failed',
+        action_summary: safeActivitySummary(summary),
+        progress_completed: finalVerdict === 'pass' ? 4 : 3,
+        progress_total: 4,
+        artifact_count: evaluated.artifact_count,
+        file_count: evaluated.file_count,
+      });
+      store.appendActivityEvent({
+        ...activityKey,
+        event_type: 'terminal',
+        phase: 'review',
+        summary: safeActivitySummary(summary),
+        status: terminalStatus,
+        metadata: {
+          dispatch_policy: dispatch.policy,
+          completion_session_id: completion.ok ? (completion.contract.session_id || '') : '',
+          checked_artifacts: evaluated.checked_artifacts,
+          checked_commands: evaluated.checked_commands.map((c) => ({ command: c.command, exit_code: c.exit_code, ok: c.ok })),
+          unresolved_gaps: evaluated.unresolved_gaps,
+          reassign_recommended: escalation.escalate,
+        },
+      });
+      closeLease({
+        outcome: finalVerdict === 'pass' ? 'success' : (finalVerdict === 'blocked' ? 'blocked' : 'failed'),
+        close_reason: escalation.escalate ? 'noncompliance escalation' : `inject verdict ${finalVerdict}`,
+        terminal_phase: 'review',
+        terminal_summary: safeActivitySummary(summary),
+      });
+      if (escalation.escalate) console.log(`  ⛔ ${escalation.recommendation}`);
       if (budgetOrLimitStop(res)) return 'paused';
     } else {
       // Latest attempt id BEFORE the spawn — lets us tell whether the in-agent
@@ -329,7 +627,22 @@ async function workPlan(pid) {
       // know which attempt to append the usage line to (and which to re-check
       // against VERIFY, never a stale/earlier one).
       const lastAttemptIdBefore = store.db.prepare('SELECT MAX(id) m FROM attempts WHERE step_id=?').get(step.id).m || 0;
-      const res = await runAgent(step);
+      const res = await runAgent(step, dispatch, {
+        heartbeat_ms: heartbeatMs,
+        onHeartbeat: ({ elapsed_ms }) => {
+          store.upsertActivityHeartbeat({
+            ...activityKey,
+            phase: 'execute',
+            status: 'in_progress',
+            action_summary: safeActivitySummary(`dispatch running (${Math.round(elapsed_ms / 1000)}s elapsed)`),
+            progress_completed: 1,
+            progress_total: 3,
+            artifact_count: 0,
+            file_count: 0,
+            metadata: { elapsed_ms },
+          });
+        },
+      });
       if (res) {
         usage.cost += res.cost; usage.in += res.tin; usage.out += res.tout; usage.turns += res.turns; usage.agents++;
         if (res.result) console.log(`  ⎿ ${res.result.replace(/\s+/g, ' ').slice(0, 300)}`);
@@ -342,19 +655,26 @@ async function workPlan(pid) {
       // the MCP tool loop), so there's no result text to intercept — instead,
       // re-check VERIFY after the agent exits and, if it claimed done (pass) but
       // VERIFY fails, record an OVERRIDING fail attempt and let recordAttempt's
-      // own verdict handling put the step back to failed.
+      // own verdict handling put the step back to failed. The override attempt
+      // still carries the observed CLI-selected model as its provenance so the
+      // roster does not lose track of what actually just ran.
       const verifyCmd = parseVerify(step.context);
       if (verifyCmd) {
         const afterAgent = store.getStep(step.id);
         if (afterAgent.status === 'done') {
           const gated = applyVerifyGate('pass', 'agent claimed pass via record_attempt', verifyCmd, { cwd: process.cwd() });
           if (gated.verdict === 'fail') {
+            const overrideAgent = roleR.mode === 'dispatch' ? (roleR.agent || dispatch.dispatchRole || '') : (dispatch.dispatchRole || '');
+            const overrideModel = (typeof res !== 'undefined' && res && res.model) || dispatch.requestedModel || '';
             store.recordAttempt(step.id, {
               what_tried: `[orchestrator:verify-override] re-ran VERIFY (\`${verifyCmd}\`) after the step was marked done`,
               result: gated.resultText,
               verdict: 'fail',
-              role: step.role || '',
+              role: dispatch.dispatchRole || '',
               executor: 'runner-mcp',
+              agent: overrideAgent,
+              model: overrideModel,
+              model_source: overrideModel ? 'runner-cli' : '',
             });
             console.log(`  ⛔ VERIFY override: step #${step.id} was done but \`${verifyCmd}\` failed — reverted to failed.`);
           } else {
@@ -362,14 +682,121 @@ async function workPlan(pid) {
           }
         }
       }
+      const post = store.getStep(step.id);
+      const terminalStatus = post.status === 'done' ? 'completed' : (post.status === 'blocked' ? 'blocked' : 'failed');
+      store.upsertActivityHeartbeat({
+        ...activityKey,
+        phase: 'review',
+        status: terminalStatus,
+        outcome: post.status === 'done' ? 'success' : (post.status === 'blocked' ? 'blocked' : 'failed'),
+        verification_state: post.status === 'done' ? 'passed' : 'failed',
+        action_summary: safeActivitySummary(`MCP dispatch finished with step status ${post.status}.`),
+        progress_completed: post.status === 'done' ? 3 : 2,
+        progress_total: 3,
+      });
+      store.appendActivityEvent({
+        ...activityKey,
+        event_type: 'terminal',
+        phase: 'review',
+        summary: safeActivitySummary(`MCP dispatch finished with step status ${post.status}.`),
+        status: terminalStatus,
+        metadata: {
+          requested_model: requestedModel || '',
+          observed_model: res?.model || '',
+          dispatch_policy: dispatch.policy,
+        },
+      });
+      // If the agent never called record_attempt over MCP, the step is still
+      // in_progress here — treat that as `abandoned` so closeExecutionLease
+      // resets the step back to pending (matches the pre-lease sweepOrphans
+      // behavior). A recorded pass/fail/blocked already terminalized the step.
+      const mcpOutcome = post.status === 'done' ? 'success'
+        : post.status === 'blocked' ? 'blocked'
+        : post.status === 'failed' ? 'failed'
+        : 'abandoned';
+      closeLease({
+        outcome: mcpOutcome,
+        close_reason: `mcp dispatch → step ${post.status}`,
+        terminal_phase: 'review',
+        terminal_summary: safeActivitySummary(`MCP dispatch finished with step status ${post.status}.`),
+      });
     }
     const after = store.getStep(step.id);
     console.log(`  → status: ${after.status}`);
     ran++;
     if (after.status === 'failed' && n >= maxAttempts) { console.log(`  ⏸ step #${step.id} failed ${n}× — pausing for a human.`); return 'paused'; }
+    } finally {
+      // Safety-net: any uncaught error above leaves the lease dangling and blocks
+      // completion invariants; close it as `abandoned` so reap_stale_leases does
+      // not have to wait a full stale-window to recover the step.
+      closeLease({ outcome: 'abandoned', close_reason: 'runner iteration exited without explicit terminal', terminal_phase: 'execute' });
+    }
   }
   console.log(`  reached --max-steps (${maxSteps}) cap.`);
   return 'paused';
+}
+
+async function workPlanParallel(pid) {
+  if (stopAll) return 'paused';
+  const worktreePool = createWorktreePool({
+    repoRoot,
+    worktreeBase,
+    skipWorktrees,
+  });
+  if (!skipWorktrees) {
+    const clean = worktreePool.assertCleanForParallelWrite();
+    if (!clean.ok) {
+      console.error(`  ⛔ ${clean.reason}`);
+      return 'paused';
+    }
+  }
+  try {
+    const openLeases = store.listExecutionLeases({ plan_id: pid, status: 'open' });
+    worktreePool.cleanupOrphans({ openLeases });
+  } catch {}
+
+  const stepRunner = createParallelStepRunner({
+    store,
+    executorId: parallel ? 'runner-parallel' : executorId,
+    inject,
+    heartbeatMs,
+    leasePolicyTemplate,
+    dispatchPlanForStep,
+    runInjected,
+    runAgent,
+    budgetOrLimitStop,
+    usage,
+    trackClaim,
+    checkPortReady,
+    cursorModelCatalog,
+    dispatchOverrideReason,
+    worktreePool,
+    onStepComplete: ({ step }) => {
+      const after = store.getStep(step.id);
+      console.log(`  -> status: ${after.status}`);
+    },
+  });
+
+  const parallelResult = await runParallelSupervisor(store, {
+    plan_id: pid,
+    max_workers: maxWorkers,
+    executor: 'runner-parallel',
+    max_steps: maxSteps,
+    max_attempts_per_step: maxAttempts,
+    stepRunner,
+    shouldStop: () => !!stopAll,
+    shouldPause: () => !!stopAll,
+    logger: (msg) => console.log(`  ${msg}`),
+    onSlotStart: ({ step, active_count }) => {
+      console.log(`\n  >> step ${step.idx} (#${step.id}) [parallel slot ${active_count}/${maxWorkers}]: ${step.title}`);
+    },
+  });
+
+  ran += parallelResult.steps_finished;
+  if (stopAll) return 'paused';
+  if (parallelResult.status === 'complete') return 'complete';
+  if (parallelResult.ready_remaining === 0 && parallelResult.steps_finished > 0) return 'complete';
+  return parallelResult.status === 'busy' ? 'busy' : 'paused';
 }
 
 const usageLine = () => { if (usage.agents) console.log(`\n  usage: ${usage.agents} agents · ${usage.turns} turns · in ${usage.in.toLocaleString()} tok · out ${usage.out.toLocaleString()} tok · $${usage.cost.toFixed(4)}`); };
@@ -411,11 +838,18 @@ if (!live) {
       const mk = inject ? buildDirectPrompt : buildPrompt;
       const first = store.nextStep(plan.id); // the SAME payload a live agent gets (lessons + file_refs embedded)
       if (first && !first.all_blocked) {
+        const dispatch = dispatchPlanForStep(first);
         console.log(`\n  --- ${inject ? 'LEAN (inject)' : 'MCP'} prompt for the next workable step (#${first.id})${lean ? ' [--strict-mcp-config]' : ''} ---\n`);
-        console.log(mk(first).split('\n').map((l) => '  | ' + l).join('\n'));
+        console.log(mk(first, dispatch).split('\n').map((l) => '  | ' + l).join('\n'));
       }
     }
     console.log(`\n  DRY RUN — nothing spawned. Re-run with --live to execute (this costs money).`);
+    if (parallel) {
+      const frontier = store.readySteps(plan.id, { claim: false });
+      console.log(`\n  PARALLEL DRY RUN — ${frontier.length} ready step(s), up to ${maxWorkers} concurrent workers.`);
+      console.log(`  repo-root: ${repoRoot}`);
+      console.log(`  worktree-base: ${skipWorktrees ? '(skipped)' : worktreeBase}`);
+    }
   }
   store.close();
   process.exit(0);
@@ -436,6 +870,10 @@ async function runOnce() {
       if (plan.status === 'draft') store.setPlanStatus(plan.id, 'active');
       console.log(`\n════════ PLAN #${plan.id}: ${plan.title} ════════`);
       const outcome = await workPlan(plan.id);
+      if (outcome === 'busy') {
+        console.log(`  ⏳ plan #${plan.id} still has active executors — leaving its status unchanged.`);
+        return;
+      }
       if (outcome !== 'complete') {
         // A budget/usage-limit/external stop is global — let the retry loop handle it; don't mark the plan or advance.
         if (stopAll) return;
@@ -450,7 +888,9 @@ async function runOnce() {
       plansDone++;
     }
   } else {
-    const outcome = await workPlan(planId);
+    const outcome = parallel
+      ? await workPlanParallel(planId)
+      : await workPlan(planId);
     if (outcome === 'complete') { store.setPlanStatus(planId, 'done'); console.log('\n  ✅ plan complete.'); }
   }
 }
@@ -472,4 +912,5 @@ while (true) {
 
 usageLine();
 if (stopAll) console.log(`\n  ⛔ STOPPED — ${stopAll}\n     Re-run the same command to resume (all state is in the DB).`);
+try { reaper.stop(); } catch {}
 store.close();

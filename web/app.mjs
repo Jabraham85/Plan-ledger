@@ -47,7 +47,7 @@ function banner(extra) {
   console.log('========================================');
 }
 
-const server = createBoardServer({ store: new Store(dbPath), html });
+const server = createBoardServer({ store: new Store(dbPath), html, dbPath });
 
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {

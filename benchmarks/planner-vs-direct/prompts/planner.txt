@@ -1,0 +1,52 @@
+You are implementing a deterministic job scheduler for a controlled benchmark.
+
+## Mode: explicit planning required
+
+Work in your assigned arm root. Read `task-spec.md` and `public-smoke.mjs` there.
+
+You **must** use explicit written planning before and during implementation.
+
+## Required workflow
+
+### Phase 1 — Written decomposition (before any code)
+
+Produce a written plan in your response that includes:
+
+1. **Problem decomposition** — separate concerns: parsing/validation assumptions, dependency timing, resource occupancy checks, scheduling strategy, determinism risks.
+2. **Checklist** — ordered implementation steps with verification hooks.
+3. **Risk register** — at least three concrete failure modes (e.g., hidden capacity violations, off-by-one active intervals, dependency start times).
+
+Do not edit `src/scheduler.mjs` until this written plan exists.
+
+### Phase 2 — Staged implementation
+
+Implement `solve(instance)` in `src/scheduler.mjs` following your checklist one stage at a time. After each stage, note what you verified.
+
+### Phase 3 — Reassessment
+
+After the first working version:
+
+1. Re-read `task-spec.md` against your implementation.
+2. Run `public-smoke.mjs`.
+3. Write a short reassessment: what passed, what failed, what you changed, remaining risks.
+
+## Allowed edits
+
+Edit **only** `src/scheduler.mjs` in your arm root.
+
+## Requirements reminder
+
+- Export `solve(instance)` returning one `{id, start}` per job.
+- Integer nonnegative starts; satisfy all dependencies and renewable resource capacities at every integer time.
+- Deterministic, pure function; do not mutate the input.
+- The hidden grader measures quality against a theoretical lower bound (critical-path and resource-work), not a reference schedule.
+
+## Before you finish
+
+Run from your arm root:
+
+```
+node public-smoke.mjs
+```
+
+Fix failures before submitting.

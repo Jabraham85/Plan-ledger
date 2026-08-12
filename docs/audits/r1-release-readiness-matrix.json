@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-12T06:08:45.750Z",
+  "report_path": "docs/audits/r1-release-validation-report.json",
+  "rows": [
+    {
+      "area": "C1 evidence gate",
+      "checks": [
+        "completion payload gate",
+        "legacy_unknown semantics"
+      ],
+      "evidence": [
+        "node test/completion-gate.mjs",
+        "node benchmarks/completion-validator.mjs"
+      ],
+      "pass": true
+    },
+    {
+      "area": "C2 terminalization integrity",
+      "checks": [
+        "reconciliation blockers",
+        "close-path atomicity",
+        "migration additive/idempotent"
+      ],
+      "evidence": [
+        "node test/terminalization-reconciliation.mjs",
+        "node test/execution-lifecycle.mjs",
+        "node benchmarks/reconciliation-latency.mjs"
+      ],
+      "pass": true
+    },
+    {
+      "area": "C3 dispatch/recovery",
+      "checks": [
+        "policy mismatch enforcement",
+        "deadline semantics",
+        "bounded/atomic reassignment",
+        "migration additive/idempotent"
+      ],
+      "evidence": [
+        "node test/dispatch-policy.mjs",
+        "node test/stale-recovery.mjs",
+        "node benchmarks/c3-dispatch-recovery.mjs"
+      ],
+      "pass": true
+    },
+    {
+      "area": "C4 telemetry/board health",
+      "checks": [
+        "ordered events",
+        "pre-v13 upgrade",
+        "marker semantics",
+        "health API/UI",
+        "migration/additive compatibility"
+      ],
+      "evidence": [
+        "node test/c4-pre-v13-upgrade.mjs",
+        "node test/c4-telemetry-health.mjs",
+        "node test/live-activity-ui.mjs",
+        "node test/board-routes.mjs",
+        "node benchmarks/non-planner-latency.mjs"
+      ],
+      "pass": true
+    },
+    {
+      "area": "CLI/MCP compatibility",
+      "checks": [
+        "ledger CLI bridge",
+        "MCP e2e contract"
+      ],
+      "evidence": [
+        "node test/ledger-cli.mjs",
+        "node test/mcp-e2e.mjs"
+      ],
+      "pass": true
+    }
+  ]
+}

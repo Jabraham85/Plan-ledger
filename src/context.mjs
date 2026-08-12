@@ -87,7 +87,7 @@ export function buildProjectContext(store, projectId) {
   out.push('## ▶ Get set up (do this first)');
   out.push(`1. **Scope to this project:** call \`set_current_project(${proj.id})\` so plans / recall / lessons stay within "${proj.name}".`);
   out.push('2. **Orient:** `project_brief()` for the current state, then `recall("<anything>")` to ask the project what\'s known/tried.');
-  out.push('3. **Work:** `next_step(<plan_id>)` → do it → `record_attempt(...)` → `write_carry_forward(...)`. Slash commands: `/plan brief`, `/plan recall <q>`, `/plan work <id>`, `/plan new <goal>`.');
+  out.push('3. **Work:** `next_step(<plan_id>)` → do it → `record_attempt(...)` → `write_carry_forward(...)`. Shortcuts: Claude Code `/plan …`; Cursor `/plan-ledger …` (`/plan` is Cursor Plan Mode).');
   out.push('');
   out.push('**If the `mcp__plan-ledger__*` tools are NOT available here, install first** — add to your MCP config and reload:');
   out.push('```jsonc');

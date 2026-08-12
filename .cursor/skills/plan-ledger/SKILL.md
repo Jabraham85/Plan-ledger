@@ -1,32 +1,183 @@
 ---
 name: plan-ledger
 description: >-
-  Work with plan-ledger — create, list, open, work, and render plans held in the external
-  plan-ledger MCP working-memory store. Use when planning or executing multi-step work: any
+  Work with plan-ledger through the JSON CLI bridge and visual board — create, list, open, work,
+  and render plans in external working memory. Use when planning or executing multi-step work: any
   task with several stages, anything already in a plan-ledger plan, or when the user mentions
   plans/steps/context/roles/"avoid past mistakes". Keeps working context small by storing plans,
-  per-step context, and a failure log in the MCP server instead of the model's head.
+  per-step context, and a failure log on disk instead of in the model's head.
 ---
 
 # plan-ledger working discipline (Cursor)
 
-You are driving **plan-ledger** (external working memory over MCP) for the user. This is the
-Cursor-native mirror of the `/plan` command; Cursor reads it as a Skill (invoke by name, or it
-auto-attaches when plan-ledger is in play). The plan-ledger loop, roles table, and dispatch/review
-gate are identical to the Claude Code surface — only the *dispatch mechanism* differs (see Roles).
+You are driving **plan-ledger** (external working memory over the JSON CLI bridge) for the user.
+This is the Cursor-native counterpart to the Claude Code plan-ledger command; invoke it explicitly
+as `/plan-ledger` (`/plan` is Cursor's built-in Plan Mode), or let it auto-attach when
+plan-ledger is in play. The plan-ledger loop, roles table, and dispatch/review gate are identical
+to the Claude Code surface — only the *ledger I/O mechanism* differs (see Bridge invocation).
 
 Parse the invocation the same way a command would: the first word is the subcommand, the rest are
-its arguments. No subcommand → treat it as `board` (show all plans).
+its arguments. No subcommand → treat it as `board` (open the visual board for all plans).
 
-All actions use the `mcp__plan-ledger__*` tools. Honor **progressive disclosure** — pull only the
-level you need: `list_plans` (surface) → `open_plan` (step index) → `get_step`/`next_step` (one
-step's full body). Never dump every step body when an index will do.
+## Bridge invocation (required — not MCP)
+
+Do **not** use `mcp__plan-ledger__*` tools or assume a `plan-ledger` MCP server is configured.
+All ledger reads and writes go through the tested JSON CLI bridge at an absolute path.
+
+**Installed paths** (refreshed by `npm run sync:global-skill` from the Plan-ledger repo):
+
+| Key | Path |
+|---|---|
+| Node | `{{PLAN_LEDGER_NODE}}` |
+| CLI | `{{PLAN_LEDGER_CLI}}` |
+| Repo | `{{PLAN_LEDGER_REPO}}` |
+
+Run the bridge from **any cwd** — DB location follows `defaultDbPath()` / `PLAN_LEDGER_DB`, not
+the shell cwd. On Windows, quote paths that contain spaces.
+
+```powershell
+& "{{PLAN_LEDGER_NODE}}" "{{PLAN_LEDGER_CLI}}" <operation> --input '<json-args>'
+```
+
+**Output contract:** success → stdout `{ "ok": true, "operation": "...", "db_path": "...", "result": ... }`;
+failure → nonzero exit, stderr `[plan-ledger-cli] …`, stdout `{ "ok": false, "error": … }`.
+
+Operation names are snake_case and match the ledger surface: `list_plans`, `open_plan`, `get_step`,
+`next_step`, `ready_steps`, `next_plan`, `create_plan`, `add_step`, `update_step`, `link_items`,
+`approve_plan`, `set_plan_status`, `set_step_status`, `record_attempt`, `write_carry_forward`,
+`add_note`, `set_layman`, `assign_step`, `get_plan_roster`, `list_project_staff`, `board`, etc.
+(See `node {{PLAN_LEDGER_CLI}} --help` or `src/ledger-cli.mjs` handlers for the full list.)
+
+**Progressive disclosure** — pull only the level you need: `list_plans` (surface) → `open_plan`
+(step index) → `get_step`/`next_step` (one step's full body). Never dump every step body when an
+index will do. At session start, call `list_projects` + `set_current_project` (or `list_plans`) once
+to orient — which project is current, what plans exist, what's active.
+
+**Bridge-only scope.** Templates, `recall`, `project_brief`, file refs, code-graph, and RAG tools
+are **not** on the CLI bridge. When working inside the Plan-ledger checkout with repo-local MCP
+(`.cursor/mcp.json`), those extras remain available; cross-workspace `/plan-ledger` sessions use
+the bridge for the core plan loop only.
+
+### Visual board — every `/plan-ledger` invocation
+
+Before any other ledger work, open the visual board so the user always sees plan context.
+Use `board` with `"command":"open"` (alias `"launch"`). Set `PLAN_LEDGER_NO_OPEN=1` **only**
+in automated tests — never suppress the browser for user-facing runs.
+
+```powershell
+& "{{PLAN_LEDGER_NODE}}" "{{PLAN_LEDGER_CLI}}" board --input '{"command":"open","project_id":<optional>,"plan_id":<optional>,"step_id":<optional>}'
+```
+
+| Subcommand | When to open | Deep-link args |
+|---|---|---|
+| *(none)* / `board` | immediately | omit ids → all plans |
+| `new` | after the draft plan exists | `plan_id` |
+| `approve`, `work`, `continue`, `run`, `complete` | immediately; again after claiming a step | `plan_id`; add `step_id` once known |
+| `list`, `open <id>` | immediately | `plan_id` when resolved |
+| `next <id>` | after fetching the step | `plan_id` + `step_id` |
+
+Default board port is `4319` (`PLAN_LEDGER_WEB_PORT`). Do **not** reuse port `4321` if a demo
+board is already bound there — leave an existing listener alone unless it matches this DB.
 
 **Be autonomous and self-motivated.** When the user sets you working, drive the project forward on
 your own: pick steps, pick the best approach, and **move from one plan to the next without asking**.
 Never present a menu of "do you want A, B, or stop?" — decide and act. The only time you stop is
 when there is genuinely nothing left to work on; if something needs the user, **mark it blocked,
 note exactly what you need, and move to the next workable plan** rather than halting.
+
+## Mandatory approval boundary
+
+Planning and execution are separate phases:
+1. For a new multi-step request, create the **entire** plan first while it remains `draft`: all
+   steps, roles/models, self-contained context, acceptance criteria, dependencies, and verification.
+2. Present the complete plan (board open + text summary) and explicitly ask for approval. **Stop
+   there. Do not claim, dispatch, edit implementation files, or run any plan step while draft.**
+3. Only an explicit user approval ("approve", "approved", "go ahead", "looks good", or equivalent)
+   authorizes execution. On approval, `approve_plan` or `set_plan_status(<id>, "active")`, then
+   immediately run the autonomous work loop until completion.
+4. Requested plan changes are not approval: update the draft, re-present the whole revised plan,
+   and wait again.
+
+## Planner-start preflight (required for new plans)
+
+Before decomposing any **new** plan, run bounded prior-plan discovery:
+
+1. Call `planner_start` with a bounded keyword set (`max_keywords <= 8`) derived from the goal.
+2. Use only `completed` matches as finished evidence. Treat `related_active` as in-flight context,
+   never as done proof.
+3. Persist consulted provenance on the draft (`draft_plan_id`) so `open_plan` shows
+   `consulted_plans` (consulted ids + relation/status at consult time).
+4. In your plan summary or notes, explicitly record which consulted plan ids informed the draft.
+
+## Active chat updates + telemetry cadence
+
+Execution must stay visible in chat and on the board:
+
+- **Chat updates (required):** send concise updates at dispatch start, material phase changes,
+  blockers, verification start/result, reassignment, and completion.
+- **Quiet-work heartbeat:** if no material event occurred, send a concise status update at least
+  every **3 minutes**.
+- **Board telemetry cadence:** heartbeat/update activity at least once per **minute** while work is
+  active.
+- **Privacy boundary:** updates include operational telemetry only (phase, progress, files,
+  artifacts, commands, status, blocker, outcome, dispatch rationale). Never include private
+  reasoning or chain-of-thought.
+- **Operational fields (exact):** `plan_id`, `step_id`, `run_id`, `session_ref`, `role`, `agent`,
+  `requested_model`, `actual_model`, `model_source`, `phase`, `action_summary`, `command_summary`,
+  `status`, `outcome`, `verification_state`, `blocker`, `progress_completed`, `progress_total`,
+  `file_count`, `artifact_count`, `recent_artifacts`, `metadata`, `updated_at`, `ended_at`.
+
+## Governance + evidence contract (runner/dispatch)
+
+For governed dispatch (especially injected/headless execution):
+
+1. **Preflight gates first:** fail fast on workspace/model/path/port prerequisites before dispatch.
+2. **COMPLETION_JSON required:** terminal report must end in machine-checkable
+   `COMPLETION_JSON` evidence (artifacts/commands/session).
+3. **Unsupported pass rejection:** a `pass` claim without verifiable artifact or successful command
+   evidence is rejected.
+4. **One-correction reassignment:** first noncompliant completion gets one correction; repeated
+   noncompliance recommends reassignment instead of repeated resumes.
+5. **Deterministic dispatch override reason:** when policy flags material role mismatch, require an
+   explicit override reason and persist it.
+6. **Retries + atomic failure:** transient operations may retry with bounded backoff; partial
+   publish outcomes are treated as atomic failure and must not silently half-apply.
+
+### Live Activity troubleshooting
+
+If live activity appears stale or missing:
+
+- Check `/api/activity/current` and `/api/activity/recent` for the scoped plan/step.
+- Confirm heartbeat cadence (`updated_at`) and stale threshold.
+- Verify run key consistency (`plan_id`, `step_id`, `run_id`, `session_ref`).
+- Confirm terminal events were appended on completion/failure.
+- If status is stale and no owner is active, recover or reassign before redispatch.
+
+## Execution lease + verification disposition contract
+
+Every claimed step MUST run inside one **execution lease**. Lease lifecycle:
+
+1. `open_execution_lease(plan_id, step_id, executor, run_id, session_ref, requested_model, ...)` —
+   atomically CAS-claims (or adopts) the step and opens a bound activity run. Fails cleanly if
+   another executor already holds it.
+2. `heartbeat_execution_lease(lease_id, patch)` on a bounded cadence (default 20s, floor 1s, ceil
+   60s). Every tick refreshes `last_heartbeat_at`; the reaper closes any lease older than
+   `stale_after_ms` as `cancelled`.
+3. `close_execution_lease(lease_id, {outcome, step_verdict, disposition, attempt, terminal_summary})`
+   at the terminal event. `outcome` ∈ `success | failed | partial | blocked | cancelled | abandoned`.
+   Close is atomic: activity terminalizes, lease closes, optional `record_attempt` and
+   disposition set — one transaction.
+
+**Verification disposition** is now first-class. Every closed step (`done | skipped | blocked`)
+MUST carry one of `verified | deferred | blocked | not_applicable | legacy_unknown`. `verified` is
+automatic when `record_attempt` verdict is `pass`; the others require an explicit
+`set_step_disposition(step_id, disposition, reason)` call. **A plan cannot be marked `done`** while
+any step is active, any lease is open, any activity is non-terminal, or any closed step lacks a
+disposition. Use `assess_plan_terminalization(plan_id)` to see exactly what blocks completion.
+
+**Reap cadence.** The board, MCP server, and runner all boot a background reaper on a
+60–120 second cadence (`PLAN_LEDGER_REAP_INTERVAL_MS` / `PLAN_LEDGER_REAP_STALE_MS`). Stale/dead
+executors are recovered automatically; you never need to hand-clean lease rows.
 
 **Work at the PLAN level, never the step level.** The user names a *plan* (by id, title, or
 keyword) and says "work / continue / complete" it — they do NOT pick step numbers. YOU always
@@ -70,136 +221,160 @@ exists, the brief MUST open with "read + adopt <charter path>", and the review-g
 done comes from that charter. Unknown/disabled role → treat as untagged: pick from the table and
 `update_step`. Full schema/precedence: plan-ledger `docs/ROLES.md` § Customizing the roster.
 
-**Dispatch, don't do.** When working a step, YOU are the orchestrator and reviewer; the role agent
-does the work. Compose the brief from the step's `context` + `acceptance_criteria` + `carry_forward`
-+ `lessons` (+ file_refs) and launch the resolved role agent. Cursor has three dispatch paths, in
-order of preference — **this is the one place that differs from Claude Code**:
+**Implementer-first dispatch.** Concrete artifact/code work defaults to `implementer`, informed by
+historical attempt evidence. Use architect/ui/perf specialists only when their capability is
+materially required — do not tag implementation output with design-only roles.
 
-1. **Cursor subagent** — invoke `/<role>` (e.g. `/implementer`) or issue a **Task tool** call
-   targeting that subagent. Cursor delegates to the markdown+frontmatter charter under
-   `~/.claude/agents/` (or `.cursor/agents/`), giving it its own context window and model. Fan out
-   in parallel with concurrent Task calls when steps are independent.
-2. **No subagents available** (headless `agent -p`, or a build where subagent delegation is off) —
-   **read `~/.claude/agents/<role>.md` and adopt that charter yourself**, do the work in-context,
-   then **self-review against its `## Definition of done`** before recording.
-3. Self-execute directly only for trivial mechanical steps (minutes of work, zero design decisions)
-   and **ALL ledger bookkeeping** — never delegate `mcp__plan-ledger__*` calls to the role agent.
+## Parallel orchestration
 
-(For reference, the Claude Code path is: `Agent` tool with `subagent_type = <role>`. Same charter,
-same review gate — only the call differs. The server's own `directive` field spells out both.)
+Never claim the whole ready frontier before slot and path checks. Maintain a **bounded worker pool**
+and **refill each free slot immediately** when a worker finishes — no fixed batch barrier.
+
+**Interactive loop:**
+1. **Peek:** `ready_steps(plan_id, claim:false, limit:N)` — dependency-ready frontier, unclaimed.
+2. **Select:** count empty worker slots; drop steps whose `OWNED_PATH:` / `OWNED_GLOB:` / `file_refs`
+   overlap an in-flight write. Pick only enough non-conflicting steps to fill slots.
+3. **Claim:** claim **only the selected steps** — `ready_steps(..., claim:true, limit:N)` or per-step
+   claim after path filtering. Never `claim:true` on the full frontier blindly.
+4. **Dispatch + review** each claimed step; on finish, refill that slot before waiting on others.
+
+Default sequential `next_step` remains fine when parallelism adds no value.
+
+**Path ownership + worktrees.** Concurrent **write** steps declare ownership in `context`:
+`OWNED_PATH: path/to/file-or-dir`, `OWNED_GLOB: src/foo/**`, plus matching `file_refs`. Overlapping
+ownership serializes — conflicting steps wait **unclaimed**. Parallel write mode needs a clean
+integration tree: each write worker uses an isolated Git worktree; verified commits are
+serialized/cherry-picked before a dependent overlapping worker starts; failed work is not integrated.
+
+Mechanics: `docs/audits/parallel-supervisor-design.md`, README § The orchestrator.
+
+**Automatic supervision (mandatory).** Do not duplicate lifecycle by hand. Every claimed step runs
+through execution leases — open, bounded heartbeat (child PID persisted), first-artifact observation,
+bounded stale recovery, then `close_execution_lease` on the C1-C4 terminal path. The reaper closes
+stale leases; use `assess_plan_terminalization` before marking a plan done.
+
+## Execution dispatch
+
+**Dispatch, don't do.** When working a step, YOU are the orchestrator and reviewer; a full,
+independent Cursor agent does the work. Compose its self-contained brief from the step's `context`
++ `acceptance_criteria` + `carry_forward` + `lessons` (+ file_refs), then:
+
+1. Resolve the assigned model from Staff (`list_project_staff` / `get_plan_roster`) and verify it
+   appears in the authenticated `agent models` output. Never silently substitute Composer or trust
+   an opaque subagent's self-identification.
+2. Launch a **fresh full Cursor CLI session** (the programmable equivalent of `/new`):
+   `agent -p --output-format json --model "<resolved model>" --trust --force --workspace "<repo>" "<brief>"`.
+   On native Windows, if `agent` is not on PATH, use
+   `%LOCALAPPDATA%\cursor-agent\agent.cmd`. Each independent invocation returns a real
+   `session_id`; record it with `model_source:"cursor-cli"` in `record_attempt`.
+3. Parallel-ready steps run as separate CLI processes per the pool rules above. Do **not** use Cursor
+   Subagent/Task calls for model-assigned work: their backend model is not authoritative enough for
+   the execution roster.
+4. If the standalone CLI is absent, install it using Cursor's documented native installer and run
+   `agent login`; do not push setup work back to the user. If authentication definitively fails,
+   mark the step blocked with the exact error.
+5. Self-execute directly only for trivial mechanical steps and **ALL ledger bookkeeping** (via the
+   CLI bridge).
 
 **Review gate — mandatory, every dispatch.** When the role agent reports:
 1. **Evidence first.** Build/test output quoted verbatim, real file paths (spot-check the repo),
    screenshots for visual work. Claims without evidence = automatic send-back.
 2. Check the step's `acceptance_criteria`, then the role's `## Definition of done` (bottom of its
    charter file), box by box against the report.
-3. Unmet → send the SAME agent a numbered correction list (what failed, which DoD box, what
-   evidence is missing) — resume/continue that subagent, or in the adopt-the-charter path revise
-   in-context. **Max 3 rounds**; then finish it yourself or `record_attempt` `fail` with the lesson.
-4. `record_attempt` ALWAYS notes `role=<name>, review_rounds=<n>` in `what_tried`.
+3. Unmet → `add_note(step_id, author: "orchestrator", body: <numbered correction list>)` so the
+   feedback is durable, then send the SAME agent that list — resume/continue that session. When it
+   replies, `add_note` a concise reply summary under the role name. **Max 3 rounds**; then finish
+   it yourself or `record_attempt` `fail` with the lesson.
+4. `record_attempt` ALWAYS notes `role=<name>, review_rounds=<n>` in `what_tried`, and sets its
+   `layman` field to a basic-language "what was done + thoughts" summary for human skimming.
 
 A BLOCKED report (spec fork, contradiction, missing decision) is not a failure — resolve the fork
 yourself if it's yours to make, escalate via blocked status if it's the user's, then re-dispatch.
 
+## Headless runner
+
+Sequential mode is the default (omit `--parallel`). Opt-in parallel:
+
+```sh
+node scripts/runner.mjs --plan <id> --live --parallel --inject --max-workers 4
+```
+
+`--inject` is the safe default for write-capable parallel runs: completion and integration stay
+under the supervisor — worker output is validated before cherry-pick, and failed work is not
+integrated. Without `--parallel`, the runner walks one step at a time via `next_step({ claim: true })`.
+
+**Release gate:** after focused or full tests, `npm run validate:r1-release` — fail-closed before
+treating parallel supervision as release-ready.
+
 ## Subcommands
 
-### `new <title…>`  (optionally `… from <template>`)
-1. `create_plan` with the title; infer 3–8 `keywords` and a tight one-paragraph `summary`
-   (what + why) from the title and conversation.
-2. If the user wrote **`from <template>`**, `instantiate_template(<template>, <plan_id>)` to seed
-   the steps, then tailor each cloned step. OTHERWISE **decompose** the goal into **self-contained
-   steps** and `add_step` each. Every step MUST have a `context` executable in a fresh session with
-   no other memory, a concrete `acceptance_criteria`, the `tools` it will use, and a `role` from the
-   table (the specialist whose discipline the step's core difficulty lives in). Vague goal → ask
-   1–2 clarifying questions BEFORE writing steps.
-3. Show the new plan as a board.
+### `new <title…>`
+1. Open the board (all plans), run `planner_start` with bounded keywords, then `create_plan` with
+   the title; infer 3–8 `keywords` and a tight one-paragraph `summary` from the title and
+   conversation. Record consulted plan ids on the draft.
+2. **Decompose** the goal into **self-contained steps** and `add_step` each. Every step MUST have
+   a `context` executable in a fresh session with no other memory, concrete `acceptance_criteria`,
+   the `tools` it will use, and a `role` from the table.
+3. Keep the plan `draft`. Open the board for the new `plan_id` and show the **whole** plan,
+   including every step's role/model, dependencies, acceptance criteria, and verification command.
+4. Ask: **"Approve plan #<id> to begin execution?"** Then stop.
 
-### `template list | show <name> | save <plan_id> as <name>`
-`list_templates` / `get_template` / `save_as_template`. Apply one with
-`/plan new <goal> from <name>` or `instantiate_template(<name>, <plan_id>)`.
-
-### `brief`
-`project_brief`: print a compact whole-project snapshot (every plan + progress, recent lessons,
-code-graphs). Use at the START of a session to orient without reading anything.
-
-### `recall <query…>`
-`recall(<query>)`: ask the project anything; print the ranked hits across plans, steps, and the
-failure log (`type · title · snippet`). Use before starting work to pull what's already
-known/tried. Offer to open the top hit.
+### `approve [<id|name>]`
+Open the board for the draft plan. Resolve it, `approve_plan` / `set_plan_status(<id>, "active")`,
+then enter `work <id>` immediately and continue autonomously through all workable steps.
 
 ### `list`
-`list_plans` (optionally a status/query from args); print the surface index only:
+Open the board (all plans). `list_plans`; print the surface index:
 `#id · title · status · done/total · keywords`.
 
 ### `open <id>`
-`open_plan <id>`; show the summary + ordered step index (titles + status). Don't expand step
-bodies unless asked.
+Open the board for the plan. `open_plan <id>`; show summary + ordered step index. Don't expand
+step bodies unless asked.
 
 ### `board [id]`
-Render a text board.
-- No id → `list_plans`, one line per plan: `#id  STATUS  done/total  title  [keywords]`.
-- With id → `open_plan <id>`, then a tree:
-  ```
-  #<id> <title>   ▸ <status>   (<done>/<total> done)
-  <summary>
-    1 ✅ <step>            done
-    2 ▶ <step>            in_progress
-    3 ⬚ <step>            pending
-    4 ✗ <step>            failed (N attempts)
-  ```
-  Icons: `✅ done · ▶ in_progress · ⬚ pending · ✗ failed · ⏸ blocked · ⤼ skipped`. Use
-  `open_plan` for counts; don't load full step context for the board.
+Open the visual board (`board` `command:"open"` with optional `plan_id`). Also render text via
+`board` `command:"show"` or `command:"list"`.
 
 ### `work [<id|name>]`  (also `continue`, `run`, `auto`, `complete`)
-The **autonomous** entry point. Name a PLAN to start there, or omit it and let the project pick.
-Then **drive the whole project forward on your own — across steps AND across plans — choosing the
-best path, never asking.** Keep working until nothing is workable.
+Open the board for the target plan (add `step_id` once a step is claimed). The **autonomous**
+entry point — drive the whole project forward across steps AND plans without asking.
 
-**Inner loop — work a plan's steps:**
-1. `next_step <plan_id>` → the next **workable** step (blocked steps skipped; full context +
-   embedded lessons). Three shapes: a step → work it · `{all_blocked}` → `set_plan_status(blocked)`
-   → outer loop · `{complete}` → `set_plan_status(done)` → outer loop.
-2. Announce ("Working #<plan> step 4/8: <title>") and `set_step_status(<step>, in_progress)`.
-3. Read its `carry_forward` and **`attempts`** FIRST. NEVER repeat an approach marked `fail`.
-4. **DISPATCH per the Roles section** (resolve the role per Roster overrides first): brief the
-   step's resolved agent via a Cursor subagent (`/<role>` or Task tool), or — no subagents — adopt
-   its `~/.claude/agents/<role>.md` charter and self-review; then run the **review gate** (evidence
-   → acceptance_criteria → the role's Definition of done; send-back, max 3 rounds). No `role` on the
-   step → pick one from the table now (and `update_step` it). Self-execute only trivial mechanical
-   steps. Always pick the best path yourself.
-5. `record_attempt` (`pass` finishes it; `partial`/`fail` is logged and kept) — always noting
-   `role=<name>, review_rounds=<n>`.
-6. `write_carry_forward` anything the next step needs, then loop to 1.
+If the selected plan is `draft`, present the complete plan and ask for explicit approval.
 
-**When a step is BLOCKED** (genuinely needs the user — a decision only they can make, a credential,
-an external action you can't perform): `record_attempt` a `partial`/`fail` stating exactly what's
-needed, `set_step_status(<step>, blocked)`, `write_carry_forward` the unblock note. **Do NOT stop or
-ask.** Call `next_step` again — it skips the blocked step and hands you the next workable one. Mark
-the whole plan blocked only when it returns `{all_blocked}`.
+**Parallel pool:** run the peek/select/claim/refill loop above (bounded slots, path ownership,
+continuous refill). Fall back to sequential `next_step` when only one step is ready or paths conflict.
 
-**Outer loop — pick the next plan:** `list_plans` → choose the best next **workable** plan (not
-complete, not blocked, prerequisites satisfied; prefer the one that unblocks the most downstream
-work). Found one → run the inner loop. **None workable → only now stop** with one summary: what
-completed, and for each blocked item exactly what you need from the user.
+**Inner loop (sequential fallback or single-slot):**
+1. `next_step <plan_id>` (pass `claim:true` for autonomous runs). Draft plans return
+   `awaiting_approval: true` — stop and ask for approval.
+2. Announce ("Working #<plan> step N/M: <title>"). Open board with `plan_id` + `step_id`.
+3. Read `carry_forward` and **`attempts`** FIRST. NEVER repeat an approach marked `fail`.
+4. **DISPATCH** per Roles (implementer-first for concrete code); self-execute only trivial
+   mechanical steps and ledger bookkeeping.
+5. `record_attempt` — always noting `role=<name>, review_rounds=<n>` and `layman`.
+6. `write_carry_forward`, loop to 1 (or refill a parallel slot).
+7. Send concise chat updates at required lifecycle events, plus every 3 minutes during quiet work.
 
-For long unattended runs the orchestrator does this same project loop headless — a FRESH process per
-step (true context reset) + usage-limit auto-retry:
-`npm run orchestrate -- --project <id> --live --retry-on-limit`. In Cursor's headless CLI the
-equivalent per-step process is `agent -p "<step brief>" --output-format json` (note: its `usage`
-object reports token counts only — `inputTokens`/`outputTokens`/`cacheReadTokens`/`cacheWriteTokens`
-— not a dollar figure). Role-tagged steps make each headless agent read + adopt the role charter, so
-the same specialists apply unattended.
+**Outer loop:** `next_plan` until `{complete}`.
 
-**Never end your turn mid-loop.** Working-loop tool results (`next_step`, `record_attempt`,
-`set_step_status`) carry a `directive` field — follow it. Before stopping, check once more: if
-`next_step` or `list_plans` shows anything workable, you are not done. A text message saying what
-you'll do next is not doing it — make the tool call instead.
+**Never end your turn mid-loop** while anything workable remains.
 
 ### `next <id>`
-`next_step <id>`; show just that step's full context (what to do right now).
+Open board for the plan. `next_step <id>`; show that step's full context.
 
 ### `done <step_id>`
-`record_attempt <step_id>` with `verdict: pass` and a one-line `what_tried`.
+`record_attempt` with `verdict: pass` and a one-line `what_tried`.
 
 Keep output tight — the point of plan-ledger is a *small* working context. Don't echo full step
 bodies unless the user is actively working that step.
+
+## Global skill sync
+
+After changing this file, run from the Plan-ledger repo:
+
+```sh
+npm run sync:global-skill
+```
+
+That copies the compact global skill to `~/.cursor/skills/plan-ledger/SKILL.md` with resolved
+absolute paths and writes `~/.cursor/plan-ledger-bridge.json` so drift is detectable.

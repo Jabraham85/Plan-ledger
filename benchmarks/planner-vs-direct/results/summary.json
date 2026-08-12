@@ -1,0 +1,58 @@
+{
+  "benchmark": "planner-vs-direct",
+  "comparedAt": "2026-07-16T16:29:08.270Z",
+  "statisticalNote": "n=1 per arm (single session each). Observed score deltas are indicative only; this protocol does not establish causal attribution between prompt style and outcomes.",
+  "orchestrationControls": {
+    "note": "Same model and tool access across arms are orchestration controls recorded by the operator. They are not independently auditable from benchmark artifacts alone.",
+    "promptTreatment": "Direct arm forbids planning artifacts; planner arm requires explicit decomposition, staged verification, and reassessment before/during implementation."
+  },
+  "direct": {
+    "overallScore": 86.68,
+    "feasibilityPoints": 44.9,
+    "qualityPoints": 41.78,
+    "feasibilityFraction": 0.898,
+    "qualityFraction": 0.8356,
+    "invalidCaseCount": 5,
+    "failureDecomposition": {
+      "timeout": 5,
+      "threw": 0,
+      "validation": 0,
+      "nondeterministic": 0,
+      "inputMutated": 0,
+      "worker": 0,
+      "otherInvalid": 0
+    },
+    "runtimeMs": 4532.77
+  },
+  "planner": {
+    "overallScore": 95.95,
+    "feasibilityPoints": 50,
+    "qualityPoints": 45.95,
+    "feasibilityFraction": 1,
+    "qualityFraction": 0.919,
+    "invalidCaseCount": 0,
+    "failureDecomposition": {
+      "timeout": 0,
+      "threw": 0,
+      "validation": 0,
+      "nondeterministic": 0,
+      "inputMutated": 0,
+      "worker": 0,
+      "otherInvalid": 0
+    },
+    "runtimeMs": 2393.51
+  },
+  "comparison": {
+    "scoreDeltaPlannerMinusDirect": 9.27,
+    "feasibilityDelta": 5.1,
+    "qualityDelta": 4.17,
+    "timeoutDelta": -5,
+    "otherInvalidDelta": 0,
+    "safeUpperBound": 98.43,
+    "safeUpperBoundNote": "Proven safe upper bound on overall score (possibly not tight). Quality is scored against theoretical lower bounds, not true optima; the calibration case has a proven integrality gap."
+  },
+  "sources": {
+    "direct": "C:\\Users\\Jose.Abraham\\Projects\\Plan-ledger\\benchmarks\\planner-vs-direct\\results\\direct.json",
+    "planner": "C:\\Users\\Jose.Abraham\\Projects\\Plan-ledger\\benchmarks\\planner-vs-direct\\results\\planner.json"
+  }
+}

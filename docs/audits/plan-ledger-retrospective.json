@@ -1,0 +1,225 @@
+{
+  "audit_schema_version": 1,
+  "generated_from": {
+    "census_json": "docs/audits/plan-ledger-cross-plan-census.json",
+    "census_markdown": "docs/audits/plan-ledger-cross-plan-census.md",
+    "scope": "Historical plans #1 through #16 only; current plan #17 excluded.",
+    "source_kind": "read-only census derived from SQLite"
+  },
+  "method": {
+    "rule": "Each plan has exactly one outcome. A classification describes the best-supported plan-level result, not every intermediate attempt.",
+    "outcomes": {
+      "worked-as-designed": "Completed without documented material execution failure or rescue.",
+      "worked-after-correction": "Completed, but the record documents a material correction, reassignment, rescue, or failed/partial attempt.",
+      "partial": "Delivered material work but documented an unresolved acceptance or verification gap.",
+      "malfunctioned": "A plan-level product or orchestration malfunction prevented a usable result.",
+      "blocked": "An external dependency prevented completion and no completed result is evidenced.",
+      "stale": "The record is inactive, unfinished, or terminal-looking but left in an active/draft state; this is state evidence, not proof of failure.",
+      "unknown": "Evidence is insufficient to classify more specifically."
+    }
+  },
+  "headline_counts": {
+    "plans": 16,
+    "worked_as_designed": 1,
+    "worked_after_correction": 8,
+    "partial": 2,
+    "malfunctioned": 0,
+    "blocked": 0,
+    "stale": 5,
+    "unknown": 0
+  },
+  "plans": [
+    {
+      "plan_id": 1,
+      "title": "Cursor integration smoke test",
+      "outcome": "worked-as-designed",
+      "fact_basis": "Plan is done 3/3; each step has one pass attempt.",
+      "inference": "The narrow smoke-test goal appears to have completed without a recorded correction.",
+      "evidence_references": ["docs/audits/plan-ledger-cross-plan-census.json#/plans[id=1]", "docs/audits/plan-ledger-cross-plan-census.md#plan-1"]
+    },
+    {
+      "plan_id": 2,
+      "title": "Solve scheduling benchmark with visible specialist chats",
+      "outcome": "stale",
+      "fact_basis": "Plan remains active with 0/4 done and no attempts, leases, or activity.",
+      "inference": "The record is dormant rather than evidence of a failed benchmark.",
+      "evidence_references": ["docs/audits/plan-ledger-cross-plan-census.json#/plans[id=2]", "docs/audits/plan-ledger-cross-plan-census.md#plan-2"]
+    },
+    {
+      "plan_id": 3,
+      "title": "Audit and republish the Diagon Depot user guide",
+      "outcome": "worked-after-correction",
+      "fact_basis": "Plan is done 8/8; step #12 records two failed capture attempts followed by an orchestrator repair, and later steps record review corrections.",
+      "inference": "The deliverable succeeded through active review and manual recovery, not the initial execution path.",
+      "evidence_references": ["docs/audits/plan-ledger-cross-plan-census.json#/plans[id=3]/steps[id=12]", "docs/audits/plan-ledger-cross-plan-census.json#/plans[id=3]/steps[id=14]", "docs/audits/plan-ledger-cross-plan-census.md#plan-3"]
+    },
+    {
+      "plan_id": 4,
+      "title": "Design a secure user-installed app runtime for Diagon Depot",
+      "outcome": "worked-after-correction",
+      "fact_basis": "Plan is done 8/8; documented corrections include security-fixture additions, implementation review rounds, and a test-runner stall rescued by the orchestrator.",
+      "inference": "A substantial, verified design/implementation result was achieved despite material execution corrections.",
+      "evidence_references": ["docs/audits/plan-ledger-cross-plan-census.json#/plans[id=4]/steps[id=19]", "docs/audits/plan-ledger-cross-plan-census.json#/plans[id=4]/steps[id=22]", "docs/audits/plan-ledger-cross-plan-census.md#plan-4"]
+    },
+    {
+      "plan_id": 5,
+      "title": "Planner v2 enforcement, prior-plan recall, and live observability",
+      "outcome": "worked-after-correction",
+      "fact_basis": "Plan is done 6/6; steps #24 and #28 record artifact-free specialist timeouts followed by reassignment to an implementer.",
+      "inference": "Role reassignment plus independent verification was an effective recovery pattern.",
+      "evidence_references": ["docs/audits/plan-ledger-cross-plan-census.json#/plans[id=5]/steps[id=24]", "docs/audits/plan-ledger-cross-plan-census.json#/plans[id=5]/steps[id=28]", "docs/audits/plan-ledger-cross-plan-census.md#plan-5"]
+    },
+    {
+      "plan_id": 6,
+      "title": "Audit the complete LWADB update request backlog and current implementation",
+      "outcome": "worked-after-correction",
+      "fact_basis": "Plan is done 8/8; steps #30 through #34 document incomplete evidence/COMPLETION_JSON failures and direct orchestrator completion with checklist validation.",
+      "inference": "Narrative-only auditing was unreliable here; anchored machine-checkable validation was the successful recovery.",
+      "evidence_references": ["docs/audits/plan-ledger-cross-plan-census.json#/plans[id=6]/steps[id=30]", "docs/audits/plan-ledger-cross-plan-census.json#/plans[id=6]/steps[id=34]", "docs/audits/plan-ledger-cross-plan-census.md#plan-6"]
+    },
+    {
+      "plan_id": 7,
+      "title": "Vendor goals for Milestones 18 and 19",
+      "outcome": "stale",
+      "fact_basis": "Plan is draft with 0/4 done and no attempts, leases, or activity.",
+      "inference": "It was never approved or executed in the available record; failure cannot be inferred.",
+      "evidence_references": ["docs/audits/plan-ledger-cross-plan-census.json#/plans[id=7]", "docs/audits/plan-ledger-cross-plan-census.md#plan-7"]
+    },
+    {
+      "plan_id": 8,
+      "title": "Build global Cursor conversation tracker",
+      "outcome": "stale",
+      "fact_basis": "All five steps are done with pass attempts, but the plan status remains active; census flags active_plan_all_steps_done.",
+      "inference": "This is terminal-status drift, not proof that the tracker malfunctioned.",
+      "evidence_references": ["docs/audits/plan-ledger-cross-plan-census.json#/plans[id=8]", "docs/audits/plan-ledger-cross-plan-census.md#plan-8"]
+    },
+    {
+      "plan_id": 9,
+      "title": "Build Nya Data Workspace with evidence-first analysis",
+      "outcome": "worked-after-correction",
+      "fact_basis": "Plan is done 7/7; steps #48, #50, #51, and #52 record partial/noncompliant or failed dispatches, then focused corrections or reassignment.",
+      "inference": "Preserving useful partial artifacts and applying narrow follow-up checks avoided needless restarts.",
+      "evidence_references": ["docs/audits/plan-ledger-cross-plan-census.json#/plans[id=9]/steps[id=48]", "docs/audits/plan-ledger-cross-plan-census.json#/plans[id=9]/steps[id=50]", "docs/audits/plan-ledger-cross-plan-census.json#/plans[id=9]/steps[id=52]", "docs/audits/plan-ledger-cross-plan-census.md#plan-9"]
+    },
+    {
+      "plan_id": 10,
+      "title": "Harden real-world spreadsheet functionality",
+      "outcome": "worked-after-correction",
+      "fact_basis": "Plan is done 6/6; step #58 records an artifact-free performance-specialist dispatch and reassignment to an implementer who created benchmark evidence.",
+      "inference": "The work was recovered by matching the implementation-heavy task to an implementer.",
+      "evidence_references": ["docs/audits/plan-ledger-cross-plan-census.json#/plans[id=10]/steps[id=58]", "docs/audits/plan-ledger-cross-plan-census.md#plan-10"]
+    },
+    {
+      "plan_id": 11,
+      "title": "Package Nya Data Workspace for sharing",
+      "outcome": "stale",
+      "fact_basis": "Three of four steps are done; step #63 remains in_progress with no attempts, leases, or activity.",
+      "inference": "The final packaging state is dormant/unfinished; the census does not establish why.",
+      "evidence_references": ["docs/audits/plan-ledger-cross-plan-census.json#/plans[id=11]", "docs/audits/plan-ledger-cross-plan-census.md#plan-11"]
+    },
+    {
+      "plan_id": 12,
+      "title": "Build standalone Diagon RAG service",
+      "outcome": "worked-after-correction",
+      "fact_basis": "Plan is done 8/8 with verified dispositions; several steps have multiple accepted attempts and documented review corrections.",
+      "inference": "The record supports a completed, verified result, but not a first-pass result.",
+      "evidence_references": ["docs/audits/plan-ledger-cross-plan-census.json#/plans[id=12]/steps[id=66]", "docs/audits/plan-ledger-cross-plan-census.json#/plans[id=12]/steps[id=71]", "docs/audits/plan-ledger-cross-plan-census.md#plan-12"]
+    },
+    {
+      "plan_id": 13,
+      "title": "Release UI feedback improvements to Diagon Depot production",
+      "outcome": "worked-after-correction",
+      "fact_basis": "Plan is done 8/8; step #73 first blocked on AWS authentication, then succeeded after credentials were refreshed, and deployment steps document ENI remediation.",
+      "inference": "External-auth and capacity friction was resolved with bounded operational recovery.",
+      "evidence_references": ["docs/audits/plan-ledger-cross-plan-census.json#/plans[id=13]/steps[id=73]", "docs/audits/plan-ledger-cross-plan-census.json#/plans[id=13]/steps[id=74]", "docs/audits/plan-ledger-cross-plan-census.md#plan-13"]
+    },
+    {
+      "plan_id": 14,
+      "title": "Add ghost-pose animation coverage to StationPlacer previews",
+      "outcome": "partial",
+      "fact_basis": "All four steps are done, but step #79 has deferred disposition and records a remaining manual viewport QA gate.",
+      "inference": "Build/test work completed, while the required live visual verification remains unresolved.",
+      "evidence_references": ["docs/audits/plan-ledger-cross-plan-census.json#/plans[id=14]/steps[id=76]", "docs/audits/plan-ledger-cross-plan-census.json#/plans[id=14]/steps[id=79]", "docs/audits/plan-ledger-cross-plan-census.md#plan-14"]
+    },
+    {
+      "plan_id": 15,
+      "title": "Deliver three broadcast-quality Cursor capability videos cut to CURSOR_VO_3",
+      "outcome": "partial",
+      "fact_basis": "All ten steps are done, but step #88 records a blocked multi-file reshoot and step #92 records residual stillness plus no full re-audit after changed footage; step #92 is deferred.",
+      "inference": "The videos were packaged, but the record does not support an unqualified final-quality claim.",
+      "evidence_references": ["docs/audits/plan-ledger-cross-plan-census.json#/plans[id=15]/steps[id=88]", "docs/audits/plan-ledger-cross-plan-census.json#/plans[id=15]/steps[id=92]", "docs/audits/plan-ledger-cross-plan-census.md#plan-15"]
+    },
+    {
+      "plan_id": 16,
+      "title": "Ship Cursor rules and a prompt that build a beautiful Unreal 5.8 stage with a spline camera reveal on the fly",
+      "outcome": "stale",
+      "fact_basis": "All eight steps are done with verified dispositions, but the plan status remains active; census flags active_plan_all_steps_done.",
+      "inference": "This is status drift after apparently successful execution, not an evidenced product failure.",
+      "evidence_references": ["docs/audits/plan-ledger-cross-plan-census.json#/plans[id=16]", "docs/audits/plan-ledger-cross-plan-census.md#plan-16"]
+    }
+  ],
+  "pitfalls": [
+    {
+      "name": "Completion-contract and evidence omissions",
+      "frequency": "10 documented failed or partial step attempts",
+      "impact": "high",
+      "representatives": ["#5/#24", "#6/#30", "#6/#31", "#6/#32", "#6/#33", "#6/#34", "#9/#48", "#9/#50", "#9/#51", "#9/#52"],
+      "facts": "These records explicitly cite missing COMPLETION_JSON, absent terminal output, missing acceptance items, or no artifact/test evidence.",
+      "inference": "A checklist-backed validator and bounded terminal contract should be required before accepting research or audit work."
+    },
+    {
+      "name": "Role/model-to-task mismatch or stalled specialist dispatch",
+      "frequency": "5 documented reassignment recoveries",
+      "impact": "high",
+      "representatives": ["#5/#24", "#5/#28", "#9/#52", "#10/#58", "#3/#12"],
+      "facts": "Architect, UI/UX, or performance dispatches produced no usable artifact or missed the actual implementation need; an implementer or orchestrator recovered the work.",
+      "inference": "Dispatch policy should prioritize demonstrated task modality and artifact production over nominal specialist labels."
+    },
+    {
+      "name": "Terminal-state drift",
+      "frequency": "5 plans",
+      "impact": "medium",
+      "representatives": ["#2", "#7", "#8", "#11", "#16"],
+      "facts": "Plans #8 and #16 are active despite all steps done; #2 has no work, #7 remains draft, and #11 has an inactive in-progress final step.",
+      "inference": "Terminalization assessment should run automatically after each terminal step and surface stale active/draft plans."
+    },
+    {
+      "name": "Legacy verification and artifact provenance gap",
+      "frequency": "54 completed steps with legacy_unknown disposition; 101/101 census rows show zero claimed artifacts",
+      "impact": "high",
+      "representatives": ["#1/#1", "#3/#12", "#11/#60"],
+      "facts": "The census tables record legacy_unknown dispositions for plans #1 and #3 through #11, and zero claimed artifacts for every step.",
+      "inference": "Historical pass results can be useful but should not be elevated to artifact-verified proof without backfilled evidence."
+    },
+    {
+      "name": "Activity/lease observability gap",
+      "frequency": "0 activity records across 101 steps; leases appear only on later plans",
+      "impact": "medium",
+      "representatives": ["#12/#65", "#14/#76", "#15/#86", "#16/#94"],
+      "facts": "The census reports Activity=0 for every plan; later plans contain lease rows while earlier plans do not.",
+      "inference": "The absence of activity evidence limits diagnosis of timing, ownership, and silent-state-machine behavior; it does not prove agents were inactive."
+    },
+    {
+      "name": "Deferred/manual verification left behind",
+      "frequency": "2 plans with explicit deferred acceptance",
+      "impact": "high",
+      "representatives": ["#14/#79", "#15/#92"],
+      "facts": "Step #79 defers viewport QA; step #92 defers a full re-audit after footage changes.",
+      "inference": "A plan should remain visibly partial until the manual gate is owned, scheduled, and evidenced."
+    },
+    {
+      "name": "Poor carry-forward hygiene",
+      "frequency": "1 explicit malformed value, with broader evidence-quality limitations",
+      "impact": "low",
+      "representatives": ["#15/#91"],
+      "facts": "Plan #15 step #91 records carry-forward as the literal string 'undefined'.",
+      "inference": "Carry-forward writes need schema validation and a required concise next-owner summary."
+    }
+  ],
+  "limitations": [
+    "The retrospective relies only on the supplied census artifacts; it does not inspect source repositories, external services, media, or the production database.",
+    "The census says claimed artifacts are ledger claims and does not verify path existence.",
+    "Empty attempts, activity, leases, models, or artifacts are absence of recorded evidence, not proof of execution failure.",
+    "Outcome classification is deliberately one per plan; it does not erase mixed step-level outcomes."
+  ]
+}
