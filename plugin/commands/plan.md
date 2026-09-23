@@ -223,6 +223,8 @@ default without `--parallel`). Release gate: `npm run validate:r1-release`. Deta
    `{complete}` → `set_plan_status(done)`, outer loop.
 2. Announce ("Working #<plan> step 4/8: <title>"); the claim already set it `in_progress`.
 3. Read its `carry_forward` and **`attempts`** FIRST. NEVER repeat an approach already marked `fail`.
+   Read its **`brain`** too: recorded facts about this step's code, already re-checked against the source
+   (anything whose file changed arrives `suspect` — verify it before relying on it). Put them in the brief.
 4. **DISPATCH per the Roles section** (resolve the role per **Roster overrides** first): brief the
    step's resolved agent (Agent tool) with the step's
    `context` + `acceptance_criteria` + `carry_forward` + `lessons`, then run the **review gate**
@@ -231,6 +233,13 @@ default without `--parallel`). Release gate: `npm run validate:r1-release`. Deta
    only trivial mechanical steps. **Always pick the best path yourself** — decide and act.
 5. `record_attempt` (`pass` finishes it; `partial`/`fail` is logged and kept) — always noting
    `role=<name>, review_rounds=<n>` and setting `layman` (plain-English what-was-done + thoughts).
+   If the step taught **durable truths** (a fact about the code/system, a decision, a lesson, a
+   pitfall — not a log of actions), `absorb_findings(step_id, findings)` with a `subject` and
+   `evidence` (`path:line`) on each; use `slot` for single-valued settings, `supersedes` to correct one, and
+   `depends_on` for the `brain` ids you relied on (so they are re-checked together). It dedups for you
+   (zero model calls) — never skip it to "avoid duplicates". Universal claims ("only", "all", "no …")
+   need a repo-wide search as proof. If a `brain` fact turned out wrong, `resolve_finding` it (revised/retracted).
+   First time in a project: `set_project_root` so findings link to their files and go stale when code changes.
 6. `write_carry_forward` anything the next step needs, then loop to 1.
 
 **When a step is BLOCKED** (genuinely needs the user — a decision only they can make, a credential, the editor/PIE reopened, or an external action you can't perform):

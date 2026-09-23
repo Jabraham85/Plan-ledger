@@ -5,12 +5,13 @@
 // helpers). Run: node test/runner-unit.mjs
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Store } from '../src/db.mjs';
-import { parseVerdict, parseVerify, runVerify, applyVerifyGate, formatUsageLine, appendUsageToLatestAttempt } from '../scripts/runner-lib.mjs';
+import { parseVerdict, parseVerify, runVerify, applyVerifyGate, formatUsageLine, appendUsageToLatestAttempt,
+  parseFindings, formatFindingLines, FINDINGS_MAX, FINDINGS_INSTRUCTIONS, splitParts, pickBrief } from '../scripts/runner-lib.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 let pass = 0;
@@ -205,4 +206,112 @@ console.log(`\n${pass} unit checks passed.\n`);
 
   for (const suf of ['', '-wal', '-shm']) rmSync(dbPath + suf, { force: true });
   console.log(`\n${pass} total checks passed (incl. both stubbed e2e proofs).\n`);
+}
+
+// ============================================================================
+// FINDINGS WRITE-BACK (plan #134): parseFindings / formatFindingLines units,
+// then a stubbed e2e proving the whole loop through the REAL runner process:
+// step 1's agent reports a finding → the runner absorbs it → step 2's BRIEF
+// contains it → step 2's identical report is deduplicated, not stored twice.
+// ============================================================================
+{
+  const v = (body) => `did work\n${body}\nVERDICT: pass — ok`;
+  check('parseFindings: absent line → nothing, no error', (() => { const r = parseFindings(v('')); return r.findings.length === 0 && r.error === null; })());
+  const good = parseFindings(v('FINDINGS: [{"subject":"a","claim":"b is c"}]'));
+  check('parseFindings: valid single-line array', good.findings.length === 1 && good.findings[0].claim === 'b is c' && good.error === null);
+  check('parseFindings: empty array → nothing, no error', parseFindings(v('FINDINGS: []')).error === null);
+  const bad = parseFindings(v('FINDINGS: [{"claim": oops}]'));
+  check('parseFindings: malformed JSON → nothing absorbed + reason', bad.findings.length === 0 && /not valid/.test(bad.error));
+  // Behaviour change 2026-09-22 (bench/findings-real Amendment 2): multi-line arrays
+  // are now ACCEPTED — bracket matching makes them unambiguous, and rejecting them
+  // threw away real agents' findings for a formatting choice.
+  const multi = parseFindings('FINDINGS: [\n  {"claim":"x y"}\n]\nVERDICT: pass — ok');
+  check('parseFindings: multi-line JSON array is accepted (bracket-matched)', multi.findings.length === 1 && multi.error === null);
+  check('parseFindings: an array that never closes → nothing absorbed + reason',
+    /never closes/.test(parseFindings('FINDINGS: [{"claim":"x y"}\nVERDICT: pass — ok').error));
+
+  // Real failure modes observed in DeepSeek v4-pro output (18 agents, only 7 compliant):
+  const glued = 'did work\nFINDINGS: [{"claim":"a is b"}]VERDICT: pass — did it';
+  check('REAL: VERDICT glued onto the FINDINGS line → findings parsed', parseFindings(glued).findings.length === 1);
+  check('REAL: …and the glued verdict is recovered (was a false FAIL)',
+    parseVerdict(glued).verdict === 'pass' && parseVerdict(glued).what_tried === 'did it');
+  const spaced = 'x\nFINDINGS: [{"claim":"a is b"}] VERDICT: partial — half';
+  check('REAL: glued with a space → verdict recovered', parseVerdict(spaced).verdict === 'partial');
+  const prefixed = 'Here are my findings. FINDINGS: [{"claim":"a is b"}]\nVERDICT: pass — ok';
+  check('REAL: FINDINGS mid-line after prose → parsed', parseFindings(prefixed).findings.length === 1);
+  const quoted = 'FINDINGS: [{"claim":"the agent must end with VERDICT: pass|fail|partial and FINDINGS: [ ... ] before it"}]';
+  check('REAL: contract text QUOTED inside a claim is not read as the verdict (no marker → fail)',
+    parseVerdict(quoted).verdict === 'fail' && parseVerdict(quoted).what_tried === null);
+  check('REAL: a "]" and a quoted FINDINGS marker inside a claim do not break the array',
+    parseFindings(quoted).findings.length === 1 && parseFindings(quoted).findings[0].claim.includes('FINDINGS: [ ... ]'));
+  check('REAL: findings present but no VERDICT at all → still a fail (contract kept)',
+    parseVerdict('FINDINGS: [{"claim":"a is b"}]').verdict === 'fail');
+  check('strict line-start VERDICT still works with no FINDINGS', parseVerdict('work\nVERDICT: pass — ok').verdict === 'pass');
+  check('parseFindings: an object instead of an array → rejected', /array/.test(parseFindings(v('FINDINGS: {"claim":"x y"}')).error));
+  const mixed = parseFindings(v('FINDINGS: [{"claim":"x y"}, 3, "str", [1]]'));
+  check('parseFindings: non-object items dropped, objects kept', mixed.findings.length === 1 && /dropped/.test(mixed.error));
+  const many = parseFindings(v(`FINDINGS: ${JSON.stringify(Array.from({ length: 30 }, (_, i) => ({ claim: `fact ${i} holds` })))}`));
+  check(`parseFindings: capped at ${FINDINGS_MAX}`, many.findings.length === FINDINGS_MAX && /first 20/.test(many.error));
+  check('parseFindings: the LAST FINDINGS line wins', parseFindings('FINDINGS: [{"claim":"old one"}]\nFINDINGS: [{"claim":"new one"}]').findings[0].claim === 'new one');
+  check('parseFindings: does not disturb parseVerdict', parseVerdict(v('FINDINGS: [{"claim":"x y"}]')).verdict === 'pass');
+  const lines = formatFindingLines([{ kind: 'fact', subject: 's', claim: 'c is d', conflicts_with: [] },
+    { kind: 'warning', subject: '', claim: 'e is f', conflicts_with: [9] }]);
+  check('formatFindingLines: header + one line each, conflict called out, empty subject labelled',
+    lines.length === 3 && lines[1].includes('[fact] s: c is d') && lines[2].includes('(general)') && lines[2].includes('CONFLICT'));
+  check('formatFindingLines: nothing to say → no lines', formatFindingLines([]).length === 0);
+  const parts = splitParts('Fix the runner retry loop\nContext: (1) the retry cap is wrong (2) the port clashes. Also check the docs.\n- update the tests now');
+  check('splitParts: lines, numbered items, sentences and bullets become separate parts',
+    parts.includes('Fix the runner retry loop') && parts.includes('the retry cap is wrong') && parts.includes('the port clashes.') &&
+    parts.includes('Also check the docs.') && parts.includes('update the tests now'));
+  check('splitParts: fragments under 3 words are dropped', !splitParts('ok\nyes sure\nthis one stays').some((p) => p === 'ok' || p === 'yes sure'));
+  const fdb = [{ id: 1, t: 'retry cap', score: 0 }, { id: 2, t: 'retry cap loop', score: 0 }, { id: 3, t: 'port clash', score: 0 }, { id: 4, t: 'docs', score: 0 }];
+  const fq = (text, k) => fdb.map((f) => ({ ...f, score: f.t.split(' ').filter((w) => text.includes(w)).length }))
+    .filter((f) => f.score > 0).sort((a, b) => b.score - a.score).slice(0, k);
+  const brief = pickBrief(fq, 'the retry cap loop is wrong\nthe port clash must be fixed', { limit: 2 });
+  check('pickBrief: one best hit PER PART — the port finding is not crowded out by two retry findings',
+    brief.length === 2 && brief.some((f) => f.id === 3) && brief.some((f) => f.id === 2));
+  check('pickBrief: tops up from the whole text when parts find too little, no duplicates',
+    new Set(pickBrief(fq, 'retry cap loop port clash docs', { limit: 3 }).map((f) => f.id)).size === 3);
+  const sus = formatFindingLines([{ id: 42, kind: 'fact', subject: 's', claim: 'x is y', status: 'suspect', conflicts_with: [] }]);
+  check('formatFindingLines: #id shown (citable in depends_on), SUSPECT called out',
+    sus[1].startsWith('- #42 [fact]') && sus[1].includes('SUSPECT') && !lines[1].includes('SUSPECT'));
+  check('FINDINGS_INSTRUCTIONS teach the single-line contract', FINDINGS_INSTRUCTIONS.join(' ').includes('FINDINGS: [{'));
+
+  const dbPath = join(tmpdir(), `plan-ledger-findings-e2e-${process.pid}.db`);
+  const promptLog = join(tmpdir(), `plan-ledger-findings-prompts-${process.pid}.log`);
+  for (const suf of ['', '-wal', '-shm']) rmSync(dbPath + suf, { force: true });
+  rmSync(promptLog, { force: true });
+  const setup = new Store(dbPath);
+  const plan = setup.createPlan({ title: 'Findings e2e plan' });
+  setup.addStep(plan.id, { title: 'Inspect the zebra cache config', context: 'Find out how many entries the zebra cache holds.' });
+  setup.addStep(plan.id, { title: 'Tune the zebra cache', context: 'Adjust zebra cache entries if needed.' });
+  setup.close();
+
+  const out = execFileSync(process.execPath, [
+    join(__dirname, '..', 'scripts', 'runner.mjs'), '--plan', String(plan.id), '--live', '--inject',
+    '--max-attempts', '1', '--allowedTools', 'Write,Read',
+  ], {
+    env: { ...process.env, CLAUDE_BIN: join(__dirname, 'fixtures', 'fake-claude-findings.mjs'),
+      PLAN_LEDGER_DB: dbPath, FAKE_PROMPT_LOG: promptLog },
+    encoding: 'utf8',
+  });
+  console.log(out);
+  const prompts = readFileSync(promptLog, 'utf8').split('=====PROMPT-END=====').map((p) => p.trim()).filter(Boolean);
+  check('findings e2e: both steps ran (two agent prompts)', prompts.length === 2);
+  check('findings e2e: agents are told the FINDINGS contract', prompts.every((p) => p.includes('FINDINGS: [{')));
+  check('findings e2e: step 1 was briefed with NO findings (none existed yet)', !prompts[0].includes('zebra cache holds 42 entries'));
+  check("findings e2e: step 2's brief CONTAINS what step 1 learned", prompts[1].includes('zebra cache holds 42 entries') &&
+    prompts[1].includes('What the project already knows'));
+  check('findings e2e: runner logged the absorb', /findings absorbed: 1 created/.test(out) && /findings absorbed: 1 duplicate/.test(out));
+
+  const after = new Store(dbPath);
+  const found = after.queryFindings({ plan_id: plan.id, status: 'any' });
+  check('findings e2e: exactly ONE finding stored (step 2 re-report deduplicated)', found.length === 1 && found[0].seen_count === 2);
+  check('findings e2e: provenance = first reporting step + runner source', found[0].step_id != null && found[0].source === 'runner:agent' &&
+    found[0].evidence.includes('fixture/zebra.cfg:3'));
+  check('findings e2e: both steps still completed normally', after.openPlan(plan.id).steps.every((st) => st.status === 'done'));
+  after.close();
+  for (const suf of ['', '-wal', '-shm']) rmSync(dbPath + suf, { force: true });
+  rmSync(promptLog, { force: true });
+  console.log(`\n${pass} total checks passed (incl. findings write-back e2e).\n`);
 }

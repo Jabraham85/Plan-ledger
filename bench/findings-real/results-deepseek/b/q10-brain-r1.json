@@ -1,0 +1,20 @@
+{
+  "phase": "b",
+  "tag": "q10-brain-r1",
+  "model": "deepseek-v4-pro",
+  "is_error": false,
+  "subtype": "success",
+  "result": "ANSWER: 5",
+  "cost": 0.001808488,
+  "turns": 3,
+  "tin": 3277,
+  "tout": 148,
+  "cache_hit": 2432,
+  "cache_miss": 845,
+  "tool_calls": 2,
+  "peak": true,
+  "exit": 0,
+  "stderr": "",
+  "duration_ms": 4402,
+  "prompt": "Answer this question about the codebase in the current directory (plan-ledger, a Node.js app).\nYou may read files. Do not modify anything.\n\nQuestion: What is the default `limit` parameter of Store.getLessons?\n\nWhat the project already knows (recorded findings — check any marked CONFLICT before relying on it):\n- [fact] src/db.mjs#currentprojectid: project scoping defaults to the settings key 'current_project' (or 1 if unset), and NULL project_id is treated as project 1 in both recall and getLessons\n- [fact] src/db.mjs#getlessons: getLessons tie-breaks equal scores by created_at descending (newer first)\n- [fact] src/db.mjs#getlessons: when step_id is given, getLessons appends the step's title and tools to the query terms and scopes to that step's project\n- [fact] src/db.mjs#getlessons: getLessons ranks non-pass attempts across plans using idfRank over step_title+what_tried+result, excluding the step's own attempts and (unless all=true) other projects\n- [fact] src/db.mjs#getlessons: getLessons tie-breaks equal scores by created_at descending (newest first) and returns score rounded to 2 decimals\n\nBe precise. The FINAL LINE of your output MUST be exactly:\nANSWER: <your answer>"
+}

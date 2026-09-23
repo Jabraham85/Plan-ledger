@@ -1,0 +1,20 @@
+{
+  "phase": "b",
+  "tag": "q05-brain-r4",
+  "model": "deepseek-v4-pro",
+  "is_error": false,
+  "subtype": "success",
+  "result": "ANSWER: 3000",
+  "cost": 0.001274592,
+  "turns": 3,
+  "tin": 3114,
+  "tout": 150,
+  "cache_hit": 2688,
+  "cache_miss": 426,
+  "tool_calls": 2,
+  "peak": true,
+  "exit": 0,
+  "stderr": "",
+  "duration_ms": 4845,
+  "prompt": "Answer this question about the codebase in the current directory (plan-ledger, a Node.js app).\nYou may read files. Do not modify anything.\n\nQuestion: What PRAGMA busy_timeout value, in milliseconds, does the Store set on its SQLite connection?\n\nWhat the project already knows (recorded findings — check any marked CONFLICT before relying on it):\n- [fact] src/db.mjs#store constructor: Store constructor sets PRAGMA journal_mode=WAL, foreign_keys=ON, busy_timeout=3000, journal_size_limit=4194304, then exec(SCHEMA) and _migrate()\n- [fact] src/db.mjs#store constructor: Store sets PRAGMA journal_mode=WAL, foreign_keys=ON, busy_timeout=3000, journal_size_limit=4194304, then execs SCHEMA and runs _migrate()\n- [fact] src/db.mjs#store constructor: Store sets PRAGMA journal_mode=WAL, foreign_keys=ON, busy_timeout=3000, journal_size_limit=4194304, then executes SCHEMA and _migrate()\n- [fact] src/db.mjs#store: Store uses Node's built-in node:sqlite DatabaseSync (synchronous API, no native deps)\n- [fact] src/db.mjs#store.user_version: Migrations are gated on PRAGMA user_version; Store.USER_VERSION is 4\n\nBe precise. The FINAL LINE of your output MUST be exactly:\nANSWER: <your answer>"
+}

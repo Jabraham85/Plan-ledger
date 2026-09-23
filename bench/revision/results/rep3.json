@@ -1,0 +1,796 @@
+{
+  "rep": 3,
+  "model": "deepseek-v4-pro",
+  "started": "2026-09-23T03:27:42.305Z",
+  "code": {
+    "fileLinked": {
+      "F1": true,
+      "F2": true,
+      "F3": true,
+      "F4": true,
+      "F5": true,
+      "F6": true,
+      "F7": false,
+      "F8": true,
+      "F9": true,
+      "F10": true,
+      "F11": true,
+      "F12": true,
+      "F13": true,
+      "F14": true,
+      "F15": true,
+      "F16": true,
+      "F17": true,
+      "F18": false,
+      "F19": true,
+      "F20": true
+    },
+    "flagged_by_stale": [
+      "F17",
+      "F13",
+      "F14",
+      "F15",
+      "F1",
+      "F2",
+      "F3",
+      "F4",
+      "F5",
+      "F6",
+      "F8",
+      "F9",
+      "F10",
+      "F11",
+      "F12"
+    ],
+    "evaluated": [
+      {
+        "fid": "F1",
+        "verdict": "revised",
+        "new_claim": "the runner's --max-retries flag defaults to 24",
+        "reason": "scripts/runner.mjs:96 reads `Number(val('--max-retries', 24)) || 24`, so the default is 24, not 48."
+      },
+      {
+        "fid": "F2",
+        "verdict": "confirmed",
+        "reason": "Checked scripts/runner.mjs line 95: `const retryMinutes = Number(val('--retry-minutes', 30)) || 30;` — the --retry-minutes flag still defaults to 30."
+      },
+      {
+        "fid": "F3",
+        "verdict": "confirmed",
+        "reason": "scripts/runner.mjs:90 reads `const maxAttempts = Number(val('--max-attempts', 2));`, so the --max-attempts flag defaults to 2; the header comment at line 10 also confirms '(default 2)'."
+      },
+      {
+        "fid": "F4",
+        "verdict": "revised",
+        "new_claim": "the runner's --permission-mode flag defaults to 'default'",
+        "reason": "Checked scripts/runner.mjs:98 — it reads `const permissionMode = val('--permission-mode', 'default');`, so the default is 'default', not 'acceptEdits'."
+      },
+      {
+        "fid": "F5",
+        "verdict": "confirmed",
+        "reason": "scripts/runner.mjs:417 in msUntilReset computes ms = t.getTime() - Date.now() + 2 * 60000, adding a 2-minute buffer past the parsed reset time, so the fact remains true as written."
+      },
+      {
+        "fid": "F6",
+        "verdict": "confirmed",
+        "reason": "Checked scripts/runner.mjs: line 418 returns null when ms > 12h (ms <= 12*3600000 ? ms : null), and line 493 uses resetMs ?? retryMinutes*60000, so null falls back to --retry-minutes."
+      },
+      {
+        "fid": "F8",
+        "verdict": "revised",
+        "new_claim": "the Store sets the SQLite busy_timeout to 5000 milliseconds",
+        "reason": "Checked src/db.mjs:341 in the current source; it reads 'PRAGMA busy_timeout = 5000;', not 3000."
+      },
+      {
+        "fid": "F9",
+        "verdict": "confirmed",
+        "reason": "Checked src/db.mjs:342 in the current source; it still executes 'PRAGMA journal_size_limit = 4194304;' in the Store constructor, capping the WAL journal at 4194304 bytes."
+      },
+      {
+        "fid": "F10",
+        "verdict": "confirmed",
+        "reason": "Checked current src/db.mjs:763 — getLessons signature still has limit = 5 default, so it returns at most 5 lessons by default."
+      },
+      {
+        "fid": "F11",
+        "verdict": "confirmed",
+        "reason": "Checked src/db.mjs:1071 — recall(query, limit = 8, all = false) still defaults limit to 8 and passes it to idfRank, so it returns at most 8 hits by default."
+      },
+      {
+        "fid": "F12",
+        "verdict": "confirmed",
+        "reason": "Checked current src/db.mjs recordAttempt (lines 663-679): verdicts are pass|fail|partial, and line 674-675 sets status to 'done' only when v==='pass', otherwise 'failed'. So any non-pass verdict sets step status to failed, matching the fact."
+      },
+      {
+        "fid": "F13",
+        "verdict": "confirmed",
+        "reason": "Checked scripts/runner-lib.mjs: FINDINGS_MAX = 20 (line 14), and parseFindings returns objs.slice(0, FINDINGS_MAX) (line 28), so at most 20 findings are kept from one agent output."
+      },
+      {
+        "fid": "F14",
+        "verdict": "confirmed",
+        "reason": "Checked scripts/runner-lib.mjs:78 — runVerify's default timeoutMs is 10 * 60 * 1000 (10 minutes), so the fact remains true."
+      },
+      {
+        "fid": "F15",
+        "verdict": "confirmed",
+        "reason": "Checked scripts/runner-lib.mjs:81 — runVerify returns tail: combined.slice(-500), so at most the last 500 characters of VERIFY output are kept."
+      },
+      {
+        "fid": "F17",
+        "verdict": "revised",
+        "new_claim": "the exe build boot-test serves the board on port 4319",
+        "reason": "scripts/build-exe.mjs line 60 currently sets `const port = 4319;` and uses it for the boot-test fetch, so the recorded port 4399 is no longer correct."
+      },
+      {
+        "fid": "F7",
+        "verdict": "revised",
+        "new_claim": "with default flags and --retry-on-limit, the runner sleeps at most 12 hours in total before giving up",
+        "reason": "--max-retries now defaults to 24 (was 48) and --retry-minutes defaults to 30, so the fallback sleep cadence totals 24 × 30 min = 12 hours, not 24."
+      },
+      {
+        "fid": "F18",
+        "verdict": "revised",
+        "new_claim": "the packaged board and the build boot-test both use port 4319, so a running board can block the boot-test",
+        "reason": "scripts/build-exe.mjs:60 sets the boot-test port to 4319 (PLAN_LEDGER_WEB_PORT=4319), and web/app.mjs:13 (the packaged board) defaults to 4319 — same port, so the 'different ports' premise is false and a running board would occupy 4319 and block the boot-test."
+      }
+    ],
+    "final": {
+      "F1": {
+        "status": "active",
+        "id": 21,
+        "claim": "the runner's --max-retries flag defaults to 24",
+        "revised": true
+      },
+      "F2": {
+        "status": "active",
+        "id": 2,
+        "claim": "the runner's --retry-minutes flag defaults to 30",
+        "revised": false
+      },
+      "F3": {
+        "status": "active",
+        "id": 3,
+        "claim": "the runner's --max-attempts flag defaults to 2",
+        "revised": false
+      },
+      "F4": {
+        "status": "active",
+        "id": 22,
+        "claim": "the runner's --permission-mode flag defaults to 'default'",
+        "revised": true
+      },
+      "F5": {
+        "status": "active",
+        "id": 5,
+        "claim": "after a parsed usage-limit reset time the runner waits an extra 2 minutes",
+        "revised": false
+      },
+      "F6": {
+        "status": "active",
+        "id": 6,
+        "claim": "a parsed reset wait longer than 12 hours is ignored in favour of --retry-minutes",
+        "revised": false
+      },
+      "F7": {
+        "status": "active",
+        "id": 25,
+        "claim": "with default flags and --retry-on-limit, the runner sleeps at most 12 hours in total before giving up",
+        "revised": true
+      },
+      "F8": {
+        "status": "active",
+        "id": 23,
+        "claim": "the Store sets the SQLite busy_timeout to 5000 milliseconds",
+        "revised": true
+      },
+      "F9": {
+        "status": "active",
+        "id": 9,
+        "claim": "the Store caps the WAL journal at 4194304 bytes with journal_size_limit",
+        "revised": false
+      },
+      "F10": {
+        "status": "active",
+        "id": 10,
+        "claim": "getLessons returns at most 5 lessons by default",
+        "revised": false
+      },
+      "F11": {
+        "status": "active",
+        "id": 11,
+        "claim": "recall returns at most 8 hits by default",
+        "revised": false
+      },
+      "F12": {
+        "status": "active",
+        "id": 12,
+        "claim": "recording an attempt with any verdict other than pass sets the step status to failed",
+        "revised": false
+      },
+      "F13": {
+        "status": "active",
+        "id": 13,
+        "claim": "at most 20 findings are kept from one agent output",
+        "revised": false
+      },
+      "F14": {
+        "status": "active",
+        "id": 14,
+        "claim": "a step VERIFY command times out after 10 minutes by default",
+        "revised": false
+      },
+      "F15": {
+        "status": "active",
+        "id": 15,
+        "claim": "at most the last 500 characters of VERIFY output are kept",
+        "revised": false
+      },
+      "F16": {
+        "status": "active",
+        "id": 16,
+        "claim": "the packaged board listens on port 4319 by default",
+        "revised": false
+      },
+      "F17": {
+        "status": "active",
+        "id": 24,
+        "claim": "the exe build boot-test serves the board on port 4319",
+        "revised": true
+      },
+      "F18": {
+        "status": "active",
+        "id": 26,
+        "claim": "the packaged board and the build boot-test both use port 4319, so a running board can block the boot-test",
+        "revised": true
+      },
+      "F19": {
+        "status": "active",
+        "id": 19,
+        "claim": "strip-signature zeroes PE data-directory index 4, the Security directory",
+        "revised": false
+      },
+      "F20": {
+        "status": "active",
+        "id": 20,
+        "claim": "strip-signature clears the optional-header CheckSum at offset 64",
+        "revised": false
+      }
+    },
+    "left_suspect": [],
+    "rounds": 2,
+    "cost": 0.089923064,
+    "calls": [
+      {
+        "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #1 (subject: scripts/runner.mjs#maxretries): \"the runner's --max-retries flag defaults to 48\"\nRecorded evidence: scripts/runner.mjs:96\n\nWhy it is suspect:\n- the source file it rests on CHANGED: C:/Users/AI/Documents/plan-ledger/bench/revision/work/r3/scripts/runner.mjs\n\nCheck the fact against the CURRENT source with your tools before deciding.\nDecide:\n- confirmed: it is still true as written\n- revised: it is no longer (fully) true — give the corrected fact as one atomic sentence about the same subject\n- retracted: it is no longer true and no corrected version is meaningful\n- unsure: it cannot be decided from what is available\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+        "result": "The fact claims the `--max-retries` flag defaults to 48. Looking at line 96:\n\n```js\nconst maxRetries = Number(val('--max-retries', 24)) || 24; // safety cap (24 × 30min ≈ 12h)\n```\n\nThe default is 24, not 48.\n\nRESOLVE: {\"verdict\":\"revised\",\"claim\":\"the runner's --max-retries flag defaults to 24\",\"reason\":\"scripts/runner.mjs:96 reads `Number(val('--max-retries', 24)) || 24`, so the default is 24, not 48.\"}",
+        "cost": 0.010022231999999999,
+        "turns": 2,
+        "peak": true,
+        "is_error": false,
+        "subtype": "success"
+      },
+      {
+        "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #2 (subject: scripts/runner.mjs#retryminutes): \"the runner's --retry-minutes flag defaults to 30\"\nRecorded evidence: scripts/runner.mjs:95\n\nWhy it is suspect:\n- the source file it rests on CHANGED: C:/Users/AI/Documents/plan-ledger/bench/revision/work/r3/scripts/runner.mjs\n\nCheck the fact against the CURRENT source with your tools before deciding.\nDecide:\n- confirmed: it is still true as written\n- revised: it is no longer (fully) true — give the corrected fact as one atomic sentence about the same subject\n- retracted: it is no longer true and no corrected version is meaningful\n- unsure: it cannot be decided from what is available\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+        "result": "The fact is about `--retry-minutes` defaulting to 30. Line 95 shows:\n\n```js\nconst retryMinutes = Number(val('--retry-minutes', 30)) || 30;\n```\n\nThe default is 30. The fact is confirmed.\n\nRESOLVE: {\"verdict\":\"confirmed\",\"claim\":\"\",\"reason\":\"Checked scripts/runner.mjs line 95: `const retryMinutes = Number(val('--retry-minutes', 30)) || 30;` — the --retry-minutes flag still defaults to 30.\"}",
+        "cost": 0.009320079999999998,
+        "turns": 2,
+        "peak": true,
+        "is_error": false,
+        "subtype": "success"
+      },
+      {
+        "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #3 (subject: scripts/runner.mjs#maxattempts): \"the runner's --max-attempts flag defaults to 2\"\nRecorded evidence: scripts/runner.mjs:90\n\nWhy it is suspect:\n- the source file it rests on CHANGED: C:/Users/AI/Documents/plan-ledger/bench/revision/work/r3/scripts/runner.mjs\n\nCheck the fact against the CURRENT source with your tools before deciding.\nDecide:\n- confirmed: it is still true as written\n- revised: it is no longer (fully) true — give the corrected fact as one atomic sentence about the same subject\n- retracted: it is no longer true and no corrected version is meaningful\n- unsure: it cannot be decided from what is available\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+        "result": "The fact is confirmed. Line 90 shows `const maxAttempts = Number(val('--max-attempts', 2));` — the default is 2, and the header comment at line 10 also states \"(default 2)\".\n\nRESOLVE: {\"verdict\":\"confirmed\",\"claim\":\"\",\"reason\":\"scripts/runner.mjs:90 reads `const maxAttempts = Number(val('--max-attempts', 2));`, so the --max-attempts flag defaults to 2; the header comment at line 10 also confirms '(default 2)'.\"}",
+        "cost": 0.009324039999999999,
+        "turns": 2,
+        "peak": true,
+        "is_error": false,
+        "subtype": "success"
+      },
+      {
+        "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #4 (subject: scripts/runner.mjs#permissionmode): \"the runner's --permission-mode flag defaults to acceptEdits\"\nRecorded evidence: scripts/runner.mjs:98\n\nWhy it is suspect:\n- the source file it rests on CHANGED: C:/Users/AI/Documents/plan-ledger/bench/revision/work/r3/scripts/runner.mjs\n\nCheck the fact against the CURRENT source with your tools before deciding.\nDecide:\n- confirmed: it is still true as written\n- revised: it is no longer (fully) true — give the corrected fact as one atomic sentence about the same subject\n- retracted: it is no longer true and no corrected version is meaningful\n- unsure: it cannot be decided from what is available\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+        "result": "The current source at line 98 shows the default is `'default'`, not `'acceptEdits'`.\n\nRESOLVE: {\"verdict\":\"revised\",\"claim\":\"the runner's --permission-mode flag defaults to 'default'\",\"reason\":\"Checked scripts/runner.mjs:98 — it reads `const permissionMode = val('--permission-mode', 'default');`, so the default is 'default', not 'acceptEdits'.\"}",
+        "cost": 0.002622752,
+        "turns": 2,
+        "peak": true,
+        "is_error": false,
+        "subtype": "success"
+      },
+      {
+        "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #5 (subject: scripts/runner.mjs#msuntilreset): \"after a parsed usage-limit reset time the runner waits an extra 2 minutes\"\nRecorded evidence: scripts/runner.mjs:417\n\nWhy it is suspect:\n- the source file it rests on CHANGED: C:/Users/AI/Documents/plan-ledger/bench/revision/work/r3/scripts/runner.mjs\n\nCheck the fact against the CURRENT source with your tools before deciding.\nDecide:\n- confirmed: it is still true as written\n- revised: it is no longer (fully) true — give the corrected fact as one atomic sentence about the same subject\n- retracted: it is no longer true and no corrected version is meaningful\n- unsure: it cannot be decided from what is available\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+        "result": "The current source at line 417 shows:\n\n```js\nconst ms = t.getTime() - Date.now() + 2 * 60000; // 2-min buffer past the reset\n```\n\nThis confirms the fact: after a parsed usage-limit reset time, the runner adds `2 * 60000` ms (2 minutes) as a buffer past the reset.\n\nRESOLVE: {\"verdict\":\"confirmed\",\"claim\":\"\",\"reason\":\"scripts/runner.mjs:417 in msUntilReset computes ms = t.getTime() - Date.now() + 2 * 60000, adding a 2-minute buffer past the parsed reset time, so the fact remains true as written.\"}",
+        "cost": 0.003656312,
+        "turns": 2,
+        "peak": true,
+        "is_error": false,
+        "subtype": "success"
+      },
+      {
+        "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #6 (subject: scripts/runner.mjs#msuntilreset): \"a parsed reset wait longer than 12 hours is ignored in favour of --retry-minutes\"\nRecorded evidence: scripts/runner.mjs:418\n\nWhy it is suspect:\n- the source file it rests on CHANGED: C:/Users/AI/Documents/plan-ledger/bench/revision/work/r3/scripts/runner.mjs\n\nCheck the fact against the CURRENT source with your tools before deciding.\nDecide:\n- confirmed: it is still true as written\n- revised: it is no longer (fully) true — give the corrected fact as one atomic sentence about the same subject\n- retracted: it is no longer true and no corrected version is meaningful\n- unsure: it cannot be decided from what is available\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+        "result": "The fact is confirmed. The current code at line 418 returns `null` when the parsed reset wait exceeds 12 hours (`ms <= 12 * 3600000 ? ms : null`), and line 493 uses `resetMs ?? retryMinutes * 60000`, so a `null` result falls back to `--retry-minutes`. The behavior described in the fact is still accurate.\n\nRESOLVE: {\"verdict\":\"confirmed\",\"claim\":\"a parsed reset wait longer than 12 hours is ignored in favour of --retry-minutes\",\"reason\":\"Checked scripts/runner.mjs: line 418 returns null when ms > 12h (ms <= 12*3600000 ? ms : null), and line 493 uses resetMs ?? retryMinutes*60000, so null falls back to --retry-minutes.\"}",
+        "cost": 0.004742408,
+        "turns": 3,
+        "peak": true,
+        "is_error": false,
+        "subtype": "success"
+      },
+      {
+        "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #8 (subject: src/db.mjs#store): \"the Store sets the SQLite busy_timeout to 3000 milliseconds\"\nRecorded evidence: src/db.mjs:341\n\nWhy it is suspect:\n- the source file it rests on CHANGED: C:/Users/AI/Documents/plan-ledger/bench/revision/work/r3/src/db.mjs\n\nCheck the fact against the CURRENT source with your tools before deciding.\nDecide:\n- confirmed: it is still true as written\n- revised: it is no longer (fully) true — give the corrected fact as one atomic sentence about the same subject\n- retracted: it is no longer true and no corrected version is meaningful\n- unsure: it cannot be decided from what is available\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+        "result": "The current source at line 341 sets `busy_timeout` to 5000 milliseconds, not 3000.\n\nRESOLVE: {\"verdict\":\"revised\",\"claim\":\"the Store sets the SQLite busy_timeout to 5000 milliseconds\",\"reason\":\"Checked src/db.mjs:341 in the current source; it reads 'PRAGMA busy_timeout = 5000;', not 3000.\"}",
+        "cost": 0.00232804,
+        "turns": 2,
+        "peak": true,
+        "is_error": false,
+        "subtype": "success"
+      },
+      {
+        "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #9 (subject: src/db.mjs#store): \"the Store caps the WAL journal at 4194304 bytes with journal_size_limit\"\nRecorded evidence: src/db.mjs:342\n\nWhy it is suspect:\n- the source file it rests on CHANGED: C:/Users/AI/Documents/plan-ledger/bench/revision/work/r3/src/db.mjs\n\nCheck the fact against the CURRENT source with your tools before deciding.\nDecide:\n- confirmed: it is still true as written\n- revised: it is no longer (fully) true — give the corrected fact as one atomic sentence about the same subject\n- retracted: it is no longer true and no corrected version is meaningful\n- unsure: it cannot be decided from what is available\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+        "result": "The fact is confirmed. Line 342 still contains `PRAGMA journal_size_limit = 4194304;` in the `Store` constructor.\n\nRESOLVE: {\"verdict\":\"confirmed\",\"claim\":\"\",\"reason\":\"Checked src/db.mjs:342 in the current source; it still executes 'PRAGMA journal_size_limit = 4194304;' in the Store constructor, capping the WAL journal at 4194304 bytes.\"}",
+        "cost": 0.0023297120000000003,
+        "turns": 2,
+        "peak": true,
+        "is_error": false,
+        "subtype": "success"
+      },
+      {
+        "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #10 (subject: src/db.mjs#getlessons): \"getLessons returns at most 5 lessons by default\"\nRecorded evidence: src/db.mjs:763\n\nWhy it is suspect:\n- the source file it rests on CHANGED: C:/Users/AI/Documents/plan-ledger/bench/revision/work/r3/src/db.mjs\n\nCheck the fact against the CURRENT source with your tools before deciding.\nDecide:\n- confirmed: it is still true as written\n- revised: it is no longer (fully) true — give the corrected fact as one atomic sentence about the same subject\n- retracted: it is no longer true and no corrected version is meaningful\n- unsure: it cannot be decided from what is available\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+        "result": "The default `limit = 5` is still present in the current source at line 763. The fact remains true.\n\nRESOLVE: {\"verdict\":\"confirmed\",\"claim\":\"\",\"reason\":\"Checked current src/db.mjs:763 — getLessons signature still has limit = 5 default, so it returns at most 5 lessons by default.\"}",
+        "cost": 0.0030066959999999997,
+        "turns": 3,
+        "peak": true,
+        "is_error": false,
+        "subtype": "success"
+      },
+      {
+        "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #11 (subject: src/db.mjs#recall): \"recall returns at most 8 hits by default\"\nRecorded evidence: src/db.mjs:1071\n\nWhy it is suspect:\n- the source file it rests on CHANGED: C:/Users/AI/Documents/plan-ledger/bench/revision/work/r3/src/db.mjs\n\nCheck the fact against the CURRENT source with your tools before deciding.\nDecide:\n- confirmed: it is still true as written\n- revised: it is no longer (fully) true — give the corrected fact as one atomic sentence about the same subject\n- retracted: it is no longer true and no corrected version is meaningful\n- unsure: it cannot be decided from what is available\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+        "result": "The fact is confirmed: `recall(query, limit = 8, all = false)` still defaults `limit` to 8, and `idfRank(entries, q, limit)` uses that limit.\n\nRESOLVE: {\"verdict\":\"confirmed\",\"claim\":\"\",\"reason\":\"Checked src/db.mjs:1071 — recall(query, limit = 8, all = false) still defaults limit to 8 and passes it to idfRank, so it returns at most 8 hits by default.\"}",
+        "cost": 0.003231096,
+        "turns": 3,
+        "peak": true,
+        "is_error": false,
+        "subtype": "success"
+      },
+      {
+        "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #12 (subject: src/db.mjs#recordattempt): \"recording an attempt with any verdict other than pass sets the step status to failed\"\nRecorded evidence: src/db.mjs:675\n\nWhy it is suspect:\n- the source file it rests on CHANGED: C:/Users/AI/Documents/plan-ledger/bench/revision/work/r3/src/db.mjs\n\nCheck the fact against the CURRENT source with your tools before deciding.\nDecide:\n- confirmed: it is still true as written\n- revised: it is no longer (fully) true — give the corrected fact as one atomic sentence about the same subject\n- retracted: it is no longer true and no corrected version is meaningful\n- unsure: it cannot be decided from what is available\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+        "result": "The current code at line 674-675 confirms: `if (v === 'pass') this.setStepStatus(stepId, 'done'); else this.setStepStatus(stepId, 'failed');`. The verdicts are `pass|fail|partial` (line 667), so any verdict other than `pass` (i.e., `fail` or `partial`) sets status to `failed`. The fact is still true as written.\n\nRESOLVE: {\"verdict\":\"confirmed\",\"claim\":\"\",\"reason\":\"Checked current src/db.mjs recordAttempt (lines 663-679): verdicts are pass|fail|partial, and line 674-675 sets status to 'done' only when v==='pass', otherwise 'failed'. So any non-pass verdict sets step status to failed, matching the fact.\"}",
+        "cost": 0.003925768,
+        "turns": 3,
+        "peak": true,
+        "is_error": false,
+        "subtype": "success"
+      },
+      {
+        "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #13 (subject: scripts/runner-lib.mjs#findings_max): \"at most 20 findings are kept from one agent output\"\nRecorded evidence: scripts/runner-lib.mjs:13\n\nWhy it is suspect:\n- the source file it rests on CHANGED: C:/Users/AI/Documents/plan-ledger/bench/revision/work/r3/scripts/runner-lib.mjs\n\nCheck the fact against the CURRENT source with your tools before deciding.\nDecide:\n- confirmed: it is still true as written\n- revised: it is no longer (fully) true — give the corrected fact as one atomic sentence about the same subject\n- retracted: it is no longer true and no corrected version is meaningful\n- unsure: it cannot be decided from what is available\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+        "result": "The fact references `findings_max` as the subject, but the actual symbol is `FINDINGS_MAX` (line 14), and the value is 20. The code at line 28 uses `objs.slice(0, FINDINGS_MAX)` to keep at most 20 findings.\n\nRESOLVE: {\"verdict\":\"confirmed\",\"claim\":\"\",\"reason\":\"Checked scripts/runner-lib.mjs: FINDINGS_MAX = 20 (line 14), and parseFindings returns objs.slice(0, FINDINGS_MAX) (line 28), so at most 20 findings are kept from one agent output.\"}",
+        "cost": 0.00397144,
+        "turns": 2,
+        "peak": true,
+        "is_error": false,
+        "subtype": "success"
+      },
+      {
+        "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #14 (subject: scripts/runner-lib.mjs#runverify): \"a step VERIFY command times out after 10 minutes by default\"\nRecorded evidence: scripts/runner-lib.mjs:77\n\nWhy it is suspect:\n- the source file it rests on CHANGED: C:/Users/AI/Documents/plan-ledger/bench/revision/work/r3/scripts/runner-lib.mjs\n\nCheck the fact against the CURRENT source with your tools before deciding.\nDecide:\n- confirmed: it is still true as written\n- revised: it is no longer (fully) true — give the corrected fact as one atomic sentence about the same subject\n- retracted: it is no longer true and no corrected version is meaningful\n- unsure: it cannot be decided from what is available\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+        "result": "The current source at line 78 shows `timeoutMs = 10 * 60 * 1000` as the default, which is 10 minutes.\n\nRESOLVE: {\"verdict\":\"confirmed\",\"claim\":\"\",\"reason\":\"Checked scripts/runner-lib.mjs:78 — runVerify's default timeoutMs is 10 * 60 * 1000 (10 minutes), so the fact remains true.\"}",
+        "cost": 0.00204688,
+        "turns": 2,
+        "peak": true,
+        "is_error": false,
+        "subtype": "success"
+      },
+      {
+        "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #15 (subject: scripts/runner-lib.mjs#runverify): \"at most the last 500 characters of VERIFY output are kept\"\nRecorded evidence: scripts/runner-lib.mjs:80\n\nWhy it is suspect:\n- the source file it rests on CHANGED: C:/Users/AI/Documents/plan-ledger/bench/revision/work/r3/scripts/runner-lib.mjs\n\nCheck the fact against the CURRENT source with your tools before deciding.\nDecide:\n- confirmed: it is still true as written\n- revised: it is no longer (fully) true — give the corrected fact as one atomic sentence about the same subject\n- retracted: it is no longer true and no corrected version is meaningful\n- unsure: it cannot be decided from what is available\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+        "result": "The fact claims \"at most the last 500 characters of VERIFY output are kept.\" Looking at line 81: `tail: combined.slice(-500)` — this keeps the last 500 characters of the combined stdout+stderr. The fact is still true as written.\n\nRESOLVE: {\"verdict\":\"confirmed\",\"claim\":\"\",\"reason\":\"Checked scripts/runner-lib.mjs:81 — runVerify returns tail: combined.slice(-500), so at most the last 500 characters of VERIFY output are kept.\"}",
+        "cost": 0.00388696,
+        "turns": 2,
+        "peak": true,
+        "is_error": false,
+        "subtype": "success"
+      },
+      {
+        "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #17 (subject: scripts/build-exe.mjs#boot-test): \"the exe build boot-test serves the board on port 4399\"\nRecorded evidence: scripts/build-exe.mjs:60\n\nWhy it is suspect:\n- the source file it rests on CHANGED: C:/Users/AI/Documents/plan-ledger/bench/revision/work/r3/scripts/build-exe.mjs\n\nCheck the fact against the CURRENT source with your tools before deciding.\nDecide:\n- confirmed: it is still true as written\n- revised: it is no longer (fully) true — give the corrected fact as one atomic sentence about the same subject\n- retracted: it is no longer true and no corrected version is meaningful\n- unsure: it cannot be decided from what is available\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+        "result": "The current source at line 60 shows `const port = 4319;`, not 4399.\n\nRESOLVE: {\"verdict\":\"revised\",\"claim\":\"the exe build boot-test serves the board on port 4319\",\"reason\":\"scripts/build-exe.mjs line 60 currently sets `const port = 4319;` and uses it for the boot-test fetch, so the recorded port 4399 is no longer correct.\"}",
+        "cost": 0.00271876,
+        "turns": 2,
+        "peak": true,
+        "is_error": false,
+        "subtype": "success"
+      },
+      {
+        "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #7 (subject: ops#retry-window): \"with default flags and --retry-on-limit, the runner sleeps at most 24 hours in total before giving up\"\n\nWhy it is suspect:\n- fact #1 it was built on changed. It said: \"the runner's --max-retries flag defaults to 48\" — it NOW says: \"the runner's --max-retries flag defaults to 24\"\n\nCheck the fact against the CURRENT source with your tools before deciding.\nDecide:\n- confirmed: it is still true as written\n- revised: it is no longer (fully) true — give the corrected fact as one atomic sentence about the same subject\n- retracted: it is no longer true and no corrected version is meaningful\n- unsure: it cannot be decided from what is available\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+        "result": "The fact was built on 48 retries × 30 min = 24 hours. Now `--max-retries` defaults to 24, and `--retry-minutes` defaults to 30, so the fallback cadence totals 24 × 30 min = 12 hours. The fact is no longer true as written.\n\nRESOLVE: {\"verdict\":\"revised\",\"claim\":\"with default flags and --retry-on-limit, the runner sleeps at most 12 hours in total before giving up\",\"reason\":\"--max-retries now defaults to 24 (was 48) and --retry-minutes defaults to 30, so the fallback sleep cadence totals 24 × 30 min = 12 hours, not 24.\"}",
+        "cost": 0.011448184,
+        "turns": 7,
+        "peak": true,
+        "is_error": false,
+        "subtype": "success"
+      },
+      {
+        "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #18 (subject: ops#ports): \"the packaged board and the build boot-test use different ports, so a running board cannot block the boot-test\"\n\nWhy it is suspect:\n- fact #17 it was built on changed. It said: \"the exe build boot-test serves the board on port 4399\" — it NOW says: \"the exe build boot-test serves the board on port 4319\"\n\nCheck the fact against the CURRENT source with your tools before deciding.\nDecide:\n- confirmed: it is still true as written\n- revised: it is no longer (fully) true — give the corrected fact as one atomic sentence about the same subject\n- retracted: it is no longer true and no corrected version is meaningful\n- unsure: it cannot be decided from what is available\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+        "result": "Confirmed: both the packaged board and the boot-test use port 4319. The fact's premise (different ports) is false, so the conclusion (a running board cannot block the boot-test) is also false.\n\nRESOLVE: {\"verdict\":\"revised\",\"claim\":\"the packaged board and the build boot-test both use port 4319, so a running board can block the boot-test\",\"reason\":\"scripts/build-exe.mjs:60 sets the boot-test port to 4319 (PLAN_LEDGER_WEB_PORT=4319), and web/app.mjs:13 (the packaged board) defaults to 4319 — same port, so the 'different ports' premise is false and a running board would occupy 4319 and block the boot-test.\"}",
+        "cost": 0.011341703999999998,
+        "turns": 5,
+        "peak": true,
+        "is_error": false,
+        "subtype": "success"
+      }
+    ]
+  },
+  "stories": [
+    {
+      "sid": "frog",
+      "twist_outcome": "created",
+      "flagged": [
+        "s1e",
+        "s1a",
+        "s1b",
+        "s1d",
+        "s1c"
+      ],
+      "evaluated": [
+        {
+          "fid": "s1a",
+          "verdict": "revised",
+          "new_claim": "the princess has frog-like skin",
+          "reason": "The princess is actually a frog, so the original fact about long golden hair is no longer true as written; a corrected fact about the same subject is meaningful."
+        },
+        {
+          "fid": "s1b",
+          "verdict": "revised",
+          "new_claim": "the princess, who is actually a frog, wore a silk gown to the ball",
+          "reason": "The original fact remains possible if the frog-princess wore the gown, but the subject’s identity change requires clarification."
+        },
+        {
+          "fid": "s1c",
+          "verdict": "unsure",
+          "reason": "The new fact says the princess is actually a frog, but it does not state whether King Aldric is still her father or whether frogs in this context can have fathers."
+        },
+        {
+          "fid": "s1d",
+          "verdict": "revised",
+          "new_claim": "the princess has lived in the castle since birth as a frog",
+          "reason": "The new fact changes the nature of the princess to a frog, so the original fact about living in the castle since birth is reinterpreted to include her being a frog."
+        },
+        {
+          "fid": "s1e",
+          "verdict": "unsure",
+          "reason": "The fact is about the princess dancing with the prince, but the new fact says the princess is actually a frog; it is not stated whether a frog can or did dance with the prince until midnight."
+        }
+      ],
+      "final": {
+        "s1a": {
+          "status": "active",
+          "id": 10,
+          "claim": "the princess has frog-like skin",
+          "revised": true
+        },
+        "s1b": {
+          "status": "active",
+          "id": 11,
+          "claim": "the princess, who is actually a frog, wore a silk gown to the ball",
+          "revised": true
+        },
+        "s1c": {
+          "status": "suspect",
+          "id": 3,
+          "claim": "the princess's father is King Aldric",
+          "revised": false
+        },
+        "s1d": {
+          "status": "active",
+          "id": 12,
+          "claim": "the princess has lived in the castle since birth as a frog",
+          "revised": true
+        },
+        "s1e": {
+          "status": "suspect",
+          "id": 5,
+          "claim": "the princess danced with the prince until midnight",
+          "revised": false
+        },
+        "s1f": {
+          "status": "active",
+          "id": 6,
+          "claim": "the prince kissed her hand when they first met",
+          "revised": false
+        },
+        "s1g": {
+          "status": "active",
+          "id": 7,
+          "claim": "the castle has four towers",
+          "revised": false
+        },
+        "s1h": {
+          "status": "active",
+          "id": 8,
+          "claim": "the kingdom has been at peace for ten years",
+          "revised": false
+        }
+      },
+      "left_suspect": [
+        "s1c",
+        "s1e"
+      ],
+      "cost": 0.0027271200000000004,
+      "calls": [
+        {
+          "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #1 (subject: princess): \"the princess has long golden hair\"\n\nWhy it is suspect:\n- a NEW fact about \"princess\" changes what everything about it means: \"the princess is actually a frog\"\n\nRe-read the fact in light of the change. Decide from what is given here; do not invent details.\nDecide:\n- confirmed: it is still true as written\n- revised: it is no longer (fully) true — give the corrected fact as one atomic sentence about the same subject\n- retracted: it is no longer true and no corrected version is meaningful\n- unsure: it cannot be decided from what is available\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+          "result": "RESOLVE: {\"verdict\":\"revised\",\"claim\":\"the princess has frog-like skin\",\"reason\":\"The princess is actually a frog, so the original fact about long golden hair is no longer true as written; a corrected fact about the same subject is meaningful.\"}",
+          "cost": 0.0005359200000000001,
+          "turns": 1,
+          "peak": true,
+          "is_error": false,
+          "subtype": "success"
+        },
+        {
+          "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #2 (subject: princess): \"the princess wore a silk gown to the ball\"\n\nWhy it is suspect:\n- a NEW fact about \"princess\" changes what everything about it means: \"the princess is actually a frog\"\n\nRe-read the fact in light of the change. Decide from what is given here; do not invent details.\nDecide:\n- confirmed: it is still true as written\n- revised: it is no longer (fully) true — give the corrected fact as one atomic sentence about the same subject\n- retracted: it is no longer true and no corrected version is meaningful\n- unsure: it cannot be decided from what is available\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+          "result": "RESOLVE: {\"verdict\":\"revised\",\"claim\":\"the princess, who is actually a frog, wore a silk gown to the ball\",\"reason\":\"The original fact remains possible if the frog-princess wore the gown, but the subject’s identity change requires clarification.\"}",
+          "cost": 0.0005478000000000001,
+          "turns": 1,
+          "peak": true,
+          "is_error": false,
+          "subtype": "success"
+        },
+        {
+          "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #3 (subject: princess#family): \"the princess's father is King Aldric\"\n\nWhy it is suspect:\n- a NEW fact about \"princess\" changes what everything about it means: \"the princess is actually a frog\"\n\nRe-read the fact in light of the change. Decide from what is given here; do not invent details.\nDecide:\n- confirmed: it is still true as written\n- revised: it is no longer (fully) true — give the corrected fact as one atomic sentence about the same subject\n- retracted: it is no longer true and no corrected version is meaningful\n- unsure: it cannot be decided from what is available\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+          "result": "RESOLVE: {\"verdict\":\"unsure\",\"claim\":\"\",\"reason\":\"The new fact says the princess is actually a frog, but it does not state whether King Aldric is still her father or whether frogs in this context can have fathers.\"}",
+          "cost": 0.00052536,
+          "turns": 1,
+          "peak": true,
+          "is_error": false,
+          "subtype": "success"
+        },
+        {
+          "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #4 (subject: princess): \"the princess has lived in the castle since birth\"\n\nWhy it is suspect:\n- a NEW fact about \"princess\" changes what everything about it means: \"the princess is actually a frog\"\n\nRe-read the fact in light of the change. Decide from what is given here; do not invent details.\nDecide:\n- confirmed: it is still true as written\n- revised: it is no longer (fully) true — give the corrected fact as one atomic sentence about the same subject\n- retracted: it is no longer true and no corrected version is meaningful\n- unsure: it cannot be decided from what is available\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+          "result": "RESOLVE: {\"verdict\":\"revised\",\"claim\":\"the princess has lived in the castle since birth as a frog\",\"reason\":\"The new fact changes the nature of the princess to a frog, so the original fact about living in the castle since birth is reinterpreted to include her being a frog.\"}",
+          "cost": 0.00057156,
+          "turns": 1,
+          "peak": true,
+          "is_error": false,
+          "subtype": "success"
+        },
+        {
+          "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #5 (subject: ball): \"the princess danced with the prince until midnight\"\n\nWhy it is suspect:\n- a NEW fact about \"princess\" changes what everything about it means: \"the princess is actually a frog\"\n\nRe-read the fact in light of the change. Decide from what is given here; do not invent details.\nDecide:\n- confirmed: it is still true as written\n- revised: it is no longer (fully) true — give the corrected fact as one atomic sentence about the same subject\n- retracted: it is no longer true and no corrected version is meaningful\n- unsure: it cannot be decided from what is available\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+          "result": "RESOLVE: {\"verdict\":\"unsure\",\"claim\":\"\",\"reason\":\"The fact is about the princess dancing with the prince, but the new fact says the princess is actually a frog; it is not stated whether a frog can or did dance with the prince until midnight.\"}",
+          "cost": 0.00054648,
+          "turns": 1,
+          "peak": true,
+          "is_error": false,
+          "subtype": "success"
+        }
+      ]
+    },
+    {
+      "sid": "heist",
+      "twist_outcome": "created",
+      "flagged": [
+        "s2c",
+        "s2g",
+        "s2a",
+        "s2b",
+        "s2e"
+      ],
+      "evaluated": [
+        {
+          "fid": "s2a",
+          "verdict": "revised",
+          "new_claim": "Marco drove the getaway van as part of an undercover police operation",
+          "reason": "The new fact that Marco is an undercover police officer changes the meaning of 'getaway van' from criminal escape to police work, so the original fact is not fully true as written."
+        },
+        {
+          "fid": "s2b",
+          "verdict": "revised",
+          "new_claim": "Marco is loyal to the police",
+          "reason": "The new fact that Marco is an undercover police officer changes the meaning of 'the crew' from a criminal group to a police affiliation, so the original loyalty claim is no longer true as written."
+        },
+        {
+          "fid": "s2c",
+          "verdict": "unsure",
+          "reason": "The fact says the crew trusts Marco completely, but the new fact that Marco is an undercover police officer does not by itself state whether the crew knows this or whether their trust has changed."
+        },
+        {
+          "fid": "s2e",
+          "verdict": "revised",
+          "new_claim": "Marco has a long undercover criminal record",
+          "reason": "The new fact that Marco is an undercover police officer changes the meaning of his criminal record from genuine criminal history to a cover identity, so the original fact is no longer fully true as written."
+        },
+        {
+          "fid": "s2g",
+          "verdict": "unsure",
+          "reason": "The fact says Marco recruited Ines, but the new fact only says Marco is an undercover police officer. It does not state whether the recruitment still happened, whether it was staged, or whether Ines is also involved with law enforcement."
+        }
+      ],
+      "final": {
+        "s2a": {
+          "status": "active",
+          "id": 9,
+          "claim": "Marco drove the getaway van as part of an undercover police operation",
+          "revised": true
+        },
+        "s2b": {
+          "status": "active",
+          "id": 10,
+          "claim": "Marco is loyal to the police",
+          "revised": true
+        },
+        "s2c": {
+          "status": "suspect",
+          "id": 3,
+          "claim": "the crew trusts Marco completely",
+          "revised": false
+        },
+        "s2d": {
+          "status": "active",
+          "id": 4,
+          "claim": "the heist went unnoticed by the police",
+          "revised": false
+        },
+        "s2e": {
+          "status": "active",
+          "id": 11,
+          "claim": "Marco has a long undercover criminal record",
+          "revised": true
+        },
+        "s2f": {
+          "status": "active",
+          "id": 6,
+          "claim": "the vault was on the third floor",
+          "revised": false
+        },
+        "s2g": {
+          "status": "suspect",
+          "id": 7,
+          "claim": "Marco recruited the safecracker, Ines",
+          "revised": false
+        }
+      },
+      "left_suspect": [
+        "s2c",
+        "s2g"
+      ],
+      "cost": 0.0028723200000000003,
+      "calls": [
+        {
+          "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #1 (subject: marco): \"Marco drove the getaway van\"\n\nWhy it is suspect:\n- a NEW fact about \"marco\" changes what everything about it means: \"Marco is an undercover police officer\"\n\nRe-read the fact in light of the change. Decide from what is given here; do not invent details.\nDecide:\n- confirmed: it is still true as written\n- revised: it is no longer (fully) true — give the corrected fact as one atomic sentence about the same subject\n- retracted: it is no longer true and no corrected version is meaningful\n- unsure: it cannot be decided from what is available\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+          "result": "RESOLVE: {\"verdict\":\"revised\",\"claim\":\"Marco drove the getaway van as part of an undercover police operation\",\"reason\":\"The new fact that Marco is an undercover police officer changes the meaning of 'getaway van' from criminal escape to police work, so the original fact is not fully true as written.\"}",
+          "cost": 0.000594,
+          "turns": 1,
+          "peak": true,
+          "is_error": false,
+          "subtype": "success"
+        },
+        {
+          "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #2 (subject: marco): \"Marco is loyal to the crew\"\n\nWhy it is suspect:\n- a NEW fact about \"marco\" changes what everything about it means: \"Marco is an undercover police officer\"\n\nRe-read the fact in light of the change. Decide from what is given here; do not invent details.\nDecide:\n- confirmed: it is still true as written\n- revised: it is no longer (fully) true — give the corrected fact as one atomic sentence about the same subject\n- retracted: it is no longer true and no corrected version is meaningful\n- unsure: it cannot be decided from what is available\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+          "result": "RESOLVE: {\"verdict\":\"revised\",\"claim\":\"Marco is loyal to the police\",\"reason\":\"The new fact that Marco is an undercover police officer changes the meaning of 'the crew' from a criminal group to a police affiliation, so the original loyalty claim is no longer true as written.\"}",
+          "cost": 0.0005755199999999999,
+          "turns": 1,
+          "peak": true,
+          "is_error": false,
+          "subtype": "success"
+        },
+        {
+          "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #3 (subject: crew): \"the crew trusts Marco completely\"\n\nWhy it is suspect:\n- a NEW fact about \"marco\" changes what everything about it means: \"Marco is an undercover police officer\"\n\nRe-read the fact in light of the change. Decide from what is given here; do not invent details.\nDecide:\n- confirmed: it is still true as written\n- revised: it is no longer (fully) true — give the corrected fact as one atomic sentence about the same subject\n- retracted: it is no longer true and no corrected version is meaningful\n- unsure: it cannot be decided from what is available\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+          "result": "RESOLVE: {\"verdict\":\"unsure\",\"claim\":\"\",\"reason\":\"The fact says the crew trusts Marco completely, but the new fact that Marco is an undercover police officer does not by itself state whether the crew knows this or whether their trust has changed.\"}",
+          "cost": 0.00053724,
+          "turns": 1,
+          "peak": true,
+          "is_error": false,
+          "subtype": "success"
+        },
+        {
+          "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #5 (subject: marco#background): \"Marco has a long criminal record\"\n\nWhy it is suspect:\n- a NEW fact about \"marco\" changes what everything about it means: \"Marco is an undercover police officer\"\n\nRe-read the fact in light of the change. Decide from what is given here; do not invent details.\nDecide:\n- confirmed: it is still true as written\n- revised: it is no longer (fully) true — give the corrected fact as one atomic sentence about the same subject\n- retracted: it is no longer true and no corrected version is meaningful\n- unsure: it cannot be decided from what is available\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+          "result": "RESOLVE: {\"verdict\":\"revised\",\"claim\":\"Marco has a long undercover criminal record\",\"reason\":\"The new fact that Marco is an undercover police officer changes the meaning of his criminal record from genuine criminal history to a cover identity, so the original fact is no longer fully true as written.\"}",
+          "cost": 0.00058212,
+          "turns": 1,
+          "peak": true,
+          "is_error": false,
+          "subtype": "success"
+        },
+        {
+          "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #7 (subject: crew): \"Marco recruited the safecracker, Ines\"\n\nWhy it is suspect:\n- a NEW fact about \"marco\" changes what everything about it means: \"Marco is an undercover police officer\"\n\nRe-read the fact in light of the change. Decide from what is given here; do not invent details.\nDecide:\n- confirmed: it is still true as written\n- revised: it is no longer (fully) true — give the corrected fact as one atomic sentence about the same subject\n- retracted: it is no longer true and no corrected version is meaningful\n- unsure: it cannot be decided from what is available\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+          "result": "RESOLVE: {\"verdict\":\"unsure\",\"claim\":\"\",\"reason\":\"The fact says Marco recruited Ines, but the new fact only says Marco is an undercover police officer. It does not state whether the recruitment still happened, whether it was staged, or whether Ines is also involved with law enforcement.\"}",
+          "cost": 0.0005834400000000001,
+          "turns": 1,
+          "peak": true,
+          "is_error": false,
+          "subtype": "success"
+        }
+      ]
+    },
+    {
+      "sid": "party",
+      "twist_outcome": "superseded",
+      "flagged": [
+        "s3b",
+        "s3c",
+        "s3e"
+      ],
+      "evaluated": [
+        {
+          "fid": "s3b",
+          "verdict": "revised",
+          "new_claim": "guests must arrive by 6pm on Sunday",
+          "reason": "The fact was based on the party being on Saturday, which changed to Sunday, so the arrival deadline should follow the new party day."
+        },
+        {
+          "fid": "s3c",
+          "verdict": "revised",
+          "new_claim": "the caterer delivers the food on Sunday at 5pm",
+          "reason": "Fact #3 was based on the party being on Saturday, which changed to Sunday, so the delivery day should be updated accordingly."
+        },
+        {
+          "fid": "s3e",
+          "verdict": "unsure",
+          "reason": "The fact about the band playing from 7pm to 11pm does not depend on the party being on Saturday or Sunday based on what is given; no information links the band's time to the party date."
+        }
+      ],
+      "final": {
+        "s3a": {
+          "status": "active",
+          "id": 6,
+          "claim": "the party is on Sunday",
+          "revised": true
+        },
+        "s3b": {
+          "status": "active",
+          "id": 7,
+          "claim": "guests must arrive by 6pm on Sunday",
+          "revised": true
+        },
+        "s3c": {
+          "status": "active",
+          "id": 8,
+          "claim": "the caterer delivers the food on Sunday at 5pm",
+          "revised": true
+        },
+        "s3d": {
+          "status": "active",
+          "id": 4,
+          "claim": "the party is held on the rooftop",
+          "revised": false
+        },
+        "s3e": {
+          "status": "suspect",
+          "id": 5,
+          "claim": "the band plays from 7pm to 11pm",
+          "revised": false
+        }
+      },
+      "left_suspect": [
+        "s3e"
+      ],
+      "cost": 0.0016750800000000002,
+      "calls": [
+        {
+          "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #2 (subject: guests): \"guests must arrive by 6pm on Saturday\"\n\nWhy it is suspect:\n- fact #1 it was built on changed. It said: \"the party is on Saturday\" — it NOW says: \"the party is on Sunday\"\n\nRe-read the fact in light of the change. Decide from what is given here; do not invent details.\nDecide:\n- confirmed: it is still true as written\n- revised: it is no longer (fully) true — give the corrected fact as one atomic sentence about the same subject\n- retracted: it is no longer true and no corrected version is meaningful\n- unsure: it cannot be decided from what is available\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+          "result": "RESOLVE: {\"verdict\":\"revised\",\"claim\":\"guests must arrive by 6pm on Sunday\",\"reason\":\"The fact was based on the party being on Saturday, which changed to Sunday, so the arrival deadline should follow the new party day.\"}",
+          "cost": 0.0005478000000000001,
+          "turns": 1,
+          "peak": true,
+          "is_error": false,
+          "subtype": "success"
+        },
+        {
+          "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #3 (subject: catering): \"the caterer delivers the food on Saturday at 5pm\"\n\nWhy it is suspect:\n- fact #1 it was built on changed. It said: \"the party is on Saturday\" — it NOW says: \"the party is on Sunday\"\n\nRe-read the fact in light of the change. Decide from what is given here; do not invent details.\nDecide:\n- confirmed: it is still true as written\n- revised: it is no longer (fully) true — give the corrected fact as one atomic sentence about the same subject\n- retracted: it is no longer true and no corrected version is meaningful\n- unsure: it cannot be decided from what is available\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+          "result": "RESOLVE: {\"verdict\":\"revised\",\"claim\":\"the caterer delivers the food on Sunday at 5pm\",\"reason\":\"Fact #3 was based on the party being on Saturday, which changed to Sunday, so the delivery day should be updated accordingly.\"}",
+          "cost": 0.0005544000000000001,
+          "turns": 1,
+          "peak": true,
+          "is_error": false,
+          "subtype": "success"
+        },
+        {
+          "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #5 (subject: music): \"the band plays from 7pm to 11pm\"\n\nWhy it is suspect:\n- fact #1 it was built on changed. It said: \"the party is on Saturday\" — it NOW says: \"the party is on Sunday\"\n\nRe-read the fact in light of the change. Decide from what is given here; do not invent details.\nDecide:\n- confirmed: it is still true as written\n- revised: it is no longer (fully) true — give the corrected fact as one atomic sentence about the same subject\n- retracted: it is no longer true and no corrected version is meaningful\n- unsure: it cannot be decided from what is available\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+          "result": "RESOLVE: {\"verdict\":\"unsure\",\"claim\":\"\",\"reason\":\"The fact about the band playing from 7pm to 11pm does not depend on the party being on Saturday or Sunday based on what is given; no information links the band's time to the party date.\"}",
+          "cost": 0.00057288,
+          "turns": 1,
+          "peak": true,
+          "is_error": false,
+          "subtype": "success"
+        }
+      ]
+    }
+  ],
+  "cost": 0.09719758399999999,
+  "finished": "2026-09-23T03:30:01.450Z"
+}

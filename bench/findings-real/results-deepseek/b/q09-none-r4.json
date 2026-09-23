@@ -1,0 +1,20 @@
+{
+  "phase": "b",
+  "tag": "q09-none-r4",
+  "model": "deepseek-v4-pro",
+  "is_error": false,
+  "subtype": "success",
+  "result": "ANSWER: 8",
+  "cost": 0.001684056,
+  "turns": 4,
+  "tin": 12207,
+  "tout": 192,
+  "cache_hit": 11904,
+  "cache_miss": 303,
+  "tool_calls": 3,
+  "peak": true,
+  "exit": 0,
+  "stderr": "",
+  "duration_ms": 5590,
+  "prompt": "Answer this question about the codebase in the current directory (plan-ledger, a Node.js app).\nYou may read files. Do not modify anything.\n\nQuestion: What is the default `limit` parameter of Store.recall?\n\nBe precise. The FINAL LINE of your output MUST be exactly:\nANSWER: <your answer>"
+}

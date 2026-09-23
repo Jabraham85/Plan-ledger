@@ -1,0 +1,20 @@
+{
+  "phase": "b",
+  "tag": "q02-none-r5",
+  "model": "deepseek-v4-pro",
+  "is_error": false,
+  "subtype": "success",
+  "result": "The property is `skipped_blocked_steps`.\n\nANSWER: skipped_blocked_steps",
+  "cost": 0.0021266080000000003,
+  "turns": 3,
+  "tin": 3539,
+  "tout": 141,
+  "cache_hit": 2432,
+  "cache_miss": 1107,
+  "tool_calls": 2,
+  "peak": true,
+  "exit": 0,
+  "stderr": "",
+  "duration_ms": 4436,
+  "prompt": "Answer this question about the codebase in the current directory (plan-ledger, a Node.js app).\nYou may read files. Do not modify anything.\n\nQuestion: When Store.nextStep returns a workable step after skipping blocked ones, what property on the returned step lists the skipped blocked steps? Give the exact property name.\n\nBe precise. The FINAL LINE of your output MUST be exactly:\nANSWER: <your answer>"
+}

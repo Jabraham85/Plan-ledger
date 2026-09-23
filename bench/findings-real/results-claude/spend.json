@@ -1,0 +1,8 @@
+{
+  "total": 0,
+  "calls": 1,
+  "errors": 1,
+  "byPhase": {
+    "smoke": 0
+  }
+}

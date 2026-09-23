@@ -308,6 +308,81 @@
   .hit .sc { color: var(--faint); font-size: 10.5px; }
   .hit .sn { color: var(--muted); font-size: 12px; margin-top: 3px; }
 
+
+  /* ---- Graph explorer (brain / plan steps / code map) ---- */
+  #graphView { position: fixed; inset: 0; z-index: 60; background: var(--bg); display: flex; flex-direction: column; }
+  #graphView[hidden] { display: none; }
+  .gv-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  .gv-bar b { font-size: 13.5px; margin-right: 4px; }
+  .gv-tabs { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .gv-tabs button { border: 0; border-radius: 0; background: transparent; }
+  .gv-tabs button.on { background: var(--accent-dim); color: #fff; }
+  .gv-bar select, .gv-bar input[type=search] { background: var(--panel2); color: var(--txt); border: 1px solid var(--line); border-radius: 7px; padding: 4px 8px; font: inherit; font-size: 12.5px; }
+  .gv-bar input[type=search] { width: 220px; }
+  .gv-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border: 1px solid var(--line); border-radius: 999px; font-size: 11.5px; color: var(--muted); cursor: pointer; user-select: none; }
+  .gv-chip i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  .gv-chip.off { opacity: .38; }
+  .gv-sep { width: 1px; height: 20px; background: var(--line); }
+  .gv-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 270px 1fr 360px; }
+  .gv-list { border-right: 1px solid var(--line); overflow-y: auto; padding: 8px; }
+  .gv-list .cnt { color: var(--faint); font-size: 11px; margin: 2px 4px 8px; }
+  .gv-item { padding: 6px 8px; border-radius: 7px; cursor: pointer; font-size: 12.5px; display: flex; gap: 7px; align-items: flex-start; }
+  .gv-item:hover { background: var(--panel2); }
+  .gv-item.sel { background: var(--accent-dim); }
+  .gv-item .dot { flex: 0 0 9px; height: 9px; border-radius: 50%; margin-top: 5px; }
+  .gv-item .t { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .gv-item .s { color: var(--faint); font-size: 11px; }
+  .gv-canvas { position: relative; min-width: 0; overflow: hidden; background: radial-gradient(circle at 50% 40%, #151924 0, var(--bg) 70%); }
+  #gvSvg { width: 100%; height: 100%; display: block; cursor: grab; }
+  #gvSvg.panning { cursor: grabbing; }
+  #gvSvg .n { cursor: pointer; }
+  #gvSvg .n text { fill: var(--muted); font-size: 10px; pointer-events: none; paint-order: stroke; stroke: var(--bg); stroke-width: 3px; }
+  #gvSvg .n.sel .shape { stroke: #fff; stroke-width: 2.5px; }
+  #gvSvg .n.hit .shape { stroke: var(--blocked); stroke-width: 2.5px; }
+  #gvSvg .dim { opacity: .12; }
+  #gvSvg .grp { fill: #aab3c5; font-size: 22px; font-weight: 600; opacity: .55; text-anchor: middle; pointer-events: none; }
+  #gvSvg .e { stroke: #3a4150; stroke-width: 1; fill: none; }
+  #gvSvg .e.depends_on, #gvSvg .e.builds_on { stroke: var(--accent); stroke-width: 1.6; }
+  #gvSvg .e.conflict { stroke: var(--fail); stroke-dasharray: 5 3; stroke-width: 1.6; }
+  #gvSvg .e.blocks { stroke: var(--blocked); stroke-width: 1.6; }
+  #gvSvg .e.learned_in, #gvSvg .e.next { stroke-dasharray: 2 4; opacity: .6; }
+  #gvSvg .e.in_dir { stroke-dasharray: 1 3; }
+  #gvSvg .e.superseded_by { stroke: var(--faint); stroke-dasharray: 6 3; }
+  #gvSvg .e.inferred { opacity: .55; }
+  .gv-legend { position: absolute; left: 10px; bottom: 10px; background: rgba(23,26,33,.92); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; font-size: 11px; color: var(--muted); line-height: 1.7; }
+  .gv-legend span { margin-right: 10px; white-space: nowrap; }
+  .gv-help { position: absolute; right: 222px; bottom: 10px; font-size: 11px; color: var(--faint); text-align: right; line-height: 1.6; }
+  #gvMini { position: absolute; right: 10px; bottom: 10px; width: 200px; height: 140px; background: rgba(11,13,17,.88); border: 1px solid var(--line); border-radius: 8px; cursor: crosshair; }
+  #gvPathBar { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); max-width: 70%; background: rgba(23,26,33,.95); border: 1px solid var(--accent-dim); border-radius: 8px; padding: 6px 10px; font-size: 12px; color: var(--muted); z-index: 2; }
+  #gvPathBar a { color: var(--txt); cursor: pointer; }
+  #gvPathBar .rel { color: var(--faint); font-size: 11px; }
+  #gvKeys { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: #0f1218; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; font-size: 12.5px; z-index: 3; max-width: min(560px, 92%); box-shadow: 0 10px 40px rgba(0,0,0,.5); }
+  #gvKeys table { border-collapse: collapse; margin-top: 8px; }
+  #gvKeys td { padding: 3px 10px 3px 0; vertical-align: top; color: var(--muted); }
+  #gvKeys td:first-child { color: var(--txt); font-family: ui-monospace, Consolas, monospace; white-space: nowrap; }
+  #gvSvg .n.path .shape { stroke: #f472b6; stroke-width: 3px; }
+  #gvSvg .e.path { stroke: #f472b6 !important; stroke-width: 2.4px; opacity: 1 !important; }
+  .gv-zoom { position: absolute; right: 10px; top: 10px; display: flex; flex-direction: column; gap: 4px; }
+  .gv-zoom button { width: 30px; padding: 4px 0; }
+  #gvTip { position: absolute; pointer-events: none; background: #0b0d11; border: 1px solid var(--line); border-radius: 7px; padding: 6px 9px; font-size: 12px; max-width: 360px; display: none; z-index: 2; }
+  .gv-detail { border-left: 1px solid var(--line); overflow-y: auto; padding: 12px; }
+  .gv-detail h3 { font-size: 14px; margin: 4px 0 8px; }
+  .gv-detail .lbl { color: var(--faint); font-size: 10.5px; text-transform: uppercase; letter-spacing: .1em; margin: 12px 0 5px; }
+  .gv-detail .claim { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; white-space: pre-wrap; }
+  .gv-detail .ev { font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; color: #cfd5e1; word-break: break-all; }
+  .gv-detail .ref { display: block; padding: 5px 7px; border-radius: 6px; cursor: pointer; font-size: 12.5px; }
+  .gv-detail .ref:hover { background: var(--panel2); }
+  .gv-detail textarea, .gv-detail input { width: 100%; background: var(--panel2); color: var(--txt); border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; font: inherit; font-size: 12.5px; }
+  .gv-detail textarea { min-height: 90px; }
+  .gv-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .gv-pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; color: #0b0d11; }
+  .gv-tl { border-left: 2px solid var(--line); margin-left: 4px; padding-left: 10px; font-size: 12px; }
+  .gv-tl div { margin-bottom: 6px; }
+  .gv-tl .ts { color: var(--faint); font-size: 10.5px; }
+  .gv-crumbs { color: var(--faint); font-size: 11px; margin-bottom: 6px; }
+  .gv-crumbs a { color: var(--muted); cursor: pointer; }
+  @media (max-width: 1100px) { .gv-body { grid-template-columns: 1fr 300px; } .gv-list { display: none; } .gv-help { display: none; } }
+  @media (max-width: 760px) { .gv-body { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) 42%; } .gv-detail { border-left: 0; border-top: 1px solid var(--line); } .gv-help, #gvMini, .gv-legend { display: none; } }
 </style>
 </head>
 <body>
@@ -322,6 +397,7 @@
     <div id="searchResults"></div>
   </div>
   <button id="copySetupBtn" title="Copy a paste-ready prompt that sets up any workspace for this project">⧉ Copy setup</button>
+  <button id="graphBtn" title="Graph explorer: the brain, a plan's steps, the code map">◉ Graph</button>
   <button id="newPlanBtn" class="primary">+ New plan</button>
   <button id="refsBtn">⚙ Rules &amp; Tools</button>
   <label class="auto" title="poll for activity, auto-focus the plan/step being worked, refresh in real time"><input type="checkbox" id="live" /> <span class="livewrap"><span class="livedot off"></span> Live</span></label>
@@ -411,6 +487,69 @@
         <button class="primary" id="npCreate" style="white-space:nowrap">Create</button>
       </div>
     </div>
+  </div>
+</div>
+
+
+<div id="graphView" hidden role="dialog" aria-label="Graph explorer">
+  <div class="gv-bar">
+    <b>◉ Graph</b>
+    <div class="gv-tabs" role="tablist">
+      <button id="gvTabBrain" data-kind="brain" title="What the brain knows: findings, the files they rest on, the steps they were learned in">🧠 Brain</button>
+      <button id="gvTabSteps" data-kind="steps" title="A plan's steps and their builds_on / blocks links">Plan steps</button>
+      <button id="gvTabCode" data-kind="code" title="A plan's code graph (highest-degree nodes)">Code map</button>
+    </div>
+    <select id="gvPlan" title="plan"></select>
+    <select id="gvGroup" title="gather nodes into labelled clusters"><option value="step">group: by step</option><option value="area">group: by area</option><option value="none">group: none</option></select>
+    <span class="gv-sep"></span>
+    <input id="gvSearch" type="search" placeholder="search nodes…  ( / )" autocomplete="off" />
+    <span id="gvFilters"></span>
+    <span class="spacer" style="flex:1"></span>
+    <button id="gvBack" title="Back ( [ )">◀</button>
+    <button id="gvFwd" title="Forward ( ] )">▶</button>
+    <button id="gvFocus" title="Show only the selected node and its neighbours ( e )">Focus</button>
+    <select id="gvDepth" title="focus depth: how many hops around the selection ( 1 / 2 / 3 )"><option value="1">1 hop</option><option value="2" selected>2 hops</option><option value="3">3 hops</option></select>
+    <button id="gvAttn" title="Jump to the next fact that needs attention: suspect or conflicting ( n )">⚠ Needs attention</button>
+    <button id="gvFit" title="Fit to view ( f )">⤢ Fit</button>
+    <button id="gvRelayout" title="Re-run the layout">↻ Layout</button>
+    <button id="gvStale" title="Re-check the files the brain rests on">Check stale</button>
+    <button id="gvHelpBtn" title="Keyboard shortcuts ( ? )">?</button>
+    <button id="gvClose" title="Close ( Esc )">✕</button>
+  </div>
+  <div class="gv-body">
+    <aside class="gv-list"><div class="cnt" id="gvCount"></div><div id="gvItems"></div></aside>
+    <div class="gv-canvas" id="gvCanvas">
+      <svg id="gvSvg" aria-label="node graph">
+        <defs>
+          <marker id="gvArrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6ea8fe"/></marker>
+          <marker id="gvArrowGray" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5b6474"/></marker>
+        </defs>
+        <g id="gvViewport"><g id="gvGroups"></g><g id="gvEdges"></g><g id="gvNodes"></g></g>
+      </svg>
+      <div class="gv-zoom"><button id="gvZoomIn" title="zoom in ( + )">+</button><button id="gvZoomOut" title="zoom out ( - )">−</button></div>
+      <div class="gv-legend" id="gvLegend"></div>
+      <div class="gv-help">arrows walk neighbours · shift-click a 2nd node for the path · ? all keys</div>
+      <canvas id="gvMini" width="200" height="140" title="overview — click or drag to move the view"></canvas>
+      <div id="gvPathBar" hidden></div>
+      <div id="gvKeys" hidden>
+        <b>Graph explorer — keys</b>
+        <table>
+          <tr><td>← ↑ → ↓</td><td>walk to the neighbour in that direction (selects the node nearest the centre first)</td></tr>
+          <tr><td>Enter</td><td>centre on the selection</td></tr>
+          <tr><td>shift-click</td><td>path: how the selection connects to that node (shortest chain of links)</td></tr>
+          <tr><td>n / N</td><td>next / previous fact needing attention (suspect or conflicting)</td></tr>
+          <tr><td>e · 1 2 3</td><td>focus on the selection · focus depth in hops</td></tr>
+          <tr><td>/ · Enter</td><td>search · next match</td></tr>
+          <tr><td>[ ]</td><td>back / forward through what you selected</td></tr>
+          <tr><td>f · + −</td><td>fit · zoom</td></tr>
+          <tr><td>double-click</td><td>focus on a node · drag a node to pin it</td></tr>
+          <tr><td>Esc</td><td>clear path → leave focus → deselect → close</td></tr>
+        </table>
+        <div style="color:var(--faint);margin-top:6px">The overview (bottom right) shows the whole graph; click or drag it to move there.</div>
+      </div>
+      <div id="gvTip"></div>
+    </div>
+    <aside class="gv-detail" id="gvDetail"><div class="empty">Select a node</div></aside>
   </div>
 </div>
 
@@ -504,7 +643,7 @@ async function openPlan(id) {
     const total = p.steps.length, done = p.steps.filter(s => s.status === 'done').length;
     const pct = total ? Math.round(100 * done / total) : 0;
     $('plan').innerHTML = `
-      <div class="row" style="margin-bottom:6px">${badge(p.status)}<span class="meta">plan #${p.id}</span><span style="flex:1"></span><button class="copybtn" onclick="copyContext(${p.id})">⧉ Copy context</button></div>
+      <div class="row" style="margin-bottom:6px">${badge(p.status)}<span class="meta">plan #${p.id}</span><span style="flex:1"></span><button class="copybtn" onclick="gvInit(); openGraph('steps', { planId: ${p.id} })" title="the plan's steps as a navigable graph">◉ Step graph</button><button class="copybtn" onclick="copyContext(${p.id})">⧉ Copy context</button></div>
       <h3 style="margin:0 0 10px;font-size:18px">${esc(p.title)}</h3>
       <div class="prog big"><i style="width:${pct}%"></i></div>
       <div class="meta" style="margin:5px 0 12px">${done} of ${total} step${total===1?'':'s'} done${total?` · ${pct}%`:''}</div>
@@ -640,7 +779,7 @@ async function renderPlanGraph(id) {
     if (!g.nodes) return;
     const chips = (g.god_nodes || []).map(n => `<span class="chip" title="${esc(n.source_file||'')}">${esc(n.label)} · ${n.degree}</span>`).join('');
     $('plan').insertAdjacentHTML('beforeend',
-      `<div class="section"><div class="lbl">Code map · ${g.nodes} nodes · ${g.edges} edges · ${g.communities} communities</div><div class="chips">${chips}</div></div>`);
+      `<div class="section"><div class="lbl">Code map · ${g.nodes} nodes · ${g.edges} edges · ${g.communities} communities <button class="copybtn" style="float:right" onclick="gvInit(); openGraph('code', { planId: ${id} })">◉ Explore</button></div><div class="chips">${chips}</div></div>`);
   } catch {}
 }
 
@@ -682,6 +821,7 @@ async function openStep(id) {
     renderStepFiles(s);
     renderStepLessons(s.id);
     renderStepGround(s.id);
+    renderStepBrain(s.id);
     scheduleActivityPoll(0);
   } catch (e) { $('step').innerHTML = `<div class="empty err">${esc(e.message)}</div>`; }
 }
@@ -1490,6 +1630,752 @@ async function applyInitialDeepLink() {
   }
 }
 
+
+// ============================================================================
+// Graph explorer — node maps of the brain (findings + the files/steps they rest
+// on), a plan's steps, and a plan's code graph. One SVG canvas, a small force
+// layout (no library: the board is also inlined into the offline exe), pan/zoom,
+// search, filters, focus-on-neighbours, back/forward history, deep links
+// (#graph/<kind>/<plan>/<node>), and a detail panel that can confirm / revise /
+// retract a memory (revising re-opens what was built on it — truth maintenance).
+// ============================================================================
+const GV_NS = 'http://www.w3.org/2000/svg';
+const GV_COLORS = {
+  active: '#4ade80', suspect: '#fbbf24', conflict: '#f87171', superseded: '#6b7280', retracted: '#545b6b',
+  done: '#4ade80', in_progress: '#6ea8fe', pending: '#6b7280', failed: '#f87171', blocked: '#fbbf24', skipped: '#545b6b',
+  draft: '#8a93a6', abandoned: '#545b6b', file: '#8a93a6', dir: '#5b6474', plan: '#c084fc',
+};
+const GV_COMMUNITY = ['#6ea8fe', '#4ade80', '#fbbf24', '#f472b6', '#a78bfa', '#34d399', '#fb923c', '#60a5fa', '#e879f9', '#facc15'];
+const GV_ARROWED = new Set(['depends_on', 'builds_on', 'blocks', 'superseded_by', 'references', 'imports_from', 'calls', 'inherits']);
+const GV_EDGE_LEN = { depends_on: 70, conflict: 60, superseded_by: 50, rests_on: 42, in_dir: 70, learned_in: 150, next: 60, builds_on: 80, blocks: 80 };
+const GV_EDGE_K = { rests_on: 0.09, learned_in: 0.02, in_dir: 0.03, next: 0.04 };
+// files coloured by the top-level area of the repo they live in
+const GV_AREA = ['#7c8db5', '#2dd4bf', '#a78bfa', '#fb923c', '#f472b6', '#94a3b8', '#facc15', '#60a5fa'];
+const gvArea = (n) => String(n.path || '').split('/')[0] || '';
+function gvAreaColor(n) { const areas = GV.areas || []; const i = areas.indexOf(gvArea(n)); return i >= 0 ? GV_AREA[i % GV_AREA.length] : GV_COLORS.file; }
+const GV = {
+  kind: 'brain', planId: null, data: null, nodes: [], edges: [], byId: new Map(), adj: new Map(), pos: new Map(),
+  sel: null, focus: false, search: '', matches: [], matchIdx: -1,
+  hidden: new Set(['superseded', 'retracted', 'dir']), history: [], hpos: -1,
+  groupBy: 'step', anchors: new Map(), depth: 2, path: null, edgeType: new Map(), attnIdx: -1, mini: null, anim: 0,
+  view: { x: 0, y: 0, k: 1 }, alpha: 0, raf: 0, visible: null, els: new Map(), edgeEls: [],
+};
+const gvColor = (n) => n.type === 'code' ? GV_COMMUNITY[(Number(n.community) || 0) % GV_COMMUNITY.length]
+  : n.type === 'file' ? gvAreaColor(n) : n.type === 'dir' ? GV_COLORS.dir : n.type === 'plan' ? GV_COLORS.plan : (GV_COLORS[n.status] || '#8a93a6');
+const gvRadius = (n) => n.type === 'finding' ? 5 + Math.min(7, Math.sqrt((GV.adj.get(n.id)?.size || 0) + (n.seen || 1) - 1) * 1.6)
+  : n.type === 'step' ? 8 : n.type === 'plan' ? 9 : n.type === 'code' ? 3 + Math.min(9, Math.sqrt(n.degree || 1)) : n.type === 'dir' ? 4 : n.type === 'file' ? 4 + Math.min(9, Math.sqrt(GV.adj.get(n.id)?.size || 1) * 2.2) : 5;
+const gvLabel = (n) => String(n.type === 'finding' ? (n.label || '').split('#').pop().split('/').pop() : n.label || '').slice(0, 42);
+
+// ---- open / load ------------------------------------------------------------
+async function openGraph(kind = 'brain', { planId = null, select = null, push = true } = {}) {
+  $('graphView').hidden = false;
+  GV.kind = kind;
+  GV.planId = planId ?? GV.planId ?? state.planId ?? null;
+  for (const b of document.querySelectorAll('.gv-tabs button')) b.classList.toggle('on', b.dataset.kind === kind);
+  await gvFillPlans();
+  $('gvPlan').style.display = kind === 'brain' ? 'none' : '';
+  $('gvGroup').style.display = kind === 'brain' ? '' : 'none';
+  if (kind !== 'brain' && !GV.planId) { gvEmpty('Pick a plan'); return; }
+  await gvLoad();
+  if (select && GV.byId.has(select)) gvSelect(select, { push, center: true });
+  else { gvSelect(null, { push: false }); setTimeout(gvFit, 450); }
+}
+async function gvFillPlans() {
+  const sel = $('gvPlan');
+  if (!sel.options.length || sel.dataset.project !== String(state.projectId)) {
+    try {
+      const plans = await api('/api/plans');
+      sel.innerHTML = plans.map((p) => `<option value="${p.id}">#${p.id} ${esc(p.title).slice(0, 60)}</option>`).join('');
+      sel.dataset.project = String(state.projectId);
+    } catch {}
+  }
+  if (GV.planId) sel.value = String(GV.planId);
+  else if (sel.options.length) GV.planId = Number(sel.value);
+}
+async function gvLoad() {
+  let d;
+  try {
+    d = GV.kind === 'brain' ? await api(`/api/brain/graph?status=any${state.projectId ? `&project=${state.projectId}` : ''}`)
+      : GV.kind === 'steps' ? await api(`/api/plans/${GV.planId}/step-graph`)
+      : await api(`/api/plans/${GV.planId}/code-graph?limit=250`);
+  } catch (e) { gvEmpty(e.message); return; }
+  GV.data = d;
+  GV.nodes = d.nodes; GV.edges = d.edges;
+  GV.byId = new Map(d.nodes.map((n) => [n.id, n]));
+  { const cnt = {}; for (const n of d.nodes) if (n.type === 'file') cnt[gvArea(n)] = (cnt[gvArea(n)] || 0) + 1;
+    GV.areas = Object.entries(cnt).sort((a, b) => b[1] - a[1]).map(([a]) => a); }
+  GV.adj = new Map(d.nodes.map((n) => [n.id, new Set()]));
+  GV.edgeType = new Map();
+  for (const e of d.edges) {
+    GV.adj.get(e.from)?.add(e.to); GV.adj.get(e.to)?.add(e.from);
+    GV.edgeType.set(`${e.from}|${e.to}`, e.type); if (!GV.edgeType.has(`${e.to}|${e.from}`)) GV.edgeType.set(`${e.to}|${e.from}`, '~' + e.type);
+  }
+  if (GV.path && !GV.path.every((id) => GV.byId.has(id))) GV.path = null;
+  // keep positions across reloads; seed new nodes next to a placed neighbour
+  for (const n of GV.nodes) {
+    const p = GV.pos.get(n.id);
+    if (p) Object.assign(n, { x: p.x, y: p.y });
+    else {
+      const nb = [...(GV.adj.get(n.id) || [])].map((id) => GV.pos.get(id)).find(Boolean);
+      n.x = (nb ? nb.x : 0) + (Math.random() - 0.5) * 160; n.y = (nb ? nb.y : 0) + (Math.random() - 0.5) * 160;
+    }
+    n.vx = 0; n.vy = 0;
+  }
+  if (GV.sel && !GV.byId.has(GV.sel)) GV.sel = null;
+  const fresh = GV.nodes.filter((n) => !GV.pos.has(n.id)).length;
+  gvRenderFilters();
+  gvRebuild();
+  // settle a fresh layout synchronously (arrives arranged, and works even when the
+  // page is hidden and requestAnimationFrame is paused); animate only the rest
+  if (fresh > GV.nodes.length * 0.3) { GV.alpha = 1; for (let i = 0; i < 260 && GV.alpha > 0.03; i++) gvTick(); gvDraw(); gvFit(); }
+  gvHeat(fresh ? 0.3 : 0.1);
+}
+function gvEmpty(msg) {
+  GV.nodes = []; GV.edges = []; GV.byId = new Map(); GV.adj = new Map();
+  $('gvNodes').innerHTML = ''; $('gvEdges').innerHTML = ''; $('gvItems').innerHTML = '';
+  $('gvCount').textContent = ''; $('gvDetail').innerHTML = `<div class="empty">${esc(msg)}</div>`; $('gvLegend').innerHTML = '';
+}
+
+// ---- filters, visibility, list -----------------------------------------------
+function gvFilterKeys() {
+  if (GV.kind === 'brain') return [['active', 'active'], ['suspect', 'suspect'], ['conflict', 'conflict'], ['superseded', 'superseded'],
+    ['retracted', 'retracted'], ['file', 'files'], ['dir', 'dirs'], ['step', 'steps']];
+  if (GV.kind === 'steps') return ['done', 'in_progress', 'pending', 'failed', 'blocked', 'skipped'].map((s) => [s, s.replace('_', ' ')]);
+  return [];
+}
+function gvRenderFilters() {
+  const counts = {};
+  for (const n of GV.nodes) { const k = gvFilterKey(n); counts[k] = (counts[k] || 0) + 1; }
+  $('gvFilters').innerHTML = gvFilterKeys().filter(([k]) => counts[k]).map(([k, lbl]) =>
+    `<span class="gv-chip ${GV.hidden.has(k) ? 'off' : ''}" data-k="${k}" title="show/hide"><i style="background:${GV_COLORS[k] || '#8a93a6'}"></i>${lbl} ${counts[k]}</span>`).join(' ');
+  for (const c of $('gvFilters').querySelectorAll('.gv-chip')) c.onclick = () => {
+    GV.hidden.has(c.dataset.k) ? GV.hidden.delete(c.dataset.k) : GV.hidden.add(c.dataset.k);
+    gvRenderFilters(); gvRebuild(); gvHeat(0.4);
+  };
+  const L = GV.kind === 'brain'
+    ? `<span><b style="color:#4ade80">●</b> fact</span><span><b style="color:#fbbf24">●</b> suspect</span><span><b style="color:#f87171">●</b> conflict</span><span>■ file</span><span>◆ step</span><br>` +
+      `<span style="color:#6ea8fe">→ built on</span><span>— rests on file</span><span>┈ learned in</span><span style="color:#f87171">╌ conflicts</span><br>` +
+      (GV.areas || []).slice(0, 8).map((a, i) => `<span><b style="color:${GV_AREA[i]}">■</b> ${esc(a)}</span>`).join('')
+    : GV.kind === 'steps' ? `<span style="color:#6ea8fe">→ builds on</span><span style="color:#fbbf24">→ blocks</span><span>┈ next</span><span>◆ step</span><span style="color:#c084fc">⬢ other plan</span>`
+    : `<span>node size = degree · colour = community</span><span>showing ${GV.nodes.length} of ${GV.data?.total ?? GV.nodes.length}</span>`;
+  $('gvLegend').innerHTML = L;
+  const attn = gvAttention().length;
+  $('gvAttn').style.display = GV.kind === 'brain' ? '' : 'none';
+  $('gvAttn').disabled = !attn;
+  $('gvAttn').textContent = attn ? `⚠ ${attn} need${attn === 1 ? 's' : ''} attention` : '✓ nothing suspect';
+}
+// facts to look at: suspect (something they rest on changed) or in conflict with another fact
+const gvAttention = () => GV.kind !== 'brain' ? [] : GV.nodes.filter((n) => n.type === 'finding' && (n.status === 'suspect' || n.status === 'conflict'))
+  .sort((a, b) => (a.status === b.status ? 0 : a.status === 'conflict' ? -1 : 1) || a.fid - b.fid);
+function gvNextAttention(delta = 1) {
+  const list = gvAttention();
+  if (!list.length) { toast('Nothing needs attention'); return; }
+  GV.attnIdx = (GV.attnIdx + delta + list.length) % list.length;
+  const n = list[GV.attnIdx];
+  if (GV.hidden.has(n.status)) { GV.hidden.delete(n.status); gvRenderFilters(); gvRebuild(); }
+  gvSelect(n.id, { center: true });
+  toast(`${GV.attnIdx + 1} of ${list.length}: #${n.fid} is ${n.status}`);
+}
+const gvFilterKey = (n) => n.type === 'finding' ? n.status : n.type === 'step' && GV.kind === 'steps' ? n.status : n.type;
+function gvComputeVisible() {
+  let vis = new Set(GV.nodes.filter((n) => !GV.hidden.has(gvFilterKey(n))).map((n) => n.id));
+  // hide file/dir/step hubs whose only neighbours are hidden
+  for (const id of [...vis]) {
+    const n = GV.byId.get(id);
+    if (n.type !== 'finding' && GV.kind === 'brain' && ![...(GV.adj.get(id) || [])].some((x) => vis.has(x) && GV.byId.get(x).type === 'finding')) vis.delete(id);
+  }
+  if (GV.focus && GV.sel && vis.has(GV.sel)) {
+    const keep = new Set([GV.sel]);
+    let frontier = [GV.sel];
+    for (let hop = 0; hop < GV.depth; hop++) {
+      const next = [];
+      for (const id of frontier) for (const nb of GV.adj.get(id) || []) if (vis.has(nb) && !keep.has(nb)) {
+        // later hops only through findings (a file or step hub would pull in everything)
+        if (hop >= 1 && GV.kind === 'brain' && GV.byId.get(id).type !== 'finding') continue;
+        keep.add(nb); next.push(nb);
+      }
+      frontier = next;
+    }
+    vis = keep;
+  }
+  if (GV.path) for (const id of GV.path) vis.add(id); // a shown path is never hidden by filters or focus
+  return vis;
+}
+function gvRebuild() {
+  GV.visible = gvComputeVisible();
+  gvComputeAnchors();
+  const nodesG = $('gvNodes'), edgesG = $('gvEdges');
+  nodesG.innerHTML = ''; edgesG.innerHTML = ''; GV.els = new Map(); GV.edgeEls = [];
+  for (const e of GV.edges) {
+    if (!GV.visible.has(e.from) || !GV.visible.has(e.to)) continue;
+    const l = document.createElementNS(GV_NS, 'line');
+    l.setAttribute('class', `e ${e.type}${e.inferred ? ' inferred' : ''}`);
+    if (GV_ARROWED.has(e.type)) l.setAttribute('marker-end', e.type === 'depends_on' || e.type === 'builds_on' ? 'url(#gvArrow)' : 'url(#gvArrowGray)');
+    edgesG.appendChild(l); GV.edgeEls.push({ e, l });
+  }
+  for (const n of GV.nodes) {
+    if (!GV.visible.has(n.id)) continue;
+    const g = document.createElementNS(GV_NS, 'g');
+    g.setAttribute('class', 'n'); g.dataset.id = n.id;
+    const r = gvRadius(n), c = gvColor(n);
+    let s;
+    if (n.type === 'file' || n.type === 'dir') { s = document.createElementNS(GV_NS, 'rect'); s.setAttribute('x', -r); s.setAttribute('y', -r); s.setAttribute('width', 2 * r); s.setAttribute('height', 2 * r); s.setAttribute('rx', n.type === 'dir' ? 4 : 1.5); }
+    else if (n.type === 'step') { s = document.createElementNS(GV_NS, 'rect'); s.setAttribute('x', -r * 0.75); s.setAttribute('y', -r * 0.75); s.setAttribute('width', r * 1.5); s.setAttribute('height', r * 1.5); s.setAttribute('transform', 'rotate(45)'); }
+    else if (n.type === 'plan') { s = document.createElementNS(GV_NS, 'polygon'); s.setAttribute('points', [0, 1, 2, 3, 4, 5].map((i) => `${r * Math.cos(Math.PI / 3 * i)},${r * Math.sin(Math.PI / 3 * i)}`).join(' ')); }
+    else { s = document.createElementNS(GV_NS, 'circle'); s.setAttribute('r', r); }
+    s.setAttribute('class', 'shape'); s.setAttribute('fill', c);
+    s.setAttribute('fill-opacity', n.type === 'finding' && (n.status === 'superseded' || n.status === 'retracted') ? '0.45' : '0.92');
+    if (n.impact === 'high') { s.setAttribute('stroke', '#f472b6'); s.setAttribute('stroke-width', '2'); }
+    g.appendChild(s);
+    const t = document.createElementNS(GV_NS, 'text');
+    t.setAttribute('x', r + 3); t.setAttribute('y', 3.5); t.textContent = gvLabel(n);
+    if (!(n.type === 'step' || n.type === 'plan' || (n.type === 'file' && (GV.adj.get(n.id)?.size || 0) >= 3) || (n.type === 'code' && (n.degree || 0) >= 8))) t.setAttribute('class', 'lz');
+    g.appendChild(t);
+    g.addEventListener('pointerdown', (ev) => gvNodeDown(ev, n));
+    g.addEventListener('click', (ev) => {
+      ev.stopPropagation(); if (GV._dragged) return;
+      if (ev.shiftKey && GV.sel && GV.sel !== n.id) gvShowPath(GV.sel, n.id); else gvSelect(n.id);
+    });
+    g.addEventListener('dblclick', (ev) => { ev.stopPropagation(); gvSelect(n.id, { push: false }); GV.focus = true; gvRebuild(); gvHeat(0.5); setTimeout(gvFit, 500); });
+    g.addEventListener('mouseenter', (ev) => gvTip(n, ev));
+    g.addEventListener('mouseleave', () => { $('gvTip').style.display = 'none'; });
+    nodesG.appendChild(g); GV.els.set(n.id, g);
+  }
+  $('gvFocus').textContent = GV.focus ? 'Show all' : 'Focus';
+  gvApplySearch(false);
+  gvHighlight();
+  gvDraw();
+  gvLabelsForZoom();
+}
+function gvList() {
+  const q = GV.search.toLowerCase();
+  const items = GV.nodes.filter((n) => GV.visible.has(n.id) && (!q || gvText(n).includes(q)))
+    .sort((a, b) => (a.type === 'finding' ? 0 : 1) - (b.type === 'finding' ? 0 : 1) || String(a.label).localeCompare(String(b.label)));
+  $('gvCount').textContent = `${items.length} of ${GV.nodes.length} nodes${q ? ` matching “${GV.search}”` : ''}`;
+  $('gvItems').innerHTML = items.slice(0, 400).map((n) =>
+    `<div class="gv-item ${n.id === GV.sel ? 'sel' : ''}" data-id="${esc(n.id)}"><span class="dot" style="background:${gvColor(n)}"></span>` +
+    `<div><div class="t">${esc(n.type === 'finding' ? n.claim : n.label)}</div><div class="s">${esc(n.type === 'finding' ? `#${n.fid} · ${n.label}` : n.path || n.type)}</div></div></div>`).join('');
+  for (const el of $('gvItems').querySelectorAll('.gv-item')) el.onclick = () => gvSelect(el.dataset.id, { center: true });
+}
+const gvText = (n) => `${n.label || ''} ${n.claim || ''} ${n.path || ''} ${n.fid ? '#' + n.fid : ''} ${n.sid ? '#' + n.sid : ''}`.toLowerCase();
+
+// ---- grouping (brain): gather nodes around labelled anchors ------------------------
+function gvGroupOf(n) {
+  if (GV.kind !== 'brain' || GV.groupBy === 'none') return null;
+  const nbs = () => [...(GV.adj.get(n.id) || [])].map((x) => GV.byId.get(x)).filter(Boolean);
+  if (GV.groupBy === 'step') {
+    if (n.type === 'step') return 's:' + n.sid;
+    if (n.type === 'finding') return n.step_id ? 's:' + n.step_id : 'none';
+    const c = {}; for (const x of nbs()) if (x.type === 'finding' && x.step_id) c[x.step_id] = (c[x.step_id] || 0) + 1;
+    const top = Object.entries(c).sort((a, b) => b[1] - a[1])[0];
+    return top ? 's:' + top[0] : 'none';
+  }
+  if (n.type === 'file' || n.type === 'dir') return gvArea(n) || 'other';
+  if (n.type === 'finding') { const fl = nbs().find((x) => x.type === 'file'); return fl ? gvArea(fl) || 'other' : 'other'; }
+  const c = {}; for (const x of nbs()) { const g = gvGroupOf(x); if (g) c[g] = (c[g] || 0) + 1; }
+  return Object.entries(c).sort((a, b) => b[1] - a[1])[0]?.[0] || 'other';
+}
+function gvComputeAnchors() {
+  GV.anchors = new Map();
+  const g = $('gvGroups'); if (g) g.innerHTML = '';
+  if (GV.kind !== 'brain' || GV.groupBy === 'none' || !GV.visible) return;
+  const size = {};
+  for (const id of GV.visible) { const n = GV.byId.get(id); n.group = gvGroupOf(n); if (n.group) size[n.group] = (size[n.group] || 0) + 1; }
+  const groups = Object.keys(size).sort((a, b) => size[b] - size[a]);
+  const R = 120 + 44 * groups.reduce((t, k) => t + Math.sqrt(size[k]), 0) / Math.PI;
+  groups.forEach((k, i) => {
+    const t = (i / groups.length) * Math.PI * 2 - Math.PI / 2, ax = Math.cos(t) * R, ay = Math.sin(t) * R;
+    GV.anchors.set(k, { x: ax, y: ay });
+    const label = k.startsWith('s:') ? (GV.byId.get(k)?.label || k).replace(/^(T\d+|V\d+)\s+/, '$1 · ').slice(0, 34) : k === 'none' ? 'no step' : k;
+    const el = document.createElementNS(GV_NS, 'text');
+    el.setAttribute('class', 'grp'); el.setAttribute('x', ax); el.setAttribute('y', ay - 26 - Math.sqrt(size[k]) * 11);
+    el.textContent = `${label} (${size[k]})`; g?.appendChild(el);
+  });
+}
+
+// ---- force layout --------------------------------------------------------------
+function gvHeat(a) { GV.alpha = Math.max(GV.alpha, a); if (!GV.raf) GV.raf = requestAnimationFrame(gvFrame); }
+function gvFrame() {
+  GV.raf = 0;
+  if ($('graphView').hidden) return;
+  const steps = GV.visible && GV.visible.size > 350 ? 1 : 3;
+  for (let i = 0; i < steps && GV.alpha > 0.015; i++) gvTick();
+  gvDraw();
+  if (GV.alpha > 0.015) GV.raf = requestAnimationFrame(gvFrame);
+}
+function gvTick() {
+  const ns = GV.nodes.filter((n) => GV.visible.has(n.id)), a = GV.alpha;
+  const grouped = GV.anchors.size > 0;
+  const rep = grouped ? 520 : 900, cut2 = grouped ? 150 * 150 : 260 * 260;
+  for (let i = 0; i < ns.length; i++) {
+    const p = ns[i];
+    for (let j = i + 1; j < ns.length; j++) {
+      const q = ns[j];
+      let dx = p.x - q.x, dy = p.y - q.y, d2 = dx * dx + dy * dy;
+      if (d2 > cut2) continue;
+      if (d2 < 1) { dx = Math.random() - 0.5; dy = Math.random() - 0.5; d2 = 1; }
+      const f = (rep / d2) * a;
+      p.vx += dx * f; p.vy += dy * f; q.vx -= dx * f; q.vy -= dy * f;
+    }
+    const an = p.group && GV.anchors.get(p.group);
+    if (an) { p.vx += (an.x - p.x) * 0.07 * a; p.vy += (an.y - p.y) * 0.07 * a; } // pulled into its cluster
+    else { p.vx -= p.x * 0.006 * a; p.vy -= p.y * 0.006 * a; } // gravity to the centre
+  }
+  for (const { e } of GV.edgeEls) {
+    const s = GV.byId.get(e.from), t = GV.byId.get(e.to);
+    const dx = t.x - s.x, dy = t.y - s.y, d = Math.sqrt(dx * dx + dy * dy) || 1;
+    const k = ((d - (GV_EDGE_LEN[e.type] || 65)) / d) * (GV_EDGE_K[e.type] || 0.06) * a;
+    s.vx += dx * k; s.vy += dy * k; t.vx -= dx * k; t.vy -= dy * k;
+  }
+  for (const n of ns) {
+    if (n.fx != null) { n.x = n.fx; n.y = n.fy; n.vx = n.vy = 0; continue; }
+    n.vx *= 0.55; n.vy *= 0.55;
+    n.x += Math.max(-40, Math.min(40, n.vx)); n.y += Math.max(-40, Math.min(40, n.vy));
+  }
+  GV.alpha *= 0.985;
+}
+function gvDraw() {
+  for (const [id, g] of GV.els) { const n = GV.byId.get(id); g.setAttribute('transform', `translate(${n.x.toFixed(1)},${n.y.toFixed(1)})`); GV.pos.set(id, { x: n.x, y: n.y }); }
+  for (const { e, l } of GV.edgeEls) {
+    const s = GV.byId.get(e.from), t = GV.byId.get(e.to);
+    const dx = t.x - s.x, dy = t.y - s.y, d = Math.sqrt(dx * dx + dy * dy) || 1, rt = gvRadius(t) + (GV_ARROWED.has(e.type) ? 3 : 0);
+    l.setAttribute('x1', s.x.toFixed(1)); l.setAttribute('y1', s.y.toFixed(1));
+    l.setAttribute('x2', (t.x - (dx / d) * rt).toFixed(1)); l.setAttribute('y2', (t.y - (dy / d) * rt).toFixed(1));
+  }
+  const v = GV.view;
+  $('gvViewport').setAttribute('transform', `translate(${v.x},${v.y}) scale(${v.k})`);
+  gvMini();
+}
+function gvLabelsForZoom() {
+  const show = GV.view.k > 1.25 || (GV.visible && GV.visible.size < 40);
+  for (const t of $('gvNodes').querySelectorAll('text.lz')) t.style.display = show ? '' : 'none';
+}
+
+// ---- pan / zoom / drag ------------------------------------------------------------
+function gvCanvasPt(ev) { const r = $('gvSvg').getBoundingClientRect(); return { x: ev.clientX - r.left, y: ev.clientY - r.top }; }
+function gvZoomAt(px, py, factor) {
+  const v = GV.view, k = Math.max(0.08, Math.min(6, v.k * factor));
+  v.x = px - ((px - v.x) * k) / v.k; v.y = py - ((py - v.y) * k) / v.k; v.k = k;
+  gvDraw(); gvLabelsForZoom();
+}
+function gvNodeDown(ev, n) {
+  ev.stopPropagation();
+  GV._dragged = false;
+  const start = gvCanvasPt(ev);
+  const move = (e) => {
+    const p = gvCanvasPt(e);
+    if (!GV._dragged && Math.hypot(p.x - start.x, p.y - start.y) < 4) return;
+    GV._dragged = true;
+    n.fx = (p.x - GV.view.x) / GV.view.k; n.fy = (p.y - GV.view.y) / GV.view.k;
+    gvHeat(0.25); gvDraw();
+  };
+  const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); setTimeout(() => { GV._dragged = false; }, 0); };
+  window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+}
+function gvCenterOn(id, k) {
+  const n = GV.byId.get(id); if (!n) return;
+  const r = $('gvSvg').getBoundingClientRect(), v = GV.view;
+  const tk = k ?? Math.max(v.k, 1.1);
+  const tx = r.width / 2 - n.x * tk, ty = r.height / 2 - n.y * tk;
+  const from = { ...v }, t0 = performance.now(), token = ++GV.anim;
+  const step = (t) => {
+    if (token !== GV.anim) return; // a later fit / centre took over
+    const u = Math.min(1, (t - t0) / 280), e = u * (2 - u);
+    v.x = from.x + (tx - from.x) * e; v.y = from.y + (ty - from.y) * e; v.k = from.k + (tk - from.k) * e;
+    gvDraw();
+    if (u < 1) requestAnimationFrame(step); else gvLabelsForZoom();
+  };
+  requestAnimationFrame(step);
+}
+function gvFit(ids = null) {
+  const only = Array.isArray(ids) ? new Set(ids) : null; // (a click handler passes an event)
+  const ns = GV.nodes.filter((n) => GV.visible?.has(n.id) && (!only || only.has(n.id)));
+  if (!ns.length) return;
+  GV.anim++; // cancel a running centre animation
+  const r = $('gvSvg').getBoundingClientRect();
+  const xs = ns.map((n) => n.x), ys = ns.map((n) => n.y);
+  const x0 = Math.min(...xs) - 40, x1 = Math.max(...xs) + 90, y0 = Math.min(...ys) - 40, y1 = Math.max(...ys) + 40;
+  // keep clear of the overlays: path bar on top, legend + overview along the bottom
+  const top = GV.path ? ($('gvPathBar').offsetHeight || 50) + 24 : 10, bottom = r.width > 760 ? 130 : 10, h = Math.max(120, r.height - top - bottom);
+  const k = Math.max(0.08, Math.min(2.2, Math.min(r.width / (x1 - x0), h / (y1 - y0))));
+  Object.assign(GV.view, { k, x: r.width / 2 - ((x0 + x1) / 2) * k, y: top + h / 2 - ((y0 + y1) / 2) * k });
+  gvDraw(); gvLabelsForZoom();
+}
+
+// ---- selection, highlight, history, deep link -------------------------------------
+function gvSelect(id, { push = true, center = false, keepPath = false } = {}) {
+  GV.sel = id;
+  if (!keepPath && GV.path) { GV.path = null; $('gvPathBar').hidden = true; gvRebuild(); }
+  if (push && id) {
+    GV.history = GV.history.slice(0, GV.hpos + 1);
+    const cur = GV.history[GV.hpos];
+    if (!cur || cur.id !== id || cur.kind !== GV.kind) { GV.history.push({ kind: GV.kind, planId: GV.planId, id }); GV.hpos = GV.history.length - 1; }
+  }
+  if (GV.focus && id && !GV.visible?.has(id)) gvRebuild();
+  gvHighlight();
+  gvList();
+  gvDetail(id);
+  if (center && id) gvCenterOn(id);
+  gvHash();
+  $('gvBack').disabled = GV.hpos <= 0; $('gvFwd').disabled = GV.hpos >= GV.history.length - 1;
+}
+function gvHighlight() {
+  const path = GV.path ? new Set(GV.path) : null;
+  const onPath = (e) => !!GV.path && GV.path.some((id, i) => i > 0 && ((GV.path[i - 1] === e.from && id === e.to) || (GV.path[i - 1] === e.to && id === e.from)));
+  const nb = path || (GV.sel ? new Set([GV.sel, ...(GV.adj.get(GV.sel) || [])]) : null);
+  for (const [id, g] of GV.els) { g.classList.toggle('sel', id === GV.sel); g.classList.toggle('path', !!path && path.has(id)); g.classList.toggle('dim', !!nb && !nb.has(id)); }
+  for (const { e, l } of GV.edgeEls) {
+    const p = onPath(e);
+    l.classList.toggle('path', p);
+    l.classList.toggle('dim', path ? !p : !!nb && !(e.from === GV.sel || e.to === GV.sel));
+  }
+}
+
+// ---- path: how two nodes connect (cheapest chain; step/folder hubs cost more, so the
+// chain prefers "built on" / "rests on" links over "both learned in the same step") ---------
+const GV_PATH_COST = { learned_in: 4, in_dir: 3, next: 2 };
+function gvFindPath(from, to) {
+  const dist = new Map([[from, 0]]), prev = new Map(), done = new Set();
+  while (true) {
+    let u = null, best = Infinity;
+    for (const [id, d] of dist) if (!done.has(id) && d < best) { best = d; u = id; }
+    if (u == null) return null;
+    if (u === to) break;
+    done.add(u);
+    for (const v of GV.adj.get(u) || []) {
+      const t = (GV.edgeType.get(`${u}|${v}`) || '').replace(/^~/, '');
+      const nd = best + (GV_PATH_COST[t] || 1);
+      if (nd < (dist.get(v) ?? Infinity)) { dist.set(v, nd); prev.set(v, u); }
+    }
+  }
+  const p = [to];
+  while (p[0] !== from) p.unshift(prev.get(p[0]));
+  return p;
+}
+const GV_REL = { depends_on: 'built on', rests_on: 'rests on', in_dir: 'in folder', learned_in: 'learned in', conflict: 'conflicts with',
+  superseded_by: 'replaced by', next: 'then', builds_on: 'builds on', blocks: 'blocks', references: 'references' };
+function gvRel(a, b) {
+  const t = GV.edgeType.get(`${a}|${b}`) || '';
+  const base = t.replace(/^~/, ''), name = GV_REL[base] || base.replace(/_/g, ' ');
+  if (!t.startsWith('~') || base === 'conflict') return `${name} →`;
+  return `← ${name}`; // the link points the other way (b is built on a, etc.)
+}
+function gvShowPath(from, to) {
+  const p = gvFindPath(from, to);
+  if (!p) { toast('Those two are not connected'); return; }
+  GV.path = p;
+  gvRebuild(); gvHeat(0.2);
+  const lbl = (id) => { const n = GV.byId.get(id); return esc(n.type === 'finding' ? `#${n.fid} ${String(n.claim || n.label).slice(0, 48)}` : String(n.label).slice(0, 40)); };
+  $('gvPathBar').innerHTML = `<b style="color:#f472b6">Path · ${p.length - 1} link${p.length === 2 ? '' : 's'}</b> ` +
+    p.map((id, i) => `${i ? ` <span class="rel">${esc(gvRel(p[i - 1], id))}</span> ` : ''}<a data-go="${esc(id)}">${lbl(id)}</a>`).join('') +
+    ` <a id="gvPathClear" title="Esc" style="color:var(--faint);margin-left:6px">✕</a>`;
+  $('gvPathBar').hidden = false;
+  for (const a of $('gvPathBar').querySelectorAll('[data-go]')) a.onclick = () => gvSelect(a.dataset.go, { center: true, keepPath: true });
+  $('gvPathClear').onclick = gvClearPath;
+  gvFit(p); setTimeout(() => { if (GV.path === p) gvFit(p); }, 500); // again once the layout has settled
+}
+function gvClearPath() { if (!GV.path) return false; GV.path = null; $('gvPathBar').hidden = true; gvRebuild(); return true; }
+
+// ---- keyboard walk: arrow → the neighbour lying most in that direction ------------------------
+function gvWalk(dx, dy) {
+  const vis = (id) => GV.visible?.has(id);
+  if (!GV.sel || !vis(GV.sel)) { // start from the node nearest the middle of the screen
+    const r = $('gvSvg').getBoundingClientRect(), v = GV.view, cx = (r.width / 2 - v.x) / v.k, cy = (r.height / 2 - v.y) / v.k;
+    const n = GV.nodes.filter((x) => vis(x.id)).sort((a, b) => Math.hypot(a.x - cx, a.y - cy) - Math.hypot(b.x - cx, b.y - cy))[0];
+    if (n) gvSelect(n.id, { center: true });
+    return;
+  }
+  const s = GV.byId.get(GV.sel);
+  let best = null, bestScore = -Infinity;
+  for (const id of GV.adj.get(GV.sel) || []) {
+    if (!vis(id)) continue;
+    const n = GV.byId.get(id), ex = n.x - s.x, ey = n.y - s.y, d = Math.hypot(ex, ey) || 1;
+    const cos = (ex * dx + ey * dy) / d;
+    if (cos < 0.25) continue;
+    const score = cos - d / 1500;
+    if (score > bestScore) { bestScore = score; best = id; }
+  }
+  if (best) gvSelect(best, { center: true, keepPath: true }); else toast('No linked node that way');
+}
+
+// ---- minimap: the whole visible graph, with the current view as a box -------------------------
+function gvMini() {
+  const c = $('gvMini');
+  if (!c || !c.offsetParent) return;
+  const ctx = c.getContext('2d'), W = c.width, H = c.height;
+  ctx.clearRect(0, 0, W, H);
+  const ns = GV.nodes.filter((n) => GV.visible?.has(n.id));
+  if (!ns.length) { GV.mini = null; return; }
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const n of ns) { x0 = Math.min(x0, n.x); x1 = Math.max(x1, n.x); y0 = Math.min(y0, n.y); y1 = Math.max(y1, n.y); }
+  const pad = 30; x0 -= pad; x1 += pad; y0 -= pad; y1 += pad;
+  const s = Math.min(W / (x1 - x0), H / (y1 - y0)), ox = (W - (x1 - x0) * s) / 2, oy = (H - (y1 - y0) * s) / 2;
+  GV.mini = { x0, y0, s, ox, oy };
+  const P = (x, y) => [ox + (x - x0) * s, oy + (y - y0) * s];
+  const path = GV.path ? new Set(GV.path) : null;
+  for (const n of ns) {
+    const [px, py] = P(n.x, n.y);
+    ctx.fillStyle = path && path.has(n.id) ? '#f472b6' : gvColor(n);
+    ctx.globalAlpha = n.type === 'finding' || n.type === 'code' ? 0.85 : 0.5;
+    ctx.fillRect(px - 1.2, py - 1.2, 2.4, 2.4);
+  }
+  ctx.globalAlpha = 1;
+  if (GV.sel && GV.byId.get(GV.sel) && GV.visible?.has(GV.sel)) {
+    const n = GV.byId.get(GV.sel), [px, py] = P(n.x, n.y);
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(px, py, 4, 0, Math.PI * 2); ctx.stroke();
+  }
+  const r = $('gvSvg').getBoundingClientRect(), v = GV.view;
+  const [vx, vy] = P(-v.x / v.k, -v.y / v.k);
+  ctx.strokeStyle = 'rgba(110,168,254,.9)'; ctx.lineWidth = 1;
+  ctx.strokeRect(vx, vy, (r.width / v.k) * s, (r.height / v.k) * s);
+}
+function gvMiniGo(ev) {
+  const m = GV.mini; if (!m) return;
+  const c = $('gvMini'), b = c.getBoundingClientRect();
+  const px = (ev.clientX - b.left) * (c.width / b.width), py = (ev.clientY - b.top) * (c.height / b.height);
+  const wx = (px - m.ox) / m.s + m.x0, wy = (py - m.oy) / m.s + m.y0;
+  const r = $('gvSvg').getBoundingClientRect(), v = GV.view;
+  v.x = r.width / 2 - wx * v.k; v.y = r.height / 2 - wy * v.k;
+  gvDraw();
+}
+async function gvNav(delta) {
+  const h = GV.history[GV.hpos + delta]; if (!h) return;
+  GV.hpos += delta;
+  if (h.kind !== GV.kind || (h.kind !== 'brain' && h.planId !== GV.planId)) await openGraph(h.kind, { planId: h.planId, select: h.id, push: false });
+  else gvSelect(h.id, { push: false, center: true });
+  $('gvBack').disabled = GV.hpos <= 0; $('gvFwd').disabled = GV.hpos >= GV.history.length - 1;
+}
+function gvHash() {
+  const h = `#graph/${GV.kind}/${GV.kind === 'brain' ? '' : GV.planId || ''}/${GV.sel ? encodeURIComponent(GV.sel) : ''}`;
+  try { history.replaceState(null, '', h); } catch {}
+}
+function gvTip(n, ev) {
+  const tip = $('gvTip'), p = gvCanvasPt(ev);
+  tip.innerHTML = `<b>${esc(n.type === 'finding' ? `#${n.fid} ${n.label}` : n.label)}</b>` +
+    (n.claim ? `<div style="color:var(--muted);margin-top:3px">${esc(n.claim.slice(0, 220))}</div>` : n.path ? `<div style="color:var(--faint)">${esc(n.path)}</div>` : '');
+  tip.style.left = Math.min(p.x + 14, $('gvCanvas').clientWidth - 370) + 'px'; tip.style.top = (p.y + 14) + 'px'; tip.style.display = 'block';
+}
+
+// ---- search ---------------------------------------------------------------------------
+function gvApplySearch(jump) {
+  const q = GV.search.toLowerCase();
+  GV.matches = q ? GV.nodes.filter((n) => GV.visible?.has(n.id) && gvText(n).includes(q)).map((n) => n.id) : [];
+  for (const [id, g] of GV.els) g.classList.toggle('hit', GV.matches.includes(id));
+  gvList();
+  if (jump && GV.matches.length) { GV.matchIdx = (GV.matchIdx + 1) % GV.matches.length; gvSelect(GV.matches[GV.matchIdx], { center: true }); }
+}
+
+// ---- detail panel ----------------------------------------------------------------------
+const gvRef = (id, text, color) => `<a class="ref" data-go="${esc(id)}"><span style="color:${color || 'var(--muted)'}">●</span> ${text}</a>`;
+function gvNeighbours(id, type) { return [...(GV.adj.get(id) || [])].map((x) => GV.byId.get(x)).filter((n) => n && (!type || n.type === type)); }
+async function gvDetail(id) {
+  const box = $('gvDetail');
+  if (!id) {
+    const d = GV.data;
+    box.innerHTML = GV.kind === 'brain' && d
+      ? `<h3>The brain · project ${esc(d.project_id)}</h3><div class="lbl">What it holds</div>` +
+        Object.entries(d.counts || {}).map(([k, n]) => `<div><span class="gv-pill" style="background:${GV_COLORS[k]}">${esc(k)}</span> ${n} finding(s)</div>`).join('') +
+        `<div class="lbl">Source root</div><div class="ev">${esc(d.root || '(not set — set_project_root links findings to files)')}</div>` +
+        `<div class="lbl">How to read it</div><div style="color:var(--muted);font-size:12.5px">Each dot is a recorded fact. Squares are the files it rests on — when one changes, its facts turn <b style="color:#fbbf24">suspect</b> until re-checked. Diamonds are the steps they were learned in. Click a fact to see its history, what it's built on, and to confirm, revise or retract it.</div>`
+      : `<div class="empty">Select a node</div>`;
+    return;
+  }
+  const n = GV.byId.get(id); if (!n) return;
+  const color = gvColor(n);
+  if (n.type === 'finding') {
+    box.innerHTML = `<div class="empty">loading #${n.fid}…</div>`;
+    let f;
+    try { f = await api('/api/findings/' + n.fid); } catch (e) { box.innerHTML = `<div class="empty err">${esc(e.message)}</div>`; return; }
+    if (GV.sel !== id) return;
+    const deps = f.depends_on.map((d) => d.type === 'finding'
+      ? (GV.byId.has(`f:${d.ref}`) ? gvRef(`f:${d.ref}`, `#${d.ref} ${esc(GV.byId.get(`f:${d.ref}`).claim.slice(0, 80))}${d.inferred ? ' <i style="color:var(--faint)">(inferred)</i>' : ''}`, gvColor(GV.byId.get(`f:${d.ref}`))) : `<div class="ref">#${d.ref}</div>`)
+      : gvRef(`${d.type}:${d.ref}`, `${d.type === 'dir' ? '📁 listing of ' : ''}<span class="ev">${esc(GV.byId.get(`${d.type}:${d.ref}`)?.path || d.ref)}</span>`, GV_COLORS[d.type])).join('');
+    const dependents = f.dependents.map((x) => GV.byId.has(`f:${x}`) ? gvRef(`f:${x}`, `#${x} ${esc(GV.byId.get(`f:${x}`).claim.slice(0, 80))}`, gvColor(GV.byId.get(`f:${x}`))) : `<div class="ref">#${x}</div>`).join('');
+    const hist = f.history.map((h) => `<div><b>${esc(h.event)}</b>${h.cause_finding_id ? ` ← <a class="ref" style="display:inline;padding:0" data-go="f:${h.cause_finding_id}">#${h.cause_finding_id}</a>` : ''}${h.cause_file ? ` <span class="ev">${esc(h.cause_file.split('/').slice(-2).join('/'))}</span>` : ''}` +
+      `${h.detail ? `<div style="color:var(--muted)">${esc(h.detail)}</div>` : ''}<div class="ts">${esc(h.created_at)}</div></div>`).join('');
+    const chain = [...f.supersedes.map((x) => ['earlier', x]), ...(f.superseded_by ? [['now', f.superseded_by]] : [])]
+      .map(([w, x]) => GV.byId.has(`f:${x}`) ? gvRef(`f:${x}`, `${w}: #${x} ${esc(GV.byId.get(`f:${x}`).claim.slice(0, 70))}`, gvColor(GV.byId.get(`f:${x}`))) : '').join('');
+    const stepNode = f.step_id && GV.byId.get(`s:${f.step_id}`);
+    const live = f.status === 'active' || f.status === 'suspect';
+    box.innerHTML = `
+      <div class="gv-crumbs">brain › ${esc(f.subject || f.kind)}</div>
+      <div class="row"><span class="gv-pill" style="background:${color}">${esc(n.status)}</span><span class="meta">#${f.id} · ${esc(f.kind)}${f.impact === 'high' ? ' · high impact' : ''} · seen ${f.seen_count}×</span></div>
+      <h3>${esc(f.subject || '(no subject)')}</h3>
+      <div class="claim" id="gvClaim">${esc(f.claim)}</div>
+      ${f.evidence?.length ? `<div class="lbl">Evidence</div>${f.evidence.map((e) => `<div class="ev">${esc(e)}</div>`).join('')}` : ''}
+      <div class="lbl">Provenance</div><div style="font-size:12.5px;color:var(--muted)">${esc(f.source || 'unknown source')}${stepNode ? ` · learned in ${gvRef(stepNode.id, esc(stepNode.label), gvColor(stepNode))}` : f.step_id ? ` · step #${f.step_id}` : ''}</div>
+      ${deps ? `<div class="lbl">Built on (${f.depends_on.length})</div>${deps}` : ''}
+      ${dependents ? `<div class="lbl">Built on this (${f.dependents.length})</div>${dependents}` : ''}
+      ${f.conflicts_with?.length ? `<div class="lbl" style="color:#f87171">Conflicts with</div>${f.conflicts_with.map((x) => gvRef(`f:${x}`, `#${x} ${esc(GV.byId.get(`f:${x}`)?.claim.slice(0, 80) || '')}`, '#f87171')).join('')}` : ''}
+      ${chain ? `<div class="lbl">Revisions</div>${chain}` : ''}
+      ${hist ? `<div class="lbl">History</div><div class="gv-tl">${hist}</div>` : ''}
+      ${live ? `<div class="lbl">Edit this memory</div>
+        <div class="gv-actions">
+          <button id="gvConfirm" title="Still true — back to active, re-anchored to the current files">✓ Confirm</button>
+          <button id="gvRevise" title="Replace with a corrected claim; what was built on it is re-opened">✎ Revise</button>
+          <button id="gvRetract" title="No longer true; what was built on it is re-opened">✗ Retract</button>
+        </div>
+        <div id="gvEdit" style="display:none;margin-top:8px"><textarea id="gvEditClaim"></textarea>
+          <input id="gvEditReason" placeholder="why (what you checked)" style="margin-top:6px" />
+          <div class="gv-actions"><button class="primary" id="gvEditSave">Save</button><button id="gvEditCancel">Cancel</button></div></div>` : ''}`;
+    gvWireRefs(box);
+    if (live) {
+      let mode = null;
+      const openEdit = (m) => { mode = m; $('gvEdit').style.display = ''; $('gvEditClaim').style.display = m === 'revised' ? '' : 'none'; $('gvEditClaim').value = f.claim; (m === 'revised' ? $('gvEditClaim') : $('gvEditReason')).focus(); };
+      $('gvConfirm').onclick = () => gvResolve(f.id, { verdict: 'confirmed', reason: 'confirmed on the board' });
+      $('gvRevise').onclick = () => openEdit('revised');
+      $('gvRetract').onclick = () => openEdit('retracted');
+      $('gvEditCancel').onclick = () => { $('gvEdit').style.display = 'none'; };
+      $('gvEditSave').onclick = () => {
+        const reason = $('gvEditReason').value.trim();
+        if (mode === 'retracted' && !reason) { toast('Say why it is no longer true'); return; }
+        gvResolve(f.id, mode === 'revised' ? { verdict: 'revised', claim: $('gvEditClaim').value.trim(), reason } : { verdict: 'retracted', reason });
+      };
+    }
+    return;
+  }
+  const nbF = gvNeighbours(id, 'finding');
+  const listF = nbF.map((x) => gvRef(x.id, `#${x.fid} ${esc(x.claim.slice(0, 90))}`, gvColor(x))).join('');
+  if (n.type === 'file' || n.type === 'dir') {
+    box.innerHTML = `<div class="gv-crumbs">brain › ${n.type}</div><h3>${esc(n.label)}</h3><div class="ev">${esc(n.path)}</div>
+      <div class="lbl">${n.type === 'dir' ? 'Facts about what this folder contains' : 'Facts resting on this file'} (${nbF.length})</div>${listF || '<div class="empty">none visible</div>'}
+      <div style="color:var(--faint);font-size:11.5px;margin-top:10px">When this ${n.type === 'dir' ? 'folder gains or loses a file' : 'file changes'}, these facts turn suspect until re-checked.</div>`;
+  } else if (n.type === 'step') {
+    const nbS = gvNeighbours(id, 'step');
+    box.innerHTML = `<div class="gv-crumbs">${GV.kind === 'brain' ? 'brain' : 'plan #' + (n.plan_id || '')} › step</div>
+      <div class="row"><span class="gv-pill" style="background:${gvColor(n)}">${esc(n.status)}</span><span class="meta">step #${n.sid} · plan #${n.plan_id}${n.role ? ' · ' + esc(n.role) : ''}</span></div>
+      <h3>${esc(n.label)}</h3>
+      <div class="gv-actions"><button id="gvOpenStep">Open in board</button>${GV.kind === 'brain' ? `<button id="gvStepGraph">Plan step graph</button>` : `<button id="gvStepBrain">Its brain</button>`}</div>
+      ${GV.kind === 'brain' ? `<div class="lbl">Facts learned in this step (${nbF.length})</div>${listF || '<div class="empty">none</div>'}` :
+        `<div class="lbl">Linked steps</div>${nbS.map((x) => gvRef(x.id, esc(x.label), gvColor(x))).join('') || '<div class="empty">none</div>'}`}`;
+    $('gvOpenStep').onclick = () => gvOpenInBoard(n.plan_id, n.sid);
+    if ($('gvStepGraph')) $('gvStepGraph').onclick = () => openGraph('steps', { planId: n.plan_id, select: id });
+    if ($('gvStepBrain')) $('gvStepBrain').onclick = () => openGraph('brain', { select: id });
+  } else if (n.type === 'plan') {
+    box.innerHTML = `<div class="gv-crumbs">plan</div><h3>${esc(n.label)}</h3><div class="gv-actions"><button id="gvOpenPlan">Open in board</button><button id="gvPlanSteps">Its step graph</button></div>`;
+    $('gvOpenPlan').onclick = () => gvOpenInBoard(n.pid, null);
+    $('gvPlanSteps').onclick = () => openGraph('steps', { planId: n.pid });
+  } else {
+    const nbC = gvNeighbours(id).sort((a, b) => (b.degree || 0) - (a.degree || 0));
+    box.innerHTML = `<div class="gv-crumbs">code map › ${esc(n.kind || 'node')}</div><h3>${esc(n.label)}</h3>
+      <div class="ev">${esc(n.path || '')}${n.loc ? ':' + esc(n.loc) : ''}</div>
+      <div style="color:var(--muted);font-size:12.5px;margin-top:6px">degree ${n.degree} · community ${n.community ?? '—'}</div>
+      <div class="lbl">Connected (${nbC.length})</div>${nbC.map((x) => gvRef(x.id, esc(x.label), gvColor(x))).join('') || '<div class="empty">none visible</div>'}`;
+  }
+  gvWireRefs(box);
+}
+function gvWireRefs(box) {
+  for (const a of box.querySelectorAll('[data-go]')) a.onclick = (e) => { e.preventDefault(); const id = a.dataset.go; if (GV.byId.has(id)) gvSelect(id, { center: true }); else toast('not in this view'); };
+}
+async function gvResolve(fid, body) {
+  try {
+    const r = await apiSend('POST', `/api/findings/${fid}/resolve`, body);
+    const re = r.suspected?.length ? ` — re-opened ${r.suspected.length} fact(s) built on it` : '';
+    toast(`${body.verdict}${re}`);
+    await gvLoad();
+    gvSelect(r.finding ? `f:${r.finding.id}` : `f:${fid}`, { center: true });
+  } catch (e) { toast(e.message); }
+}
+async function gvOpenInBoard(planId, stepId) {
+  $('graphView').hidden = true;
+  try { history.replaceState(null, '', location.pathname + location.search); } catch {}
+  if (planId) await openPlan(planId);
+  if (stepId) await openStep(stepId);
+}
+
+// ---- wiring --------------------------------------------------------------------------------
+function gvInit() {
+  if (gvInit.done) return; gvInit.done = true;
+  const svg = $('gvSvg');
+  for (const b of document.querySelectorAll('.gv-tabs button')) b.onclick = () => openGraph(b.dataset.kind, { push: false });
+  $('gvPlan').onchange = () => { GV.planId = Number($('gvPlan').value); GV.pos.clear(); GV.focus = false; openGraph(GV.kind, { planId: GV.planId }); };
+  $('gvClose').onclick = () => { $('graphView').hidden = true; try { history.replaceState(null, '', location.pathname + location.search); } catch {} };
+  $('gvFit').onclick = gvFit;
+  $('gvGroup').onchange = () => { GV.groupBy = $('gvGroup').value; gvRebuild(); GV.alpha = 1; for (let i = 0; i < 200 && GV.alpha > 0.03; i++) gvTick(); gvDraw(); gvFit(); gvHeat(0.2); };
+  $('gvRelayout').onclick = () => { for (const n of GV.nodes) { n.fx = n.fy = null; n.x = (Math.random() - 0.5) * 400; n.y = (Math.random() - 0.5) * 400; } gvHeat(1); setTimeout(gvFit, 700); };
+  $('gvFocus').onclick = () => { if (!GV.sel && !GV.focus) { toast('Select a node first'); return; } GV.focus = !GV.focus; gvRebuild(); gvHeat(0.5); setTimeout(gvFit, 500); };
+  $('gvBack').onclick = () => gvNav(-1); $('gvFwd').onclick = () => gvNav(1);
+  $('gvDepth').onchange = () => { GV.depth = Number($('gvDepth').value); if (GV.focus) { gvRebuild(); gvHeat(0.5); setTimeout(gvFit, 500); } };
+  $('gvAttn').onclick = () => gvNextAttention(1);
+  $('gvHelpBtn').onclick = () => { $('gvKeys').hidden = !$('gvKeys').hidden; };
+  $('gvKeys').onclick = () => { $('gvKeys').hidden = true; };
+  { const mini = $('gvMini');
+    mini.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); gvMiniGo(e);
+      const move = (ev) => gvMiniGo(ev), up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+      window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+    }); }
+  $('gvZoomIn').onclick = () => { const r = svg.getBoundingClientRect(); gvZoomAt(r.width / 2, r.height / 2, 1.3); };
+  $('gvZoomOut').onclick = () => { const r = svg.getBoundingClientRect(); gvZoomAt(r.width / 2, r.height / 2, 1 / 1.3); };
+  $('gvStale').onclick = async () => {
+    try { const r = await apiSend('POST', '/api/brain/check-stale', { project_id: state.projectId }); toast(r.suspected.length ? `${r.suspected.length} fact(s) now suspect — their files changed` : `all ${r.files_checked} source file(s) unchanged`); if (GV.kind === 'brain') await gvLoad(); }
+    catch (e) { toast(e.message); }
+  };
+  $('gvSearch').oninput = () => { GV.search = $('gvSearch').value.trim(); GV.matchIdx = -1; gvApplySearch(false); };
+  $('gvSearch').onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); gvApplySearch(true); } if (e.key === 'Escape') { $('gvSearch').value = ''; GV.search = ''; gvApplySearch(false); $('gvSearch').blur(); } };
+  svg.addEventListener('wheel', (e) => { e.preventDefault(); const p = gvCanvasPt(e); gvZoomAt(p.x, p.y, e.deltaY < 0 ? 1.15 : 1 / 1.15); }, { passive: false });
+  svg.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('.n')) return;
+    const s = gvCanvasPt(e), v0 = { ...GV.view }; let moved = false;
+    svg.classList.add('panning');
+    const move = (ev) => { const p = gvCanvasPt(ev); if (Math.hypot(p.x - s.x, p.y - s.y) > 3) moved = true; GV.view.x = v0.x + p.x - s.x; GV.view.y = v0.y + p.y - s.y; gvDraw(); };
+    const up = () => { svg.classList.remove('panning'); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); if (!moved) gvSelect(null, { push: false }); };
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+  });
+  document.addEventListener('keydown', (e) => {
+    if ($('graphView').hidden) return;
+    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '');
+    if (e.key === 'Escape' && !typing) {
+      if (!$('gvKeys').hidden) $('gvKeys').hidden = true;
+      else if (gvClearPath()) {}
+      else if (GV.focus) { GV.focus = false; gvRebuild(); gvHeat(0.4); }
+      else if (GV.sel) gvSelect(null, { push: false }); else $('gvClose').onclick();
+      return;
+    }
+    if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
+    const dir = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+    if (dir) { e.preventDefault(); gvWalk(...dir); return; }
+    if (e.key === '/') { e.preventDefault(); $('gvSearch').focus(); }
+    else if (e.key === '?') $('gvKeys').hidden = !$('gvKeys').hidden;
+    else if (e.key === 'Enter' && GV.sel) gvCenterOn(GV.sel);
+    else if (e.key === 'n') gvNextAttention(1);
+    else if (e.key === 'N') gvNextAttention(-1);
+    else if (e.key === '1' || e.key === '2' || e.key === '3') {
+      GV.depth = Number(e.key); $('gvDepth').value = e.key;
+      if (GV.sel) { GV.focus = true; gvRebuild(); gvHeat(0.5); setTimeout(gvFit, 500); }
+    }
+    else if (e.key === '[') gvNav(-1);
+    else if (e.key === ']') gvNav(1);
+    else if (e.key === 'f') gvFit();
+    else if (e.key === 'e') $('gvFocus').onclick();
+    else if (e.key === '+' || e.key === '=') $('gvZoomIn').onclick();
+    else if (e.key === '-') $('gvZoomOut').onclick();
+  });
+  window.addEventListener('resize', () => { if (!$('graphView').hidden) gvDraw(); });
+}
+// "#graph/<kind>/<plan>/<node>" deep link (the board's own ?plan=&step= links still work)
+async function gvDeepLink() {
+  const m = /^#graph\/(brain|steps|code)\/(\d*)\/?(.*)$/.exec(location.hash || '');
+  if (!m) return false;
+  gvInit();
+  await openGraph(m[1], { planId: m[2] ? Number(m[2]) : null, select: m[3] ? decodeURIComponent(m[3]) : null });
+  return true;
+}
+// Board step panel: what the brain knows about this step, with a jump into the graph.
+async function renderStepBrain(stepId) {
+  try {
+    const facts = await api(`/api/steps/${stepId}/brain`);
+    const html = facts.length
+      ? facts.map((f) => `<div class="link" style="cursor:pointer" data-fid="${f.id}"><span style="color:${GV_COLORS[f.status] || '#8a93a6'}">●</span> <b>#${f.id}</b> ${esc(f.claim.slice(0, 180))}</div>`).join('')
+      : `<div class="body" style="color:var(--faint)">Nothing recorded about this step's code yet.</div>`;
+    $('step').insertAdjacentHTML('beforeend', `<div class="section" id="stepBrain"><div class="lbl">Brain · what the project knows (${facts.length}) <button class="copybtn" id="stepBrainGraph" style="float:right">◉ Explore</button></div>${html}</div>`);
+    $('stepBrainGraph').onclick = () => { gvInit(); openGraph('brain', { select: `s:${stepId}` }); };
+    for (const el of document.querySelectorAll('#stepBrain [data-fid]')) el.onclick = () => { gvInit(); openGraph('brain', { select: `f:${el.dataset.fid}` }); };
+  } catch {}
+}
+
+{ const gb = $('graphBtn'); if (gb) gb.onclick = () => { gvInit(); openGraph('brain'); }; }
+
 async function initializeBoard() {
   try {
     const meta = await api('/api/meta');
@@ -1497,6 +2383,7 @@ async function initializeBoard() {
   } catch {}
   await loadProjects();
   await applyInitialDeepLink();
+  try { await gvDeepLink(); } catch (e) { console.error(`[Graph] ${e.message || e}`); }
   renderActivityPanel();
   scheduleActivityPoll(0);
 }

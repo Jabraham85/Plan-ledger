@@ -1,0 +1,450 @@
+{
+  "_note": "Held-out reach scenarios, written 2026-09-23 BEFORE any run (PREREG.md). named = names the subject (sweep); hidden = indirect reference, must change; keep = unrelated, must not be reached.",
+  "heldout": [
+    {
+      "sid": "abroad",
+      "facts": [
+        {
+          "fid": "a1",
+          "subject": "anna",
+          "claim": "Anna ran the village shop all through last summer",
+          "label": "named"
+        },
+        {
+          "fid": "a2",
+          "subject": "lake",
+          "claim": "she taught the village kids to swim in the lake every July",
+          "label": "hidden"
+        },
+        {
+          "fid": "a3",
+          "subject": "shop",
+          "claim": "last summer the shopkeeper greeted every customer by name",
+          "label": "hidden"
+        },
+        {
+          "fid": "a4",
+          "subject": "lake",
+          "claim": "the lake was unusually warm in July",
+          "label": "keep"
+        },
+        {
+          "fid": "a5",
+          "subject": "shop",
+          "claim": "the village shop sells rye bread",
+          "label": "keep"
+        },
+        {
+          "fid": "a6",
+          "subject": "village",
+          "claim": "the village mayor is Tomas",
+          "label": "keep"
+        }
+      ],
+      "twist": {
+        "subject": "anna",
+        "claim": "Anna was abroad for all of last summer",
+        "impact": "high"
+      }
+    },
+    {
+      "sid": "blind",
+      "facts": [
+        {
+          "fid": "b1",
+          "subject": "captain reyes",
+          "claim": "Captain Reyes reads the sea charts every night",
+          "label": "named"
+        },
+        {
+          "fid": "b2",
+          "subject": "bridge",
+          "claim": "she steers the ship through the reef by eye",
+          "label": "hidden"
+        },
+        {
+          "fid": "b3",
+          "subject": "crew",
+          "claim": "each morning the captain visually inspects the rigging",
+          "label": "hidden"
+        },
+        {
+          "fid": "b4",
+          "subject": "crew",
+          "claim": "the ship carries a crew of forty",
+          "label": "keep"
+        },
+        {
+          "fid": "b5",
+          "subject": "bridge",
+          "claim": "the reef lies east of the island",
+          "label": "keep"
+        },
+        {
+          "fid": "b6",
+          "subject": "galley",
+          "claim": "the cook is called Bram",
+          "label": "keep"
+        }
+      ],
+      "twist": {
+        "subject": "captain reyes",
+        "claim": "Captain Reyes lost her sight in a storm last year",
+        "impact": "high"
+      }
+    },
+    {
+      "sid": "moved",
+      "facts": [
+        {
+          "fid": "m1",
+          "subject": "dr patel",
+          "claim": "Dr Patel sees patients at the town clinic on Mondays",
+          "label": "named"
+        },
+        {
+          "fid": "m2",
+          "subject": "school",
+          "claim": "she gives the school first-aid talk every spring",
+          "label": "hidden"
+        },
+        {
+          "fid": "m3",
+          "subject": "town",
+          "claim": "the town doctor makes house calls on Fridays",
+          "label": "hidden"
+        },
+        {
+          "fid": "m4",
+          "subject": "school",
+          "claim": "the school has 300 pupils",
+          "label": "keep"
+        },
+        {
+          "fid": "m5",
+          "subject": "town",
+          "claim": "the pharmacy is on Main Street",
+          "label": "keep"
+        },
+        {
+          "fid": "m6",
+          "subject": "clinic",
+          "claim": "the clinic opens at 8am",
+          "label": "keep"
+        }
+      ],
+      "twist": {
+        "subject": "dr patel",
+        "claim": "Dr Patel moved to Canada in January",
+        "impact": "high"
+      }
+    }
+  ],
+  "heldout2": [
+    {
+      "sid": "judge",
+      "facts": [
+        {
+          "fid": "j1",
+          "subject": "judge okafor",
+          "claim": "Judge Okafor is the presiding judge of the county court",
+          "label": "named"
+        },
+        {
+          "fid": "j2",
+          "subject": "court",
+          "claim": "the presiding judge hears traffic appeals every Tuesday afternoon",
+          "label": "hidden"
+        },
+        {
+          "fid": "j3",
+          "subject": "warrants",
+          "claim": "he signs the county search warrants",
+          "label": "hidden"
+        },
+        {
+          "fid": "j4",
+          "subject": "court",
+          "claim": "the courthouse was built in 1910",
+          "label": "keep"
+        },
+        {
+          "fid": "j5",
+          "subject": "warrants",
+          "claim": "search warrants expire after ten days",
+          "label": "keep"
+        },
+        {
+          "fid": "j6",
+          "subject": "county",
+          "claim": "the county sheriff is Mills",
+          "label": "keep"
+        }
+      ],
+      "twist": {
+        "subject": "judge okafor",
+        "claim": "Judge Okafor retired from the bench in March",
+        "impact": "high"
+      }
+    },
+    {
+      "sid": "coach",
+      "facts": [
+        {
+          "fid": "c1",
+          "subject": "coach lindqvist",
+          "claim": "Coach Lindqvist has been the club head coach since 2019",
+          "label": "named"
+        },
+        {
+          "fid": "c2",
+          "subject": "training",
+          "claim": "the head coach runs training every Wednesday evening",
+          "label": "hidden"
+        },
+        {
+          "fid": "c3",
+          "subject": "bus",
+          "claim": "she drives the team bus to away games",
+          "label": "hidden"
+        },
+        {
+          "fid": "c4",
+          "subject": "training",
+          "claim": "training is held on the north pitch",
+          "label": "keep"
+        },
+        {
+          "fid": "c5",
+          "subject": "bus",
+          "claim": "the team bus seats 50 people",
+          "label": "keep"
+        },
+        {
+          "fid": "c6",
+          "subject": "club",
+          "claim": "the club was founded in 1921",
+          "label": "keep"
+        }
+      ],
+      "twist": {
+        "subject": "coach lindqvist",
+        "claim": "Coach Lindqvist resigned from the club in May",
+        "impact": "high"
+      }
+    },
+    {
+      "sid": "baker",
+      "facts": [
+        {
+          "fid": "k1",
+          "subject": "mr haddad",
+          "claim": "Mr Haddad owns the corner bakery",
+          "label": "named"
+        },
+        {
+          "fid": "k2",
+          "subject": "school",
+          "claim": "the bakery owner delivers free bread to the school every Friday",
+          "label": "hidden"
+        },
+        {
+          "fid": "k3",
+          "subject": "choir",
+          "claim": "he sings bass in the town choir",
+          "label": "hidden"
+        },
+        {
+          "fid": "k4",
+          "subject": "bakery",
+          "claim": "the corner bakery sells sourdough",
+          "label": "keep"
+        },
+        {
+          "fid": "k5",
+          "subject": "school",
+          "claim": "the school opened a new gym this year",
+          "label": "keep"
+        },
+        {
+          "fid": "k6",
+          "subject": "choir",
+          "claim": "the town choir rehearses on Thursdays",
+          "label": "keep"
+        }
+      ],
+      "twist": {
+        "subject": "mr haddad",
+        "claim": "Mr Haddad sold the bakery and left town in April",
+        "impact": "high"
+      }
+    }
+  ],
+  "heldout3": [
+    {
+      "sid": "surgeon",
+      "facts": [
+        {
+          "fid": "q1",
+          "subject": "dr lin",
+          "claim": "Dr Lin is the chief surgeon at St Mary hospital",
+          "label": "named"
+        },
+        {
+          "fid": "q2",
+          "subject": "surgery",
+          "claim": "she performs the heart operations every Thursday",
+          "label": "hidden",
+          "settle": "change"
+        },
+        {
+          "fid": "q3",
+          "subject": "marathon",
+          "claim": "she ran the city marathon last month",
+          "label": "hidden",
+          "settle": "change"
+        },
+        {
+          "fid": "q4",
+          "subject": "rounds",
+          "claim": "the chief surgeon leads ward rounds at 7am",
+          "label": "hidden",
+          "settle": "either"
+        },
+        {
+          "fid": "q5",
+          "subject": "surgery",
+          "claim": "the operating theatre has two robots",
+          "label": "keep"
+        },
+        {
+          "fid": "q6",
+          "subject": "hospital",
+          "claim": "St Mary hospital has 400 beds",
+          "label": "keep"
+        },
+        {
+          "fid": "q7",
+          "subject": "marathon",
+          "claim": "the city marathon starts at the harbour",
+          "label": "keep"
+        }
+      ],
+      "twist": {
+        "subject": "dr lin",
+        "claim": "Dr Lin broke both wrists in a fall and has been unable to work since last spring",
+        "impact": "high"
+      }
+    },
+    {
+      "sid": "author",
+      "facts": [
+        {
+          "fid": "w1",
+          "subject": "tomas berg",
+          "claim": "Tomas Berg is the town librarian",
+          "label": "named"
+        },
+        {
+          "fid": "w2",
+          "subject": "library",
+          "claim": "he reads stories to the children every Saturday morning",
+          "label": "hidden",
+          "settle": "change"
+        },
+        {
+          "fid": "w3",
+          "subject": "newspaper",
+          "claim": "he writes the weekly book column for the local paper",
+          "label": "hidden",
+          "settle": "change"
+        },
+        {
+          "fid": "w4",
+          "subject": "library",
+          "claim": "the librarian orders new books each month",
+          "label": "hidden",
+          "settle": "either"
+        },
+        {
+          "fid": "w5",
+          "subject": "library",
+          "claim": "the library has a reading garden",
+          "label": "keep"
+        },
+        {
+          "fid": "w6",
+          "subject": "newspaper",
+          "claim": "the local paper is printed on Thursdays",
+          "label": "keep"
+        },
+        {
+          "fid": "w7",
+          "subject": "town",
+          "claim": "the town hall clock was restored in 2020",
+          "label": "keep"
+        }
+      ],
+      "twist": {
+        "subject": "tomas berg",
+        "claim": "Tomas Berg died last winter",
+        "impact": "high"
+      }
+    },
+    {
+      "sid": "pilot",
+      "facts": [
+        {
+          "fid": "p1",
+          "subject": "captain sato",
+          "claim": "Captain Sato is the senior pilot at the flying club",
+          "label": "named"
+        },
+        {
+          "fid": "p2",
+          "subject": "airfield",
+          "claim": "she flies the club plane to the coast every Sunday",
+          "label": "hidden",
+          "settle": "change"
+        },
+        {
+          "fid": "p3",
+          "subject": "lessons",
+          "claim": "she gives beginners their first flying lesson",
+          "label": "hidden",
+          "settle": "change"
+        },
+        {
+          "fid": "p4",
+          "subject": "club",
+          "claim": "the senior pilot signs off every new member",
+          "label": "hidden",
+          "settle": "either"
+        },
+        {
+          "fid": "p5",
+          "subject": "airfield",
+          "claim": "the airfield has one grass runway",
+          "label": "keep"
+        },
+        {
+          "fid": "p6",
+          "subject": "lessons",
+          "claim": "a lesson lasts forty-five minutes",
+          "label": "keep"
+        },
+        {
+          "fid": "p7",
+          "subject": "club",
+          "claim": "the flying club has 80 members",
+          "label": "keep"
+        }
+      ],
+      "twist": {
+        "subject": "captain sato",
+        "claim": "Captain Sato lost her pilot licence in January and may not fly",
+        "impact": "high"
+      }
+    }
+  ]
+}

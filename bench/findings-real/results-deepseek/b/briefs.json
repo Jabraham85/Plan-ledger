@@ -1,0 +1,206 @@
+{
+  "q01": {
+    "lines": [
+      "\nWhat the project already knows (recorded findings — check any marked CONFLICT before relying on it):",
+      "- [fact] src/db.mjs#store.nextstep: nextStep returns the lowest-idx step whose status is not done/skipped/blocked and whose builds_on/blocks dependencies are all done/skipped; it returns null when no steps remain, {all_blocked:true} whe",
+      "- [fact] src/db.mjs#store.nextstep: nextStep selects the lowest-idx step whose status is not done/skipped/blocked and whose builds_on/blocks dependencies are all done/skipped; it returns null when no steps remain, {all_blocked:true} whe",
+      "- [fact] src/db.mjs#store.readysteps: readySteps returns EVERY pending non-blocked step with satisfied deps (the concurrent frontier), not just the lowest-idx one, using the same _depsSatisfied gate as nextStep",
+      "- [fact] src/db.mjs#store.readysteps: readySteps returns every pending non-blocked step whose deps are satisfied (the full concurrently-launchable frontier), using the same _depsSatisfied gate as nextStep so the two agree",
+      "- [fact] src/db.mjs#store.readysteps: readySteps returns every pending, non-blocked step whose deps are satisfied (not just the lowest-idx one), using the same _depsSatisfied gate as nextStep so the two agree by construction"
+    ],
+    "finding_ids": [
+      49,
+      1,
+      99,
+      53,
+      4
+    ]
+  },
+  "q02": {
+    "lines": [
+      "\nWhat the project already knows (recorded findings — check any marked CONFLICT before relying on it):",
+      "- [fact] src/db.mjs#store.nextstep: Blocked steps are skipped (not returned as workable) and reported in skipped_blocked_steps with reason 'blocked', while dependency-waiting steps get reason 'dependency' plus waiting_on_step_ids",
+      "- [fact] src/db.mjs#store.nextstep: skipped_blocked_steps is attached to the returned step only for blocked/dep-waiting steps whose idx is lower than the workable step's idx",
+      "- [fact] src/db.mjs#store.nextstep: Blocked steps and dependency-waiting steps are both skipped and reported in skipped_blocked_steps with a reason of 'blocked' or 'dependency' (the latter carrying waiting_on_step_ids), but only for ste",
+      "- [fact] src/db.mjs#store.nextplan: nextPlan skips plans with status blocked and plans whose nextStep returns all_blocked, advancing to the next workable plan",
+      "- [fact] src/db.mjs#store.nextplan: nextPlan skips plans with status done/abandoned/blocked and also skips a plan whose nextStep returns all_blocked, advancing to the next workable plan"
+    ],
+    "finding_ids": [
+      51,
+      98,
+      3,
+      101,
+      54
+    ]
+  },
+  "q03": {
+    "lines": [
+      "\nWhat the project already knows (recorded findings — check any marked CONFLICT before relying on it):",
+      "- [fact] scripts/runner.mjs#maxretries: --max-retries caps the retry loop at 48 (default), with --retry-minutes default 30 min per sleep (48×30min ≈ 24h)",
+      "- [fact] scripts/runner.mjs#msuntilreset: When the limit message names a reset time, sleep targets just past it (2-min buffer); otherwise falls back to --retry-minutes; parses are sanity-capped at 12h",
+      "- [fact] scripts/runner.mjs#retryminutes/maxretries: --retry-minutes defaults to 30 and --max-retries defaults to 48 (≈24h safety cap)",
+      "- [fact] scripts/runner.mjs#maxretries: Retry safety cap defaults to 48 retries (--max-retries), and sleep interval defaults to 30 minutes (--retry-minutes), ~24h total",
+      "- [fact] scripts/runner.mjs#retryonlimit: --retry-on-limit enables a sleep+retry loop only for usage/rate-limit stops (stopKind==='limit'); budget and failure stops are never retried"
+    ],
+    "finding_ids": [
+      105,
+      62,
+      60,
+      12,
+      104
+    ]
+  },
+  "q04": {
+    "lines": [
+      "\nWhat the project already knows (recorded findings — check any marked CONFLICT before relying on it):",
+      "- [fact] scripts/runner.mjs#maxretries: --max-retries caps the retry loop at 48 (default), with --retry-minutes default 30 min per sleep (48×30min ≈ 24h)",
+      "- [fact] scripts/runner.mjs#retryminutes/maxretries: --retry-minutes defaults to 30 and --max-retries defaults to 48 (≈24h safety cap)",
+      "- [fact] scripts/runner.mjs#maxretries: Retry safety cap defaults to 48 retries (--max-retries), and sleep interval defaults to 30 minutes (--retry-minutes), ~24h total",
+      "- [fact] scripts/runner.mjs#maxsteps: --max-steps caps total steps per run (default Infinity via 0||Infinity); workPlan returns 'paused' when ran reaches maxSteps",
+      "- [fact] scripts/runner.mjs#maxtotalusd: --max-total-usd is a hard whole-run spend ceiling (0 = none); budgetOrLimitStop stops the run when usage.cost >= maxTotalUsd and warns at 95%"
+    ],
+    "finding_ids": [
+      105,
+      60,
+      12,
+      102,
+      103
+    ]
+  },
+  "q05": {
+    "lines": [
+      "\nWhat the project already knows (recorded findings — check any marked CONFLICT before relying on it):",
+      "- [fact] src/db.mjs#store constructor: Store constructor sets PRAGMA journal_mode=WAL, foreign_keys=ON, busy_timeout=3000, journal_size_limit=4194304, then exec(SCHEMA) and _migrate()",
+      "- [fact] src/db.mjs#store constructor: Store sets PRAGMA journal_mode=WAL, foreign_keys=ON, busy_timeout=3000, journal_size_limit=4194304, then execs SCHEMA and runs _migrate()",
+      "- [fact] src/db.mjs#store constructor: Store sets PRAGMA journal_mode=WAL, foreign_keys=ON, busy_timeout=3000, journal_size_limit=4194304, then executes SCHEMA and _migrate()",
+      "- [fact] src/db.mjs#store: Store uses Node's built-in node:sqlite DatabaseSync (synchronous API, no native deps)",
+      "- [fact] src/db.mjs#store.user_version: Migrations are gated on PRAGMA user_version; Store.USER_VERSION is 4"
+    ],
+    "finding_ids": [
+      110,
+      65,
+      21,
+      66,
+      111
+    ]
+  },
+  "q06": {
+    "lines": [
+      "\nWhat the project already knows (recorded findings — check any marked CONFLICT before relying on it):",
+      "- [fact] src/db.mjs#store constructor: Store supports an in-memory database via the ':memory:' path, which skips mkdirSync",
+      "- [fact] config key plan_ledger_db: PLAN_LEDGER_DB env var overrides the default SQLite DB location",
+      "- [fact] config key plan_ledger_db: PLAN_LEDGER_DB env var overrides the default DB location and is the single shared override for every entry point",
+      "- [warning] readme.md#db location: README.md and src/server.mjs comment say the DB lives at ./data/plan-ledger.db, but defaultDbPath() actually returns the homedir Documents path",
+      "- [warning] src/server.mjs#comment: The header comment claims the DB is './data/plan-ledger.db next to this file' but the code actually uses defaultDbPath() (homedir Documents path), so the comment is stale/misleading"
+    ],
+    "finding_ids": [
+      22,
+      108,
+      18,
+      113,
+      69
+    ]
+  },
+  "q07": {
+    "lines": [
+      "\nWhat the project already knows (recorded findings — check any marked CONFLICT before relying on it):",
+      "- [fact] scripts/build-exe.mjs#build pipeline: The exe is built in 6 stages: esbuild bundle of web/app.mjs, Node SEA blob generation, clone of node.exe, Authenticode signature strip, postject blob injection, and a boot-test of the real exe",
+      "- [fact] scripts/build-exe.mjs#boot-test: The self-test spawns the real exe on port 4399 with PLAN_LEDGER_WEB_PORT=4399 and PLAN_LEDGER_NO_OPEN=1, polling GET /api/plans up to 20 times at 300ms intervals, and exits 1 if it never serves",
+      "- [fact] scripts/build-exe.mjs#boot-test: The boot-test spawns the real exe on port 4399 with PLAN_LEDGER_WEB_PORT=4399 and PLAN_LEDGER_NO_OPEN=1, polls GET /api/plans up to 20 times at 300ms, and exits 1 if the exe crashes or never serves",
+      "- [fact] web/app.mjs#port slot: The packaged exe's default web port is 4319 (PLAN_LEDGER_WEB_PORT env override), overridden to 4399 only during the boot-test",
+      "- [fact] scripts/build-exe.mjs#build pipeline: The exe build runs 6 stages: esbuild bundle, SEA blob generation, clone node.exe, strip Authenticode signature, detect sentinel fuse, postject inject, then boot-test"
+    ],
+    "finding_ids": [
+      70,
+      117,
+      73,
+      32,
+      115
+    ]
+  },
+  "q08": {
+    "lines": [
+      "\nWhat the project already knows (recorded findings — check any marked CONFLICT before relying on it):",
+      "- [fact] scripts/build-exe.mjs#fuse detection: The SEA sentinel fuse is auto-detected from the binary by scanning for the 'NODE_SEA_FUSE_' marker followed by hex chars, rather than hardcoding the documented constant",
+      "- [fact] scripts/build-exe.mjs#sentinel fuse: The SEA sentinel fuse is auto-detected from the cloned binary by searching for the `NODE_SEA_FUSE_` marker followed by hex chars, rather than hardcoding the documented constant",
+      "- [fact] scripts/build-exe.mjs#sentinel fuse: The SEA sentinel fuse is auto-detected from the binary by locating the 'NODE_SEA_FUSE_' marker and reading trailing hex chars, rather than hardcoding the documented constant",
+      "- [fact] scripts/build-exe.mjs#build pipeline: The exe build runs 6 stages: esbuild bundle, SEA blob generation, clone node.exe, strip Authenticode signature, detect sentinel fuse, postject inject, then boot-test",
+      "- [fact] scripts/build-exe.mjs#sea blob: The injected blob is read from build/sea-prep.blob, which is expected to be produced by 'node --experimental-sea-config' and is not otherwise generated by any repo script"
+    ],
+    "finding_ids": [
+      116,
+      72,
+      28,
+      115,
+      122
+    ]
+  },
+  "q09": {
+    "lines": [
+      "\nWhat the project already knows (recorded findings — check any marked CONFLICT before relying on it):",
+      "- [fact] src/db.mjs#currentprojectid: project scoping defaults to the settings key 'current_project' (or 1 if unset), and NULL project_id is treated as project 1 in both recall and getLessons",
+      "- [fact] src/db.mjs#recall: recall builds a single ranked index of plan, step, attempt, and active finding docs (each with a concatenated text field) and ranks them with the same idfRank",
+      "- [fact] src/db.mjs#recall: recall only includes findings with status 'active', and surfaces a finding with non-empty conflicts_with as status 'conflict'",
+      "- [fact] src/db.mjs#recall: recall builds candidate docs from plans, steps, attempts, and active findings, scoped to the current project unless all=true, and ranks them with the shared idfRank",
+      "- [fact] src/db.mjs#recall: recall returns {query, hits:[]} immediately when the tokenized query is empty, and scores are rounded to 2 decimals"
+    ],
+    "finding_ids": [
+      128,
+      127,
+      84,
+      83,
+      40
+    ]
+  },
+  "q10": {
+    "lines": [
+      "\nWhat the project already knows (recorded findings — check any marked CONFLICT before relying on it):",
+      "- [fact] src/db.mjs#currentprojectid: project scoping defaults to the settings key 'current_project' (or 1 if unset), and NULL project_id is treated as project 1 in both recall and getLessons",
+      "- [fact] src/db.mjs#getlessons: getLessons tie-breaks equal scores by created_at descending (newer first)",
+      "- [fact] src/db.mjs#getlessons: when step_id is given, getLessons appends the step's title and tools to the query terms and scopes to that step's project",
+      "- [fact] src/db.mjs#getlessons: getLessons ranks non-pass attempts across plans using idfRank over step_title+what_tried+result, excluding the step's own attempts and (unless all=true) other projects",
+      "- [fact] src/db.mjs#getlessons: getLessons tie-breaks equal scores by created_at descending (newest first) and returns score rounded to 2 decimals"
+    ],
+    "finding_ids": [
+      128,
+      126,
+      125,
+      124,
+      82
+    ]
+  },
+  "q11": {
+    "lines": [
+      "\nWhat the project already knows (recorded findings — check any marked CONFLICT before relying on it):",
+      "- [fact] scripts/runner-lib.mjs#runverify: runVerify runs the VERIFY command with shell:true (deliberate, trusted step-author input) and a 10-minute default timeout, returning ok/code/tail where tail is the last 500 chars of combined stdout+st",
+      "- [fact] scripts/runner-lib.mjs#runverify: Runs the VERIFY command with spawnSync shell:true (deliberate, trusted step-author input) and a 10-minute default timeout, returning {ok, code, tail} where tail is the last 500 chars of combined stdou",
+      "- [fact] scripts/runner-lib.mjs#runverify: runVerify executes the VERIFY command with shell:true (deliberate, trusted step-author input) and a 10-minute default timeout, returning ok/code and the last 500 chars of combined output",
+      "- [fact] scripts/runner.mjs#maxretries: --max-retries caps the retry loop at 48 (default), with --retry-minutes default 30 min per sleep (48×30min ≈ 24h)",
+      "- [fact] scripts/runner.mjs#msuntilreset: When the limit message names a reset time, sleep targets just past it (2-min buffer); otherwise falls back to --retry-minutes; parses are sanity-capped at 12h"
+    ],
+    "finding_ids": [
+      133,
+      90,
+      46,
+      105,
+      62
+    ]
+  },
+  "q12": {
+    "lines": [
+      "\nWhat the project already knows (recorded findings — check any marked CONFLICT before relying on it):",
+      "- [fact] scripts/runner-lib.mjs#parseverdict: Scans output lines bottom-up for a case-insensitive `VERDICT: pass|fail|partial — <what>` line; no marker resolves to {verdict:'fail', what_tried:null}",
+      "- [fact] scripts/runner-lib.mjs#parseverdict: The inject-mode result contract requires the agent's final line to match /^\\s*VERDICT:\\s*(pass|fail|partial)\\s*(?:[—–-]+\\s*(.*))?$/i; a missing marker resolves to verdict 'fail' with null what_tried",
+      "- [fact] scripts/runner-lib.mjs#parseverdict: The inject-mode result contract requires the agent's final line to match /^\\s*VERDICT:\\s*(pass|fail|partial)\\s*(?:[—–-]+\\s*(.*))?$/i; a missing marker returns verdict 'fail' with what_tried null",
+      "- [fact] scripts/runner-lib.mjs#parsefindings: FINDINGS is an optional single-line JSON array on the line immediately before VERDICT; a missing or malformed line never fails the step, it only returns empty findings with an error reason",
+      "- [fact] scripts/runner.mjs#workplan inject branch: In inject mode the runner parses the agent's VERDICT line, applies the VERIFY gate, and records the gated verdict via recordAttempt with executor 'runner-inject'; a missing VERDICT line or errored run"
+    ],
+    "finding_ids": [
+      86,
+      129,
+      41,
+      43,
+      92
+    ]
+  }
+}

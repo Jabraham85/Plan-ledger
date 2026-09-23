@@ -1,0 +1,20 @@
+{
+  "phase": "h3b-pilot",
+  "tag": "h05-none-r1",
+  "model": "deepseek-v4-pro",
+  "is_error": false,
+  "subtype": "success",
+  "result": "The code shows: `if (v === 'pass') setStepStatus('done'); else setStepStatus('failed')`. So a 'partial' verdict results in status 'failed'.\n\nANSWER: failed",
+  "cost": 0.007009288000000001,
+  "turns": 4,
+  "tin": 10665,
+  "tout": 236,
+  "cache_hit": 6272,
+  "cache_miss": 4393,
+  "tool_calls": 4,
+  "peak": true,
+  "exit": 0,
+  "stderr": "",
+  "duration_ms": 6252,
+  "prompt": "Answer this question about the codebase in the current directory (plan-ledger, a Node.js app).\nYou may read files. Do not modify anything.\n\nQuestion: In plan-ledger, an agent records an attempt on a step with verdict 'partial'. What status does the step end up in? Give the exact status value.\n\nBe precise. The FINAL LINE of your output MUST be exactly:\nANSWER: <your answer>"
+}

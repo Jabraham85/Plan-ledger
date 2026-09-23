@@ -1,0 +1,20 @@
+{
+  "phase": "smoke",
+  "tag": "smoke",
+  "model": "deepseek-v4-pro",
+  "is_error": false,
+  "subtype": "success",
+  "result": "ANSWER: plan-ledger",
+  "cost": 0.0016646080000000001,
+  "turns": 2,
+  "tin": 1609,
+  "tout": 49,
+  "cache_hit": 512,
+  "cache_miss": 1097,
+  "tool_calls": 1,
+  "peak": true,
+  "exit": 0,
+  "stderr": "",
+  "duration_ms": 2957,
+  "prompt": "Read package.json in the current directory and tell me the value of its \"name\" field. The FINAL LINE of your output MUST be exactly: ANSWER: <name>"
+}

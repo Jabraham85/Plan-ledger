@@ -1,0 +1,20 @@
+{
+  "phase": "b",
+  "tag": "q03-none-r4",
+  "model": "deepseek-v4-pro",
+  "is_error": false,
+  "subtype": "success",
+  "result": "ANSWER: 30",
+  "cost": 0.001571152,
+  "turns": 3,
+  "tin": 2687,
+  "tout": 161,
+  "cache_hit": 2048,
+  "cache_miss": 639,
+  "tool_calls": 3,
+  "peak": true,
+  "exit": 0,
+  "stderr": "",
+  "duration_ms": 4587,
+  "prompt": "Answer this question about the codebase in the current directory (plan-ledger, a Node.js app).\nYou may read files. Do not modify anything.\n\nQuestion: What is the orchestrator runner's default value for --retry-minutes?\n\nBe precise. The FINAL LINE of your output MUST be exactly:\nANSWER: <your answer>"
+}

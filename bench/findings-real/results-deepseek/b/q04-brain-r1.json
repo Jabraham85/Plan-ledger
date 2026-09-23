@@ -1,0 +1,20 @@
+{
+  "phase": "b",
+  "tag": "q04-brain-r1",
+  "model": "deepseek-v4-pro",
+  "is_error": false,
+  "subtype": "success",
+  "result": "ANSWER: 48",
+  "cost": 0.001001792,
+  "turns": 2,
+  "tin": 1913,
+  "tout": 69,
+  "cache_hit": 1408,
+  "cache_miss": 505,
+  "tool_calls": 1,
+  "peak": true,
+  "exit": 0,
+  "stderr": "",
+  "duration_ms": 2742,
+  "prompt": "Answer this question about the codebase in the current directory (plan-ledger, a Node.js app).\nYou may read files. Do not modify anything.\n\nQuestion: What is the orchestrator runner's default value for --max-retries?\n\nWhat the project already knows (recorded findings — check any marked CONFLICT before relying on it):\n- [fact] scripts/runner.mjs#maxretries: --max-retries caps the retry loop at 48 (default), with --retry-minutes default 30 min per sleep (48×30min ≈ 24h)\n- [fact] scripts/runner.mjs#retryminutes/maxretries: --retry-minutes defaults to 30 and --max-retries defaults to 48 (≈24h safety cap)\n- [fact] scripts/runner.mjs#maxretries: Retry safety cap defaults to 48 retries (--max-retries), and sleep interval defaults to 30 minutes (--retry-minutes), ~24h total\n- [fact] scripts/runner.mjs#maxsteps: --max-steps caps total steps per run (default Infinity via 0||Infinity); workPlan returns 'paused' when ran reaches maxSteps\n- [fact] scripts/runner.mjs#maxtotalusd: --max-total-usd is a hard whole-run spend ceiling (0 = none); budgetOrLimitStop stops the run when usage.cost >= maxTotalUsd and warns at 95%\n\nBe precise. The FINAL LINE of your output MUST be exactly:\nANSWER: <your answer>"
+}

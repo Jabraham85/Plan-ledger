@@ -1,0 +1,20 @@
+{
+  "phase": "h3b-pilot",
+  "tag": "h11-none-r1",
+  "model": "deepseek-v4-pro",
+  "is_error": false,
+  "subtype": "success",
+  "result": "The verdict is `fail`, and the output tail is `combined.slice(-500)`, so maximum 500 characters.\n\nANSWER: fail, 500",
+  "cost": 0.00842776,
+  "turns": 4,
+  "tin": 10242,
+  "tout": 364,
+  "cache_hit": 5120,
+  "cache_miss": 5122,
+  "tool_calls": 5,
+  "peak": true,
+  "exit": 0,
+  "stderr": "",
+  "duration_ms": 7614,
+  "prompt": "Answer this question about the codebase in the current directory (plan-ledger, a Node.js app).\nYou may read files. Do not modify anything.\n\nQuestion: In inject mode, a step's agent claims 'VERDICT: pass', but the step's VERIFY command exits with code 3. What verdict does the runner record, and what is the maximum number of characters of the command's output appended to the result? Give the verdict word and the number.\n\nBe precise. The FINAL LINE of your output MUST be exactly:\nANSWER: <your answer>"
+}

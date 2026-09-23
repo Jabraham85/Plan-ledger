@@ -1,0 +1,20 @@
+{
+  "phase": "b",
+  "tag": "q07-none-r3",
+  "model": "deepseek-v4-pro",
+  "is_error": false,
+  "subtype": "success",
+  "result": "ANSWER: 4399",
+  "cost": 0.0008559759999999999,
+  "turns": 3,
+  "tin": 3828,
+  "tout": 95,
+  "cache_hit": 3584,
+  "cache_miss": 244,
+  "tool_calls": 2,
+  "peak": true,
+  "exit": 0,
+  "stderr": "",
+  "duration_ms": 3840,
+  "prompt": "Answer this question about the codebase in the current directory (plan-ledger, a Node.js app).\nYou may read files. Do not modify anything.\n\nQuestion: Which TCP port does the exe build script use to boot-test the freshly built exe?\n\nBe precise. The FINAL LINE of your output MUST be exactly:\nANSWER: <your answer>"
+}

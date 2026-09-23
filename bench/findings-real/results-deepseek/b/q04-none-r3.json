@@ -1,0 +1,20 @@
+{
+  "phase": "b",
+  "tag": "q04-none-r3",
+  "model": "deepseek-v4-pro",
+  "is_error": false,
+  "subtype": "success",
+  "result": "ANSWER: 48",
+  "cost": 0.001106952,
+  "turns": 3,
+  "tin": 2957,
+  "tout": 160,
+  "cache_hit": 2688,
+  "cache_miss": 269,
+  "tool_calls": 3,
+  "peak": true,
+  "exit": 0,
+  "stderr": "",
+  "duration_ms": 4486,
+  "prompt": "Answer this question about the codebase in the current directory (plan-ledger, a Node.js app).\nYou may read files. Do not modify anything.\n\nQuestion: What is the orchestrator runner's default value for --max-retries?\n\nBe precise. The FINAL LINE of your output MUST be exactly:\nANSWER: <your answer>"
+}

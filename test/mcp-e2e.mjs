@@ -41,11 +41,13 @@ await client.connect(transport);
 
 const tools = (await client.listTools()).tools;
 console.log(`tools exposed: ${tools.length} -> ${tools.map((t) => t.name).join(', ')}`);
-check('tool surface includes the expected minimum set', tools.length >= 54);
+check('tool surface includes the expected minimum set', tools.length >= 61);
 check('activity tools are exposed', ['start_activity', 'heartbeat_activity', 'append_activity_event', 'list_current_activity', 'list_recent_activity']
   .every((n) => tools.some((t) => t.name === n)));
 check('reconciliation read-only diagnostic tool is exposed',
   tools.some((t) => t.name === 'assess_plan_reconciliation'));
+check('truth-maintenance tools exposed', ['check_stale', 'suspect_findings', 'resolve_finding', 'set_project_root'].every((n) => tools.some((t) => t.name === n)));
+check('findings tools exposed', ['absorb_findings', 'query_findings', 'retract_finding'].every((n) => tools.some((t) => t.name === n)));
 check('retired tools are gone (set_ref_enabled, list_file_refs)',
   !tools.some((t) => t.name === 'set_ref_enabled' || t.name === 'list_file_refs'));
 check('new update_plan tool is exposed', tools.some((t) => t.name === 'update_plan'));
@@ -295,6 +297,55 @@ const afterNotes = parse(await client.callTool({ name: 'get_step', arguments: { 
 check('add_note appends twice over MCP, in order', afterNotes.notes.length === 2
   && afterNotes.notes[0].body.includes('edge case') && afterNotes.notes[1].body.includes('Done'));
 
+// ---- findings round-trip over MCP (plan #134): absorb -> recall -> supersede/retract
+const fPlan = parse(await client.callTool({ name: 'create_plan', arguments: { title: 'Findings e2e' } }));
+const absorbed = parse(await client.callTool({ name: 'absorb_findings', arguments: { plan_id: fPlan.id, source: 'e2e', findings: [
+  { subject: 'src/widget.mjs#spin', claim: 'spin() throttles the zebrafish renderer to 30 fps', evidence: ['src/widget.mjs:12'] },
+  { subject: 'src/widget.mjs#spin', claim: 'spin() throttles the zebrafish renderer to 30 FPS.' },
+  { subject: 'config#flux', slot: 'capacitor', claim: 'flux capacitor mode is quasar' },
+] } }));
+check('absorb_findings over MCP: created + duplicate + created', absorbed.counts.created === 2 && absorbed.counts.duplicate === 1);
+const zebra = absorbed.results[0].id;
+let rec = parse(await client.callTool({ name: 'recall', arguments: { query: 'zebrafish renderer' } }));
+check('recall surfaces an absorbed finding', rec.hits.some((h) => h.type === 'finding' && h.id === zebra && h.status === 'active'));
+
+const conflict = parse(await client.callTool({ name: 'absorb_findings', arguments: { plan_id: fPlan.id, findings: [
+  { subject: 'src/widget.mjs#spin', claim: 'spin() throttles the zebrafish renderer to 60 fps' }] } }));
+check('different number over MCP → conflict', conflict.results[0].outcome === 'conflict');
+rec = parse(await client.callTool({ name: 'recall', arguments: { query: 'zebrafish renderer' } }));
+check('recall flags findings in a conflict', rec.hits.filter((h) => h.type === 'finding').every((h) => h.status === 'conflict'));
+
+const oldFlux = absorbed.results[2].id;
+const sup = parse(await client.callTool({ name: 'absorb_findings', arguments: { plan_id: fPlan.id, findings: [
+  { subject: 'config#flux', slot: 'capacitor', claim: 'flux capacitor mode is nebula' }] } }));
+check('slot update over MCP → superseded', sup.results[0].outcome === 'superseded' && sup.results[0].superseded[0] === oldFlux);
+rec = parse(await client.callTool({ name: 'recall', arguments: { query: 'flux capacitor' } }));
+check('recall never returns the superseded value', rec.hits.some((h) => h.type === 'finding' && h.id === sup.results[0].id) &&
+  !rec.hits.some((h) => h.type === 'finding' && h.id === oldFlux));
+
+await client.callTool({ name: 'retract_finding', arguments: { finding_id: sup.results[0].id, reason: 'e2e: wrong mode' } });
+rec = parse(await client.callTool({ name: 'recall', arguments: { query: 'flux capacitor nebula' } }));
+check('retracted finding is no longer recalled', !rec.hits.some((h) => h.type === 'finding'));
+const hist = parse(await client.callTool({ name: 'query_findings', arguments: { subject: 'config#flux', status: 'any', plan_id: fPlan.id } }));
+check('query_findings status:any shows the full history (superseded + retracted)',
+  hist.some((f) => f.status === 'superseded') && hist.some((f) => f.status === 'retracted'));
+const noClaim = await client.callTool({ name: 'absorb_findings', arguments: { findings: [{ subject: 'x' }] } });
+check('schema rejects a finding with no claim', noClaim.isError === true);
+
+// ---- truth maintenance over MCP (schema v5): depends_on -> suspect -> resolve
+const base = parse(await client.callTool({ name: 'absorb_findings', arguments: { plan_id: fPlan.id, findings: [
+  { subject: 'e2e#retry', slot: 'max', claim: 'the e2e runner retries 48 times' }] } })).results[0];
+const derived = parse(await client.callTool({ name: 'absorb_findings', arguments: { plan_id: fPlan.id, findings: [
+  { subject: 'e2e#window', claim: 'an e2e retry window lasts a day', depends_on: [base.id] }] } })).results[0];
+const moved = parse(await client.callTool({ name: 'absorb_findings', arguments: { plan_id: fPlan.id, findings: [
+  { subject: 'e2e#retry', slot: 'max', claim: 'the e2e runner retries 12 times' }] } })).results[0];
+check('superseding a finding reports its dependent as suspected', moved.suspected?.includes(derived.id));
+const queue = parse(await client.callTool({ name: 'suspect_findings', arguments: { plan_id: fPlan.id } }));
+check('suspect_findings lists it with the cause', queue.some((q) => q.id === derived.id && q.causes.some((c) => c.finding?.id === base.id)));
+const settled = parse(await client.callTool({ name: 'resolve_finding', arguments: { finding_id: derived.id, verdict: 'revised', claim: 'an e2e retry window lasts six hours' } }));
+check('resolve_finding revised → new active finding', settled.replaced === derived.id && settled.finding.status === 'active');
+const stale = parse(await client.callTool({ name: 'check_stale', arguments: {} }));
+check('check_stale runs over MCP', typeof stale.files_checked === 'number' && Array.isArray(stale.suspected));
 // next_step claim option (§ core repair): atomically claim in one transaction,
 // so a second peek in the same tick sees the step as already in_progress and
 // hops on. The MCP surface exposes this to autonomous dispatchers (runners,

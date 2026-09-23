@@ -1,0 +1,20 @@
+{
+  "phase": "h3b",
+  "tag": "h03-none-r1",
+  "model": "deepseek-v4-pro",
+  "is_error": false,
+  "subtype": "success",
+  "result": "The getStep payload caps attempts to the LAST 10. So (2) = 10.\n\nNow let me confirm all five values:\n\n1. milliseconds slept between retries when exe build copies node.exe on Windows: `await sleep(350)` → 350\n2. maximum number of attempts embedded in a getStep payload: LIMIT 10 → 10\n3. runner's default --max-retries: `Number(val('--max-retries', 48))` → 48\n4. default timeout of a step VERIFY command, in minutes: `timeoutMs = 10 * 60 * 1000` → 10 minutes\n5. byte offset of CheckSum field from optional-header start: `optStart + 64` → 64\n\nAll confirmed.ANSWER: 350, 10, 48, 10, 64",
+  "cost": 0.025919080000000004,
+  "turns": 7,
+  "tin": 68429,
+  "tout": 852,
+  "cache_hit": 53120,
+  "cache_miss": 15309,
+  "tool_calls": 10,
+  "peak": true,
+  "exit": 0,
+  "stderr": "",
+  "duration_ms": 16783,
+  "prompt": "Answer this question about the codebase in the current directory (plan-ledger, a Node.js app).\nYou may read files. Do not modify anything.\n\nQuestion: Find these five values in the plan-ledger codebase:\n(1) milliseconds slept between retries when the exe build copies node.exe on Windows\n(2) maximum number of attempts embedded in a getStep payload\n(3) the runner's default --max-retries\n(4) default timeout of a step VERIFY command, in minutes\n(5) byte offset of the CheckSum field from the optional-header start that strip-signature.mjs clears\nGive exactly five numbers, in this order, comma-separated, with no units.\n\nBe precise. The FINAL LINE of your output MUST be exactly:\nANSWER: <your answer>"
+}

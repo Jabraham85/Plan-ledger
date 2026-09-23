@@ -1,0 +1,20 @@
+{
+  "phase": "h3b-pilot",
+  "tag": "h03-none-r1",
+  "model": "deepseek-v4-pro",
+  "is_error": false,
+  "subtype": "success",
+  "result": "All five values found:\n\n1. Sleep between retries when copying node.exe on Windows: `await sleep(350)` → **350**\n2. Max attempts in getStep payload: `LIMIT 10` → **10**\n3. Runner default `--max-retries`: `val('--max-retries', 48)` → **48**\n4. Default timeout of VERIFY command: `timeoutMs = 10 * 60 * 1000` → 10 minutes → **10**\n5. CheckSum byte offset from optional-header start: `optStart + 64` → **64**\n\nANSWER: 350, 10, 48, 10, 64",
+  "cost": 0.011716848,
+  "turns": 4,
+  "tin": 15800,
+  "tout": 538,
+  "cache_hit": 8832,
+  "cache_miss": 6968,
+  "tool_calls": 7,
+  "peak": true,
+  "exit": 0,
+  "stderr": "",
+  "duration_ms": 10000,
+  "prompt": "Answer this question about the codebase in the current directory (plan-ledger, a Node.js app).\nYou may read files. Do not modify anything.\n\nQuestion: Find these five values in the plan-ledger codebase:\n(1) milliseconds slept between retries when the exe build copies node.exe on Windows\n(2) maximum number of attempts embedded in a getStep payload\n(3) the runner's default --max-retries\n(4) default timeout of a step VERIFY command, in minutes\n(5) byte offset of the CheckSum field from the optional-header start that strip-signature.mjs clears\nGive exactly five numbers, in this order, comma-separated, with no units.\n\nBe precise. The FINAL LINE of your output MUST be exactly:\nANSWER: <your answer>"
+}

@@ -1,0 +1,20 @@
+{
+  "phase": "b",
+  "tag": "q12-brain-r1",
+  "model": "deepseek-v4-pro",
+  "is_error": false,
+  "subtype": "success",
+  "result": "ANSWER: fail",
+  "cost": 0.0026985200000000003,
+  "turns": 3,
+  "tin": 4129,
+  "tout": 130,
+  "cache_hit": 2560,
+  "cache_miss": 1569,
+  "tool_calls": 2,
+  "peak": true,
+  "exit": 0,
+  "stderr": "",
+  "duration_ms": 3639,
+  "prompt": "Answer this question about the codebase in the current directory (plan-ledger, a Node.js app).\nYou may read files. Do not modify anything.\n\nQuestion: What verdict does parseVerdict return when the agent's output contains no VERDICT line? Give the single word.\n\nWhat the project already knows (recorded findings — check any marked CONFLICT before relying on it):\n- [fact] scripts/runner-lib.mjs#parseverdict: Scans output lines bottom-up for a case-insensitive `VERDICT: pass|fail|partial — <what>` line; no marker resolves to {verdict:'fail', what_tried:null}\n- [fact] scripts/runner-lib.mjs#parseverdict: The inject-mode result contract requires the agent's final line to match /^\\s*VERDICT:\\s*(pass|fail|partial)\\s*(?:[—–-]+\\s*(.*))?$/i; a missing marker resolves to verdict 'fail' with null what_tried\n- [fact] scripts/runner-lib.mjs#parseverdict: The inject-mode result contract requires the agent's final line to match /^\\s*VERDICT:\\s*(pass|fail|partial)\\s*(?:[—–-]+\\s*(.*))?$/i; a missing marker returns verdict 'fail' with what_tried null\n- [fact] scripts/runner-lib.mjs#parsefindings: FINDINGS is an optional single-line JSON array on the line immediately before VERDICT; a missing or malformed line never fails the step, it only returns empty findings with an error reason\n- [fact] scripts/runner.mjs#workplan inject branch: In inject mode the runner parses the agent's VERDICT line, applies the VERIFY gate, and records the gated verdict via recordAttempt with executor 'runner-inject'; a missing VERDICT line or errored run\n\nBe precise. The FINAL LINE of your output MUST be exactly:\nANSWER: <your answer>"
+}

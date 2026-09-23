@@ -1,0 +1,20 @@
+{
+  "phase": "a",
+  "tag": "t6-r1",
+  "model": "deepseek-v4-pro",
+  "is_error": false,
+  "subtype": "success",
+  "result": "I have verified the source thoroughly. Here are my findings.\n\nFINDINGS: [{\"kind\":\"fact\",\"subject\":\"scripts/runner-lib.mjs#parseVerdict\",\"claim\":\"The inject-mode result contract requires the agent's final line to match /^\\\\s*VERDICT:\\\\s*(pass|fail|partial)\\\\s*(?:[—–-]+\\\\s*(.*))?$/i; a missing marker returns verdict 'fail' with what_tried null\",\"evidence\":\"scripts/runner-lib.mjs:52-59\"},{\"kind\":\"fact\",\"subject\":\"scripts/runner-lib.mjs#parseVerdict\",\"claim\":\"The verdict is case-insensitive and normalized to lowercase; the what_tried text is optional and trimmed, defaulting to null\",\"evidence\":\"scripts/runner-lib.mjs:55-56\"},{\"kind\":\"fact\",\"subject\":\"scripts/runner-lib.mjs#parseFindings\",\"claim\":\"FINDINGS is an optional single-line JSON array on the line immediately before VERDICT; a missing or malformed line never fails the step, it only returns empty findings with an error reason\",\"evidence\":\"scripts/runner-lib.mjs:14-30\"},{\"kind\":\"fact\",\"subject\":\"scripts/runner-lib.mjs#parseFindings\",\"claim\":\"parseFindings scans lines bottom-up, keeps only object (non-array) items, and truncates to FINDINGS_MAX=20, reporting a truncation or dropped-item error string\",\"evidence\":\"scripts/runner-lib.mjs:13,24-27\"},{\"kind\":\"fact\",\"subject\":\"scripts/runner-lib.mjs#parseVerify\",\"claim\":\"A VERIFY command is declared by an optional /^VERIFY:\\\\s*(.+)$/m line in step.context, same shape as the RAG: convention, and is left in context verbatim\",\"evidence\":\"scripts/runner-lib.mjs:61-71\"},{\"kind\":\"fact\",\"subject\":\"scripts/runner-lib.mjs#runVerify\",\"claim\":\"runVerify executes the VERIFY command with shell:true (deliberate, trusted step-author input) and a 10-minute default timeout, returning ok/code and the last 500 chars of combined output\",\"evidence\":\"scripts/runner-lib.mjs:77-81\"},{\"kind\":\"fact\",\"subject\":\"scripts/runner-lib.mjs#applyVerifyGate\",\"claim\":\"The VERIFY gate only downgrades a claimed 'pass' to 'fail' when the command exits non-zero; it is a no-op when there is no VERIFY command or the claimed verdict was not 'pass'\",\"evidence\":\"scripts/runner-lib.mjs:88-97\"},{\"kind\":\"fact\",\"subject\":\"scripts/runner.mjs#inject gate\",\"claim\":\"In inject mode the runner treats an errored run or a missing VERDICT marker as fail, then applies applyVerifyGate with cwd=process.cwd() before recording the attempt\",\"evidence\":\"scripts/runner.mjs:331-338\"}]",
+  "cost": 0.010645888000000001,
+  "turns": 4,
+  "tin": 13374,
+  "tout": 870,
+  "cache_hit": 8192,
+  "cache_miss": 5182,
+  "tool_calls": 4,
+  "peak": true,
+  "exit": 0,
+  "stderr": "",
+  "duration_ms": 13761,
+  "prompt": "You are investigating the codebase in the current directory (plan-ledger, a Node.js app).\nInvestigate how it defines and enforces the inject-mode agent output contract and the VERIFY gate — scripts/runner-lib.mjs. Read the relevant source. Do not modify anything.\n\nIf you learned something DURABLE that a later step should know — a fact about the code or system, a decision, a lesson, a pitfall (NOT a log of what you did) — put it on ONE line immediately BEFORE the VERDICT line:\nFINDINGS: [{\"kind\":\"fact\",\"subject\":\"path#symbol or config key\",\"claim\":\"one atomic truth\",\"evidence\":\"file:line or command\"}]\nkinds: fact | decision | lesson | failure | warning. Add \"slot\" for a single-valued setting (e.g. \"port\"). Report only what you verified; never invent evidence. Omit the line if there is nothing durable.\nReport between 3 and 8 findings. Each must be something you verified in the code, with evidence.\nThe FINAL LINE of your output MUST be exactly:\nVERDICT: pass|fail|partial — <one-line summary of what you investigated>"
+}

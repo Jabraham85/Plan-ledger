@@ -104,6 +104,18 @@ export function createBoardServer({ store, html, dbPath }) {
     ['PATCH',  /^\/api\/steps\/(\d+)\/disposition$/,   (m, b) => store.setStepDisposition(Number(m[1]), b)],
     ['GET',    /^\/api\/plans\/(\d+)\/terminalize-check$/, (m) => store.assessPlanTerminalization(Number(m[1]))],
     ['GET',    /^\/api\/recall$/,  (m, b, q) => store.recall(q.get('q') || '', Number(q.get('limit')) || 10)],
+    // --- Graph explorer: node maps of the brain, a plan's steps, a plan's code ---
+    ['GET',    /^\/api\/brain\/graph$/, (m, b, q) => store.brainGraph({
+      project_id: q.get('project') ? Number(q.get('project')) : null, status: q.get('status') || 'live', limit: Number(q.get('limit')) || 600 })],
+    ['GET',    /^\/api\/plans\/(\d+)\/step-graph$/, (m) => store.planStepGraph(Number(m[1]))],
+    ['GET',    /^\/api\/plans\/(\d+)\/code-graph$/, (m, b, q) => store.codeGraph(Number(m[1]), { limit: Number(q.get('limit')) || 250 })],
+    ['GET',    /^\/api\/findings\/(\d+)$/, (m) => store.getFinding(Number(m[1]))],
+    ['GET',    /^\/api\/steps\/(\d+)\/brain$/, (m) => store.stepBrief(Number(m[1]))],
+    // edit a memory from the board: confirmed | revised (with claim) | retracted | unsure —
+    // revising or retracting re-opens what was built on it (truth maintenance)
+    ['POST',   /^\/api\/findings\/(\d+)\/resolve$/, (m, b) => store.resolveFinding(Number(m[1]), {
+      verdict: b.verdict, claim: b.claim, reason: b.reason || 'edited on the board', source: 'board' })],
+    ['POST',   /^\/api\/brain\/check-stale$/, (m, b) => store.checkStale({ project_id: b.project_id ?? null })],
     ['POST',   /^\/api\/plans$/,                      (m, b) => store.createPlan(b)],
     ['PATCH',  /^\/api\/plans\/(\d+)$/,               (m, b) => store.updatePlan(Number(m[1]), b)],
     ['PATCH',  /^\/api\/plans\/(\d+)\/status$/,       (m, b) => store.setPlanStatus(Number(m[1]), b.status, { force: !!b.force, reason: b.reason ?? '' })],

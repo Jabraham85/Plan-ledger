@@ -1,0 +1,20 @@
+{
+  "phase": "h3b",
+  "tag": "h10-none-r2",
+  "model": "deepseek-v4-pro",
+  "is_error": false,
+  "subtype": "success",
+  "result": "I have all five values.\n\n1. DEFAULT_NEAR_THRESHOLD = 0.7\n2. queryFindings default limit = 20\n3. --max-attempts default = 2\n4. PE32+ data directory offset = 112 (magic 0x20b → ddStart = optStart + 112)\n5. sleep between retries = 350 ms\n\nANSWER: 0.7, 20, 2, 112, 350",
+  "cost": 0.001930808,
+  "turns": 3,
+  "tin": 5809,
+  "tout": 366,
+  "cache_hit": 5632,
+  "cache_miss": 177,
+  "tool_calls": 7,
+  "peak": true,
+  "exit": 0,
+  "stderr": "",
+  "duration_ms": 6255,
+  "prompt": "Answer this question about the codebase in the current directory (plan-ledger, a Node.js app).\nYou may read files. Do not modify anything.\n\nQuestion: Find these five values in the plan-ledger codebase:\n(1) default near-duplicate threshold for findings (DEFAULT_NEAR_THRESHOLD)\n(2) default result limit of Store.queryFindings\n(3) the runner's default --max-attempts\n(4) byte offset of the data directories from the optional-header start for PE32+ in strip-signature.mjs\n(5) milliseconds slept between retries when the exe build copies node.exe on Windows\nGive exactly five numbers, in this order, comma-separated, with no units.\n\nBe precise. The FINAL LINE of your output MUST be exactly:\nANSWER: <your answer>"
+}

@@ -1,0 +1,20 @@
+{
+  "phase": "b",
+  "tag": "q10-none-r1",
+  "model": "deepseek-v4-pro",
+  "is_error": false,
+  "subtype": "success",
+  "result": "ANSWER: 5",
+  "cost": 0.0016705040000000002,
+  "turns": 3,
+  "tin": 2985,
+  "tout": 128,
+  "cache_hit": 2176,
+  "cache_miss": 809,
+  "tool_calls": 2,
+  "peak": true,
+  "exit": 0,
+  "stderr": "",
+  "duration_ms": 3907,
+  "prompt": "Answer this question about the codebase in the current directory (plan-ledger, a Node.js app).\nYou may read files. Do not modify anything.\n\nQuestion: What is the default `limit` parameter of Store.getLessons?\n\nBe precise. The FINAL LINE of your output MUST be exactly:\nANSWER: <your answer>"
+}

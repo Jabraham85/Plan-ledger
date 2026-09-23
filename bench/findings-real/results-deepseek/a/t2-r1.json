@@ -1,0 +1,20 @@
+{
+  "phase": "a",
+  "tag": "t2-r1",
+  "model": "deepseek-v4-pro",
+  "is_error": false,
+  "subtype": "success",
+  "result": "I have verified the relevant source. Here are my findings.\n\nFINDINGS: [{\"kind\":\"fact\",\"subject\":\"scripts/runner.mjs#maxAttempts\",\"claim\":\"Per-step spawn cap defaults to 2 and is set via --max-attempts; a step is paused for a human when the spawn counter exceeds it\",\"evidence\":\"scripts/runner.mjs:90,324\"},{\"kind\":\"fact\",\"subject\":\"scripts/runner.mjs#spawns\",\"claim\":\"The per-step attempt counter is a local Map keyed by step.id, reset each workPlan call, so it only counts spawns within the current run (not DB attempts)\",\"evidence\":\"scripts/runner.mjs:314,322-323\"},{\"kind\":\"fact\",\"subject\":\"scripts/runner.mjs#retryOnLimit\",\"claim\":\"Usage/rate-limit retry is opt-in via --retry-on-limit; without it a limit stop breaks the loop immediately\",\"evidence\":\"scripts/runner.mjs:94,489\"},{\"kind\":\"fact\",\"subject\":\"scripts/runner.mjs#maxRetries\",\"claim\":\"Retry safety cap defaults to 48 retries (--max-retries), and sleep interval defaults to 30 minutes (--retry-minutes), ~24h total\",\"evidence\":\"scripts/runner.mjs:95-96\"},{\"kind\":\"fact\",\"subject\":\"scripts/runner.mjs#budgetOrLimitStop\",\"claim\":\"A limit stop is detected only from structured signals (HTTP 429, stop_reason, or free-text result when isError); a successful agent merely mentioning 'rate limit' does not stop the run\",\"evidence\":\"scripts/runner.mjs:290-301\"},{\"kind\":\"fact\",\"subject\":\"scripts/runner.mjs#msUntilReset\",\"claim\":\"When the limit message names a reset time, the runner sleeps until just past it (2-min buffer) instead of the fixed cadence, sanity-capped at 12h\",\"evidence\":\"scripts/runner.mjs:408-419\"},{\"kind\":\"fact\",\"subject\":\"scripts/runner.mjs#budgetUsd\",\"claim\":\"--budget is a per-agent USD cap passed to claude as --max-budget-usd, distinct from the whole-run --max-total-usd ceiling\",\"evidence\":\"scripts/runner.mjs:100,239,279\"},{\"kind\":\"fact\",\"subject\":\"scripts/runner.mjs#stopKind\",\"claim\":\"Only stopKind==='limit' is retryable; a 'budget' stop (spend ceiling) breaks the loop even with --retry-on-limit\",\"evidence\":\"scripts/runner.mjs:489\"}]VERDICT: pass — verified usage-limit detection, opt-in retry loop, and per-step attempt caps in scripts/runner.mjs (and the usage-append helper in runner-lib.mjs).",
+  "cost": 0.023113728,
+  "turns": 6,
+  "tin": 52750,
+  "tout": 998,
+  "cache_hit": 39552,
+  "cache_miss": 13198,
+  "tool_calls": 6,
+  "peak": true,
+  "exit": 0,
+  "stderr": "",
+  "duration_ms": 18755,
+  "prompt": "You are investigating the codebase in the current directory (plan-ledger, a Node.js app).\nInvestigate how it handles usage limits, retries and per-step attempt caps in the orchestrator — scripts/runner.mjs. Read the relevant source. Do not modify anything.\n\nIf you learned something DURABLE that a later step should know — a fact about the code or system, a decision, a lesson, a pitfall (NOT a log of what you did) — put it on ONE line immediately BEFORE the VERDICT line:\nFINDINGS: [{\"kind\":\"fact\",\"subject\":\"path#symbol or config key\",\"claim\":\"one atomic truth\",\"evidence\":\"file:line or command\"}]\nkinds: fact | decision | lesson | failure | warning. Add \"slot\" for a single-valued setting (e.g. \"port\"). Report only what you verified; never invent evidence. Omit the line if there is nothing durable.\nReport between 3 and 8 findings. Each must be something you verified in the code, with evidence.\nThe FINAL LINE of your output MUST be exactly:\nVERDICT: pass|fail|partial — <one-line summary of what you investigated>"
+}

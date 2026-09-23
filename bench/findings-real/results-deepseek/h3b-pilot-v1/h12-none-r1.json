@@ -1,0 +1,20 @@
+{
+  "phase": "h3b-pilot",
+  "tag": "h12-none-r1",
+  "model": "deepseek-v4-pro",
+  "is_error": false,
+  "subtype": "success",
+  "result": "The answer is directly in `src/db.mjs` lines 341-342: `busy_timeout = 3000` milliseconds and `journal_size_limit = 4194304` bytes (4 MB).\n\nANSWER: 3000 milliseconds, 4 megabytes",
+  "cost": 0.002583768,
+  "turns": 2,
+  "tin": 2600,
+  "tout": 157,
+  "cache_hit": 1152,
+  "cache_miss": 1448,
+  "tool_calls": 2,
+  "peak": true,
+  "exit": 0,
+  "stderr": "",
+  "duration_ms": 4061,
+  "prompt": "Answer this question about the codebase in the current directory (plan-ledger, a Node.js app).\nYou may read files. Do not modify anything.\n\nQuestion: When plan-ledger's Store opens its SQLite database, how many milliseconds will it wait for a lock held by another process, and to how many whole megabytes is the WAL journal capped after checkpoints? Give both numbers (milliseconds, then megabytes).\n\nBe precise. The FINAL LINE of your output MUST be exactly:\nANSWER: <your answer>"
+}

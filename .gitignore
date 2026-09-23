@@ -5,3 +5,7 @@ data/
 *.db-shm
 dist/
 build/
+
+# local secrets (API keys) — never commit
+.env
+**/.env

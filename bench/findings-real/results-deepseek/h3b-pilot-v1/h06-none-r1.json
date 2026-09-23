@@ -1,0 +1,20 @@
+{
+  "phase": "h3b-pilot",
+  "tag": "h06-none-r1",
+  "model": "deepseek-v4-pro",
+  "is_error": false,
+  "subtype": "success",
+  "result": "The query skips statuses `'done'`, `'abandoned'`, and `'blocked'`.\n\nANSWER: done, abandoned, blocked",
+  "cost": 0.0022453200000000003,
+  "turns": 3,
+  "tin": 3032,
+  "tout": 175,
+  "cache_hit": 1920,
+  "cache_miss": 1112,
+  "tool_calls": 2,
+  "peak": true,
+  "exit": 0,
+  "stderr": "",
+  "duration_ms": 4927,
+  "prompt": "Answer this question about the codebase in the current directory (plan-ledger, a Node.js app).\nYou may read files. Do not modify anything.\n\nQuestion: Store.nextPlan in src/db.mjs never picks plans with certain statuses. Which three plan statuses does it skip? List all three exact status values.\n\nBe precise. The FINAL LINE of your output MUST be exactly:\nANSWER: <your answer>"
+}

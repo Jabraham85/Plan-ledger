@@ -9,9 +9,11 @@
 // what the current step needs and lets everything else stay on disk.
 
 import { DatabaseSync } from 'node:sqlite';
-import { dirname, join, resolve } from 'node:path';
+import { createHash } from 'node:crypto';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
-import { mkdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { pickBrief } from './brief.mjs';
 import { DEFAULT_STAFF_ROLES, listCursorModels, resolveRole } from './roles.mjs';
 import {
   evaluateDispatchPolicy,
@@ -348,6 +350,62 @@ CREATE TABLE IF NOT EXISTS template_steps (
   role                TEXT    NOT NULL DEFAULT '',
   acceptance_criteria TEXT    NOT NULL DEFAULT ''
 );
+
+-- Durable findings: atomic, evidenced truths an agent (or a chat session) learned,
+-- absorbed back into the brain without duplicates (plan #134). Never deleted —
+-- corrections SUPERSEDE (history kept) and mistakes are RETRACTED (reason kept).
+-- claim_hash = sha256(normalized subject + canonical claim), scoped per project.
+CREATE TABLE IF NOT EXISTS findings (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id     INTEGER NOT NULL,
+  plan_id        INTEGER REFERENCES plans(id) ON DELETE SET NULL,
+  step_id        INTEGER REFERENCES steps(id) ON DELETE SET NULL,
+  kind           TEXT    NOT NULL DEFAULT 'fact',
+  subject        TEXT    NOT NULL DEFAULT '',
+  slot           TEXT    NOT NULL DEFAULT '',
+  claim          TEXT    NOT NULL,
+  evidence       TEXT    NOT NULL DEFAULT '[]',
+  source         TEXT    NOT NULL DEFAULT '',
+  claim_hash     TEXT    NOT NULL,
+  status         TEXT    NOT NULL DEFAULT 'active',
+  superseded_by  INTEGER REFERENCES findings(id),
+  conflicts_with TEXT    NOT NULL DEFAULT '[]',
+  seen_count     INTEGER NOT NULL DEFAULT 1,
+  note           TEXT    NOT NULL DEFAULT '',
+  impact         TEXT    NOT NULL DEFAULT 'normal',
+  suspect_since  TEXT    NOT NULL DEFAULT '',
+  created_at     TEXT    NOT NULL,
+  updated_at     TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_findings_hash    ON findings(project_id, claim_hash, status);
+CREATE INDEX IF NOT EXISTS idx_findings_subject ON findings(project_id, subject, status);
+
+-- Truth maintenance (schema v5): what each finding was BUILT ON. dep_type 'finding'
+-- (dep_ref = finding id) or 'file' (dep_ref = absolute path, dep_hash = sha256 of
+-- the content when linked). When a dependency changes, its dependents turn
+-- 'suspect' — re-evaluated, never silently trusted. inferred=1: linked by the
+-- ledger (shared subject/words with the brief the agent saw), not cited by it.
+CREATE TABLE IF NOT EXISTS finding_deps (
+  finding_id INTEGER NOT NULL REFERENCES findings(id) ON DELETE CASCADE,
+  dep_type   TEXT    NOT NULL,
+  dep_ref    TEXT    NOT NULL,
+  dep_hash   TEXT    NOT NULL DEFAULT '',
+  inferred   INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT    NOT NULL,
+  PRIMARY KEY (finding_id, dep_type, dep_ref)
+);
+CREATE INDEX IF NOT EXISTS idx_fdeps_ref ON finding_deps(dep_type, dep_ref);
+-- Why the brain changed its mind: suspect | confirmed | revised | retracted | unsure.
+CREATE TABLE IF NOT EXISTS finding_events (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  finding_id       INTEGER NOT NULL,
+  event            TEXT    NOT NULL,
+  cause_finding_id INTEGER,
+  cause_file       TEXT    NOT NULL DEFAULT '',
+  detail           TEXT    NOT NULL DEFAULT '',
+  created_at       TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_fevents_finding ON finding_events(finding_id);
 CREATE INDEX IF NOT EXISTS idx_tsteps_tpl ON template_steps(template_id, idx);
 `;
 
@@ -533,6 +591,105 @@ export function extractKeywords(input, max = 8) {
   return out;
 }
 
+// ---- findings: claim canonicalization (plan #134) -------------------------
+// Deliberately NOT the ledger's tokenize(): its STOP set drops "not" and it
+// discards tokens of <=2 chars, so "compact_at is 0.25" vs "compact_at is 0.7"
+// and "X is enabled" vs "X is not enabled" would canonicalize identically and be
+// merged as duplicates — the worst possible dedup error (a contradiction erased).
+// Here numbers and polarity are first-class.
+export const FINDING_KINDS = new Set(['fact', 'decision', 'lesson', 'failure', 'warning']);
+// 'suspect' = something it was built on changed; shown with a warning, never as fact.
+const FINDING_STATUS = new Set(['active', 'suspect', 'superseded', 'retracted']);
+const LIVE = "status IN ('active','suspect')"; // what the brain currently holds
+export const RESOLVE_VERDICTS = new Set(['confirmed', 'revised', 'retracted', 'unsure']);
+const fileHash = (p) => { try { return createHash('sha256').update(readFileSync(p)).digest('hex'); } catch { return ''; } };
+const normPath = (p) => resolve(p).replace(/\\/g, '/');
+// The path as the filesystem spells it. Windows lookups ignore case, so a lowercased
+// subject path and a correctly-cased evidence path both resolve — without this the
+// same file was linked twice (seen on real-project findings, 2026-09-23).
+const truePath = (p) => { try { return realpathSync.native(p).replace(/\\/g, '/'); } catch { return normPath(p); } };
+// "scripts/runner.mjs:96", "src/db.mjs#recall", "web/app.mjs line 13" → the path part.
+const PATHISH = /^[\w@.~-]*[\w@~-][\w@.~/\\-]*\.[a-z0-9]{1,6}(?=$|[:#\s(,])/i;
+// F2 (real-project study round 1): claims about ABSENCE, UNIQUENESS or RECENCY ("the only
+// materials.json", "the ADR directory ends at ADR008", "the last perf capture") are
+// broken by NEW files, which no file hash sees. They also depend on the listing of
+// their files' directories (dep_type 'dir').
+export const SCOPE_CLAIM = /\b(only|all|every|none|never|sole|last|latest|anywhere|nowhere|ends at|no other)\b|\bno\s+(?:\w+\s+){0,3}(?:exists?|is|are|files?|found|present|defined|emitted)\b|\bnot\s+(?:\w+\s+){0,3}(?:exist|exists|present|emitted|anywhere|found|referenced|defined)\b|\bmissing\b|\bdoes not exist\b/i;
+const dirHash = (d) => { try { return createHash('sha256').update(readdirSync(d).sort().join('\n')).digest('hex'); } catch { return ''; } };
+const CLAIM_STOP = new Set(['a', 'an', 'the', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'of', 'to',
+  'in', 'on', 'at', 'it', 'its', 'this', 'that', 'these', 'those', 'and', 'or', 'for', 'with', 'by', 'as',
+  'so', 'currently', 'now', 'actually', 'always', 'do', 'does', 'did']);
+const NEGATIONS = new Set(['not', 'no', 'never', 'without', 'cannot', 'none']);
+// Antonym -> positive base token. Folded to base + a polarity flip, so
+// "disabled" == "not enabled" (a true duplicate) while "enabled" vs "disabled"
+// differ only in polarity (a conflict, not two unrelated facts).
+const ANTONYMS = new Map(Object.entries({
+  disabled: 'enabled', disable: 'enable', false: 'true', off: 'on', absent: 'present', missing: 'present',
+  fails: 'passes', fail: 'pass', failed: 'passed', failing: 'passing', denied: 'allowed', invalid: 'valid',
+  unsupported: 'supported', unsafe: 'safe', unused: 'used', excluded: 'included', optional: 'required',
+}));
+const NUM_RE = /^v?\d+(?:[.,]\d+)*[a-z%]*$/;
+
+export function normSubject(s) {
+  return String(s ?? '').trim().replace(/\\/g, '/').replace(/^(\.\/)+/, '').replace(/\/{2,}/g, '/')
+    .replace(/\/$/, '').toLowerCase();
+}
+
+// Canonical claim -> { content:Set (similarity tokens, no numbers/negations),
+// numbers:Set, negative:bool (odd polarity), canon:string (hash input) }.
+export function claimTokens(text) {
+  const raw = String(text ?? '').toLowerCase().replace(/[‘’]/g, "'")
+    .replace(/n't\b/g, ' not').replace(/\bcan ?not\b/g, 'can not')
+    .match(/[a-z0-9_]+(?:[.,\-/][a-z0-9_]+)*%?/g) || [];
+  const content = new Set(), numbers = new Set(), canonical = [];
+  let flips = 0;
+  for (let t of raw) {
+    t = t.replace(/[.,]+$/, '');
+    if (!t || CLAIM_STOP.has(t)) continue;
+    if (NEGATIONS.has(t)) { flips++; continue; }
+    if (ANTONYMS.has(t)) { flips++; t = ANTONYMS.get(t); }
+    if (NUM_RE.test(t)) { const n = t.replace(/,/g, '.'); numbers.add(n); canonical.push(n); continue; }
+    content.add(t); canonical.push(t);
+  }
+  const negative = flips % 2 === 1;
+  return { content, numbers, negative, canon: (negative ? '¬ ' : '') + canonical.join(' ') };
+}
+
+const jaccard = (a, b) => {
+  if (!a.size && !b.size) return 1;
+  let inter = 0;
+  for (const t of a) if (b.has(t)) inter++;
+  return inter / (a.size + b.size - inter);
+};
+const sameSet = (a, b) => a.size === b.size && [...a].every((x) => b.has(x));
+// A paraphrase ADDS or drops words ("retries a step" / "retries each step … for a
+// human"); two DISTINCT facts SWAP them ("re-reads step status" / "re-reads plan
+// status"). If each side has a content word the other lacks, it is a substitution,
+// and lexical similarity alone cannot say it is the same fact — so it never merges.
+const isSubstitution = (a, b) => [...a].some((t) => !b.has(t)) && [...b].some((t) => !a.has(t));
+
+// Dedup routes, benchmarked in scripts/eval-findings.mjs (plan #134 step 3).
+//   exact       — identical canonical claim on the same subject only
+//   near        — + token-Jaccard near-duplicates, NO guards        (benchmark: many wrong merges)
+//   guarded     — + number/polarity guards: mismatch => conflict, not merge
+//   full        — + slot supersede, newest report wins            (benchmark: stale reports win)
+//   strict      — guarded + substitution guard (swapped words never merge)
+//   strict_full — strict + slot supersede + revert guard: a report re-asserting an
+//                 already-superseded value is flagged as a conflict, not applied
+export const FINDING_ROUTES = {
+  exact: { near: false, guards: false, subst: false, slots: false, revert: false },
+  near: { near: true, guards: false, subst: false, slots: false, revert: false },
+  guarded: { near: true, guards: true, subst: false, slots: false, revert: false },
+  full: { near: true, guards: true, subst: false, slots: true, revert: false },
+  strict: { near: true, guards: true, subst: true, slots: false, revert: false },
+  strict_full: { near: true, guards: true, subst: true, slots: true, revert: true },
+};
+// strict_full chosen by scripts/eval-findings.mjs (2026-09-22): 0 wrong merges at every threshold,
+// 100% current values kept, 1 stale-silent vs 65 for exact, 59% less bloat than exact.
+// 0.6 and 0.7 tied on the fixture; 0.7 kept as the more conservative margin.
+export const DEFAULT_FINDING_ROUTE = 'strict_full';
+export const DEFAULT_NEAR_THRESHOLD = 0.7;
+
 export class Store {
   constructor(dbPath) {
     if (dbPath !== ':memory:') mkdirSync(dirname(dbPath), { recursive: true });
@@ -610,7 +767,10 @@ export class Store {
   // steps.auto_reassignment_count.
   // Version 12 (2026-08) separates first-artifact and overall lease deadlines:
   // execution_leases.first_artifact_deadline_at.
-  static USER_VERSION = 13;
+  // Version 14 (brain branch, 2026-09) adds the findings brain: findings (+impact,
+  // suspect_since), finding_deps, finding_events — tables via SCHEMA, columns
+  // guarded by hasCol (the brain branch had stamped its own v4/v5; see _migrate).
+  static USER_VERSION = 14;
 
   _migrate() {
     const v = this.db.prepare('PRAGMA user_version').get().user_version;
@@ -774,6 +934,30 @@ export class Store {
     if (hasCol('activity_events', 'step_id') && hasCol('activity_events', 'event_timestamp')) {
       this.db.exec('CREATE INDEX IF NOT EXISTS idx_activity_events_step_time ON activity_events(step_id, event_timestamp, id)');
     }
+
+    // findings brain (merged as v14): findings/finding_deps/finding_events are brand-new tables
+    // created by SCHEMA on any DB shape; the two columns are guarded by hasCol, not by the
+    // version stamp — the brain branch stamped its own v4/v5 on DBs that never ran upstream v4-v13.
+    if (!hasCol('findings', 'impact') || !hasCol('findings', 'suspect_since')) this._tx(() => {
+      if (!hasCol('findings', 'impact')) this.db.exec("ALTER TABLE findings ADD COLUMN impact TEXT NOT NULL DEFAULT 'normal'");
+      if (!hasCol('findings', 'suspect_since')) this.db.exec("ALTER TABLE findings ADD COLUMN suspect_since TEXT NOT NULL DEFAULT ''");
+    });
+
+    // One-time: file/dir links (and project roots) written before truePath() may be in
+    // the wrong case, and the same file may be linked twice — canonicalize + de-duplicate.
+    if (!this.db.prepare("SELECT 1 FROM settings WHERE key = 'deps_true_case_v1'").get()) this._tx(() => {
+      const rows = this.db.prepare("SELECT finding_id, dep_type, dep_ref, dep_hash, inferred, created_at FROM finding_deps WHERE dep_type IN ('file','dir')").all();
+      for (const r of rows) {
+        const t = existsSync(r.dep_ref) ? truePath(r.dep_ref) : r.dep_ref;
+        if (t === r.dep_ref) continue;
+        this.db.prepare('DELETE FROM finding_deps WHERE finding_id = ? AND dep_type = ? AND dep_ref = ?').run(r.finding_id, r.dep_type, r.dep_ref);
+        this.db.prepare('INSERT OR IGNORE INTO finding_deps (finding_id, dep_type, dep_ref, dep_hash, inferred, created_at) VALUES (?,?,?,?,?,?)')
+          .run(r.finding_id, r.dep_type, t, r.dep_hash, r.inferred, r.created_at);
+      }
+      for (const k of this.db.prepare("SELECT key, value FROM settings WHERE key LIKE 'project_root:%'").all())
+        if (k.value && existsSync(k.value)) this.db.prepare('UPDATE settings SET value = ? WHERE key = ?').run(truePath(k.value), k.key);
+      this.db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('deps_true_case_v1', '1')").run();
+    });
 
     if (v < Store.USER_VERSION) this.db.exec(`PRAGMA user_version = ${Store.USER_VERSION}`);
   }
@@ -2607,6 +2791,7 @@ export class Store {
       }
       const step = this.getStep(workable.id);
       step.lessons = this.getLessons({ step_id: workable.id, limit: 5 });
+      step.brain = this.stepBrief(workable.id);
       const live = this._resolveStepDispatch(step, {});
       step.dispatch_policy = this._dispatchPolicy(step, { resolved_model: live.model ?? '' });
       const skipped = describe([...blocked, ...depWaiting].filter((b) => b.idx < workable.idx));
@@ -2679,6 +2864,7 @@ export class Store {
       return ready.map((r) => {
         const step = this.getStep(r.id);
         step.lessons = this.getLessons({ step_id: r.id, limit: 5 });
+        step.brain = this.stepBrief(r.id);
         const live = this._resolveStepDispatch(step, {});
         step.dispatch_policy = this._dispatchPolicy(step, { resolved_model: live.model ?? '' });
         if (claim) {
@@ -2688,6 +2874,36 @@ export class Store {
         return step;
       });
     });
+  }
+
+  // The brain's brief for a step: re-hash the sources its project's findings rest on
+  // (so anything whose file changed arrives SUSPECT, never as fact), then pick the
+  // live findings that match each part of the step (src/brief.mjs). Never throws —
+  // a brief is a bonus, not a gate.
+  stepBrief(stepId, { limit = 5 } = {}) {
+    try {
+      const s = this.db.prepare('SELECT s.title, s.context, s.acceptance_criteria, s.plan_id, p.project_id FROM steps s JOIN plans p ON p.id = s.plan_id WHERE s.id = ?').get(stepId);
+      if (!s) return [];
+      if (!this.db.prepare("SELECT 1 FROM findings WHERE project_id = ? AND status IN ('active','suspect') LIMIT 1").get(s.project_id ?? 1)) return [];
+      this.checkStale({ project_id: s.project_id ?? 1 });
+      const text = `${s.title}\n${s.context || ''}\n${s.acceptance_criteria || ''}`;
+      return pickBrief((q, k) => this.queryFindings({ plan_id: s.plan_id, query: q, limit: k, status: 'live' }), text, { limit })
+        .map((f) => ({ id: f.id, kind: f.kind, subject: f.subject, claim: f.claim, evidence: f.evidence, status: f.status,
+          ...(f.conflicts_with.length ? { conflicts_with: f.conflicts_with } : {}) }));
+    } catch { return []; }
+  }
+
+  // Where a project's source lives, so findings absorbed without an explicit `root`
+  // still link to their files (and can go stale). Stored in settings.
+  setProjectRoot(projectId, root) {
+    if (!this.getProject(projectId)) throw new Error(`no project with id ${projectId}`);
+    const p = root ? truePath(String(root)) : "";
+    if (p && !existsSync(p)) throw new Error(`root does not exist: ${p}`);
+    this.db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(`project_root:${projectId}`, p);
+    return { project_id: projectId, root: p || null };
+  }
+  getProjectRoot(projectId) {
+    return this.db.prepare('SELECT value FROM settings WHERE key = ?').get(`project_root:${projectId}`)?.value || null;
   }
 
   // Cross-plan failure memory: IDF-weighted lexical match of `terms` (or a step's
@@ -3030,6 +3246,16 @@ export class Store {
       if (inScope(s.project_id)) docs.push({ type: 'step', id: s.id, plan_id: s.plan_id, title: s.title, status: s.status, text: `${s.title} ${s.context} ${s.acceptance_criteria} ${s.carry_forward}` });
     for (const a of this.db.prepare('SELECT a.id, a.what_tried, a.result, a.verdict, a.step_id, s.title AS st, s.plan_id, p.project_id FROM attempts a JOIN steps s ON a.step_id = s.id JOIN plans p ON s.plan_id = p.id').all())
       if (inScope(a.project_id)) docs.push({ type: 'attempt', id: a.id, step_id: a.step_id, plan_id: a.plan_id, title: a.st, status: a.verdict, text: `${a.what_tried} ${a.result}` });
+    // Findings are the brain's durable knowledge (plan #134). Only ACTIVE ones are
+    // recalled — superseded/retracted history must never resurface as current
+    // truth. A finding in an unresolved disagreement is surfaced with status
+    // 'conflict' so the reader knows to check it rather than trust it.
+    // A 'suspect' finding (something it was built on changed) is surfaced as such.
+    for (const f of this.db.prepare(`SELECT id, project_id, plan_id, step_id, kind, subject, claim, conflicts_with, status FROM findings WHERE ${LIVE}`).all())
+      if (inScope(f.project_id)) docs.push({ type: 'finding', id: f.id, plan_id: f.plan_id, step_id: f.step_id,
+        title: `${f.kind}: ${f.subject || '(no subject)'}`,
+        status: f.status === 'suspect' ? 'suspect' : this._liveConflicts(f.conflicts_with).length ? 'conflict' : 'active',
+        text: `${f.subject} ${f.claim}` });
     const entries = docs.map((d) => ({ doc: d, toks: new Set(tokenize(d.text)) }));
     return {
       query,
@@ -3040,6 +3266,603 @@ export class Store {
             snippet: d.text.replace(/\s+/g, ' ').trim().slice(0, 160), score: Math.round(x.score * 100) / 100 };
         }),
     };
+  }
+
+  // ---- findings: the brain's write-back channel (plan #134) ----------------
+  // An agent (or a chat session) reports what it LEARNED — atomic, evidenced
+  // claims anchored to a subject — and the ledger absorbs them without
+  // duplicating what it already knows. Zero model calls: exact canonical match,
+  // then (route-dependent) near-duplicate merge guarded by numbers + polarity,
+  // slot supersede for single-valued aspects, and explicit supersede. Nothing is
+  // ever deleted: corrections supersede, mistakes are retracted with a reason,
+  // and disagreements the ledger cannot resolve are kept as cross-linked conflicts.
+
+  _findingScope({ plan_id = null, step_id = null } = {}) {
+    if (step_id != null) {
+      const r = this.db.prepare('SELECT s.plan_id, p.project_id FROM steps s JOIN plans p ON s.plan_id = p.id WHERE s.id = ?').get(step_id);
+      if (!r) throw new Error(`no step with id ${step_id}`);
+      return { project_id: r.project_id ?? 1, plan_id: plan_id ?? r.plan_id, step_id };
+    }
+    if (plan_id != null) {
+      const r = this.db.prepare('SELECT project_id FROM plans WHERE id = ?').get(plan_id);
+      if (!r) throw new Error(`no plan with id ${plan_id}`);
+      return { project_id: r.project_id ?? 1, plan_id, step_id: null };
+    }
+    return { project_id: this.currentProjectId(), plan_id: null, step_id: null };
+  }
+
+  _findingRow(r) {
+    return { id: r.id, kind: r.kind, subject: r.subject, slot: r.slot, claim: r.claim,
+      evidence: parseArr(r.evidence), source: r.source, status: r.status, superseded_by: r.superseded_by,
+      conflicts_with: this._liveConflicts(r.conflicts_with), seen_count: r.seen_count, note: r.note,
+      impact: r.impact ?? 'normal', suspect_since: r.suspect_since ?? '',
+      project_id: r.project_id, plan_id: r.plan_id, step_id: r.step_id, created_at: r.created_at, updated_at: r.updated_at };
+  }
+
+  // A conflict only matters while the other side is still held (active/suspect):
+  // once it is revised or retracted, the disagreement is settled and must stop
+  // flagging this finding as CONFLICT in briefs, recall and the graph.
+  _liveConflicts(raw) {
+    const ids = parseArr(raw).map(Number).filter(Number.isInteger);
+    if (!ids.length) return [];
+    const live = new Set(this.db.prepare(`SELECT id FROM findings WHERE id IN (${ids.map(() => '?').join(',')}) AND ${LIVE}`).all(...ids).map((x) => x.id));
+    return ids.filter((i) => live.has(i));
+  }
+
+  // ---- consistency audit: facts that contradict each other ---------------------
+  // Dedup only catches near-identical wording, so two facts about the same code can
+  // quietly disagree ("hard-wired to Z01" vs "takes a -Map parameter"). The audit
+  // groups live findings by the file they rest on (else by subject), a model names
+  // contradicting pairs (scripts/reevaluate.mjs audit), and markContradiction
+  // cross-links them and re-opens both — re-evaluation then decides which is true.
+  auditGroups({ project_id = null, all = false, maxSize = 20 } = {}) {
+    const P = project_id ?? this.currentProjectId();
+    const rows = this.db.prepare(`SELECT id, subject, claim FROM findings WHERE status = 'active' ${all ? '' : 'AND project_id = ?'}`).all(...(all ? [] : [P]));
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    const groups = new Map();
+    const add = (k, id) => { if (!groups.has(k)) groups.set(k, new Set()); groups.get(k).add(id); };
+    const fileDeps = rows.length ? this.db.prepare(`SELECT finding_id, dep_ref FROM finding_deps WHERE dep_type = 'file' AND finding_id IN (${rows.map(() => '?').join(',')})`)
+      .all(...rows.map((r) => r.id)) : [];
+    const linked = new Set();
+    for (const d of fileDeps) { add(`file:${d.dep_ref}`, d.finding_id); linked.add(d.finding_id); }
+    for (const r of rows) if (!linked.has(r.id)) add(`subject:${r.subject.split('#')[0]}`, r.id);
+    const out = [];
+    for (const [key, set] of groups) {
+      const ids = [...set].sort((a, b) => a - b);
+      if (ids.length < 2) continue;
+      for (let i = 0; i < ids.length; i += maxSize) {
+        const chunk = ids.slice(i, i + maxSize);
+        if (chunk.length >= 2) out.push({ key, findings: chunk.map((id) => ({ id, subject: byId.get(id).subject, claim: byId.get(id).claim })) });
+      }
+    }
+    return out;
+  }
+
+  markContradiction(a, b, why = '') {
+    const ts = now(), A = Number(a), B = Number(b);
+    if (A === B) throw new Error('a finding cannot contradict itself');
+    const ra = this.db.prepare('SELECT id, project_id, status, conflicts_with FROM findings WHERE id = ?').get(A);
+    const rb = this.db.prepare('SELECT id, project_id, status, conflicts_with FROM findings WHERE id = ?').get(B);
+    if (!ra || !rb) throw new Error('no such finding');
+    if (ra.project_id !== rb.project_id) throw new Error('findings are in different projects');
+    const suspected = [];
+    this._tx(() => {
+      for (const [x, y] of [[ra, B], [rb, A]]) {
+        const cw = [...new Set([...parseArr(x.conflicts_with).map(Number), y])];
+        this.db.prepare('UPDATE findings SET conflicts_with = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(cw), ts, x.id);
+        if (this._markSuspect(x.id, { cause_finding_id: y, detail: `contradicts #${y}${why ? `: ${String(why).slice(0, 200)}` : ''}` }, ts)) suspected.push(x.id);
+      }
+    });
+    return { pair: [A, B], suspected };
+  }
+
+  // An audit pair re-opens both sides, and re-evaluation is told "at most one can be
+  // right". If BOTH come back confirmed, the pair was a false alarm: unlink it, or the
+  // two would keep showing as CONFLICT forever. (Only audit-made links — a conflict
+  // found at absorb time stays until one side is revised or retracted.)
+  _dropFalseContradictions(id, raw, ts) {
+    for (const p of parseArr(raw).map(Number).filter(Number.isInteger)) {
+      const other = this.db.prepare('SELECT status, conflicts_with FROM findings WHERE id = ?').get(p);
+      if (other?.status !== 'active') continue; // the other side is still being checked (it will unlink when confirmed)
+      const audited = this.db.prepare("SELECT 1 FROM finding_events WHERE finding_id = ? AND cause_finding_id = ? AND event = 'suspect' AND detail LIKE 'contradicts #%'").get(id, p);
+      if (!audited) continue;
+      const mine = this.db.prepare('SELECT conflicts_with FROM findings WHERE id = ?').get(id).conflicts_with;
+      this.db.prepare('UPDATE findings SET conflicts_with = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(parseArr(mine).map(Number).filter((x) => x !== p)), ts, id);
+      this.db.prepare('UPDATE findings SET conflicts_with = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(parseArr(other.conflicts_with).map(Number).filter((x) => x !== id)), ts, p);
+      for (const [a, b] of [[id, p], [p, id]]) this._event(a, 'consistent', { cause_finding_id: b, detail: `both confirmed — #${a} and #${b} do not contradict after all` }, ts);
+    }
+  }
+
+  getFinding(id) {
+    const r = this.db.prepare('SELECT * FROM findings WHERE id = ?').get(id);
+    if (!r) throw new Error(`no finding with id ${id}`);
+    return { ...this._findingRow(r),
+      supersedes: this.db.prepare('SELECT id FROM findings WHERE superseded_by = ? ORDER BY id').all(id).map((x) => x.id),
+      depends_on: this.db.prepare('SELECT dep_type AS type, dep_ref AS ref, inferred FROM finding_deps WHERE finding_id = ? ORDER BY dep_type, dep_ref')
+        .all(id).map((d) => ({ type: d.type, ref: d.type === 'finding' ? Number(d.ref) : d.ref, inferred: !!d.inferred })),
+      dependents: this.db.prepare("SELECT finding_id FROM finding_deps WHERE dep_type = 'finding' AND dep_ref = ? ORDER BY finding_id")
+        .all(String(id)).map((d) => d.finding_id),
+      history: this.db.prepare('SELECT event, cause_finding_id, cause_file, detail, created_at FROM finding_events WHERE finding_id = ? ORDER BY id')
+        .all(id).map((e) => ({ ...e })),
+    };
+  }
+
+  // ---- truth maintenance (schema v5) ----------------------------------------
+  // A finding records what it was BUILT ON: other findings and source files.
+  // When one of those changes, its dependents turn 'suspect' — handed out with a
+  // warning, never as fact — until re-evaluated (resolveFinding). The cascade has
+  // a BRAKE: it goes one hop at a time, and only continues through a dependent
+  // whose claim actually changed (revised/retracted). A confirmed dependent stops
+  // it, so one edit cannot flag the whole brain.
+
+  _event(findingId, event, { cause_finding_id = null, cause_file = '', detail = '' } = {}, ts = now()) {
+    this.db.prepare('INSERT INTO finding_events (finding_id, event, cause_finding_id, cause_file, detail, created_at) VALUES (?,?,?,?,?,?)')
+      .run(findingId, event, cause_finding_id, String(cause_file), String(detail).slice(0, 500), ts);
+  }
+
+  // active → suspect (other statuses untouched). Returns true if it changed.
+  _markSuspect(id, cause = {}, ts = now()) {
+    const r = this.db.prepare("UPDATE findings SET status = 'suspect', suspect_since = ?, updated_at = ? WHERE id = ? AND status = 'active'").run(ts, ts, id);
+    if (!r.changes) return false;
+    this._event(id, 'suspect', cause, ts);
+    return true;
+  }
+
+  // One hop: everything that cites `changedId` as a dependency turns suspect. A
+  // dependent that is ALREADY suspect (e.g. its file changed too) gets this as an
+  // extra cause, so its re-evaluation sees the new value — not just the old reason.
+  _cascade(changedId, detail, ts = now()) {
+    const out = [];
+    for (const d of this.db.prepare("SELECT DISTINCT finding_id FROM finding_deps WHERE dep_type = 'finding' AND dep_ref = ?").all(String(changedId))) {
+      const cause = { cause_finding_id: changedId, detail };
+      if (this._markSuspect(d.finding_id, cause, ts)) out.push(d.finding_id);
+      else if (this.db.prepare('SELECT status FROM findings WHERE id = ?').get(d.finding_id)?.status === 'suspect') this._event(d.finding_id, 'suspect', cause, ts);
+    }
+    return out;
+  }
+
+  // The frog rule: a HIGH-IMPACT fact about a subject re-opens everything known
+  // about that subject — same subject, a sub-aspect of it ("princess#dress"), or
+  // any finding whose claim names it — even with no recorded dependency.
+  _impactSweep(newId, subject, P, ts = now()) {
+    if (!subject) return [];
+    const base = subject.split('#')[0];
+    const names = [...claimTokens(base.split('/').pop().replace(/\.[a-z0-9]+$/i, '').replace(/[_-]/g, ' ')).content].filter((t) => t.length >= 4);
+    const out = [];
+    for (const f of this.db.prepare("SELECT id, subject, claim FROM findings WHERE project_id = ? AND status = 'active' AND id != ?").all(P, newId)) {
+      const hit = f.subject === subject || f.subject === base || f.subject.startsWith(base + '#') ||
+        (names.length && names.every((n) => claimTokens(f.claim).content.has(n)));
+      if (hit && this._markSuspect(f.id, { cause_finding_id: newId, detail: `high-impact fact about "${subject}"` }, ts)) out.push(f.id);
+    }
+    return out;
+  }
+
+  // Model-assisted reach — the frog rule's second half. The lexical sweep only
+  // finds facts that NAME the subject; "the prince kissed HER hand" or "the town
+  // doctor makes house calls" refer to it indirectly. These helpers let a model
+  // (scripts/reevaluate.mjs) pick which OTHER live facts a high-impact fact affects.
+
+  // F4 verify-on-ingest: put active findings up for an independent check against the
+  // source before they are trusted (reevaluate settles them). Returns the ids marked.
+  markForVerification(ids, detail = 'new finding — not yet independently verified; check every part of it against the source') {
+    const ts = now(), out = [];
+    this._tx(() => { for (const id of ids) if (this._markSuspect(Number(id), { detail }, ts)) out.push(Number(id)); });
+    return out;
+  }
+
+  // High-impact facts whose reach has not been checked yet.
+  pendingReach({ plan_id = null, all = false } = {}) {
+    const P = this._findingScope({ plan_id }).project_id;
+    return this.db.prepare(`SELECT * FROM findings f WHERE f.impact = 'high' AND f.status = 'active' ${all ? '' : 'AND f.project_id = ?'}
+      AND NOT EXISTS (SELECT 1 FROM finding_events e WHERE e.finding_id = f.id AND e.event = 'reached') ORDER BY f.id`)
+      .all(...(all ? [] : [P])).map((r) => this._findingRow(r));
+  }
+
+  // Active facts the sweep did NOT already flag for this finding. Neighbours first:
+  // facts on a subject that also holds a flagged fact (the same scene/topic).
+  reachCandidates(findingId, { limit = 80 } = {}) {
+    const f = this.db.prepare('SELECT * FROM findings WHERE id = ?').get(findingId);
+    if (!f) throw new Error(`no finding with id ${findingId}`);
+    const flagged = new Set(this.db.prepare("SELECT finding_id FROM finding_events WHERE event = 'suspect' AND cause_finding_id = ?")
+      .all(findingId).map((r) => r.finding_id));
+    const near = new Set([f.subject.split('#')[0], ...[...flagged].map((id) => this.db.prepare('SELECT subject FROM findings WHERE id = ?').get(id)?.subject.split('#')[0])]);
+    return this.db.prepare("SELECT * FROM findings WHERE project_id = ? AND status = 'active' AND id != ? ORDER BY id DESC")
+      .all(f.project_id, findingId).filter((r) => !flagged.has(r.id))
+      .sort((a, b) => Number(near.has(b.subject.split('#')[0])) - Number(near.has(a.subject.split('#')[0])))
+      .slice(0, Math.max(1, Math.min(Number(limit) || 80, 300))).map((r) => this._findingRow(r));
+  }
+
+  // What was recorded about the subject by name: the facts this finding's sweep
+  // flagged (any status now), for the reach prompt's "what was known" context.
+  reachKnown(findingId) {
+    return this.db.prepare(`SELECT DISTINCT f.* FROM finding_events e JOIN findings f ON f.id = e.finding_id
+      WHERE e.event = 'suspect' AND e.cause_finding_id = ? AND e.detail NOT LIKE '%(reach:%' ORDER BY f.id`)
+      .all(findingId).map((r) => this._findingRow(r));
+  }
+
+  // Record the reach decision: the chosen facts turn suspect (caused by the
+  // high-impact fact), and the fact is marked 'reached' so it is not asked again.
+  // `why`: {id: link} from the reach model ("'she' is Coach Lindqvist") — stored
+  // with the suspect event so re-evaluation is told the link, not just the twist.
+  applyReach(findingId, ids = [], detail = '', why = {}) {
+    const ts = now(), out = [];
+    const f = this.db.prepare('SELECT subject, project_id FROM findings WHERE id = ?').get(findingId);
+    if (!f) throw new Error(`no finding with id ${findingId}`);
+    this._tx(() => {
+      for (const id of ids) {
+        const r = this.db.prepare('SELECT project_id FROM findings WHERE id = ?').get(Number(id));
+        const link = String(why?.[id] ?? '').replace(/[()]/g, '').trim() || 'refers to it indirectly';
+        if (r?.project_id === f.project_id && Number(id) !== findingId &&
+          this._markSuspect(Number(id), { cause_finding_id: findingId, detail: `high-impact fact about "${f.subject}" (reach: ${link})` }, ts)) out.push(Number(id));
+      }
+      this._event(findingId, 'reached', { detail: detail || `re-opened ${out.length} indirectly related fact(s)` }, ts);
+    });
+    return out;
+  }
+
+  // Record what finding `id` was built on. Explicit: depends_on ids, files.
+  // Inferred: file paths in the subject/evidence (resolved against `root`), and
+  // findings the agent was BRIEFED with that share its subject or wording.
+  _linkDeps(id, { depends_on = [], files = [], evidence = [], subject = '', claim = '', tok = null, P, root = null, briefed = [] }, ts = now()) {
+    const addF = (dep, inferred) => {
+      const d = Number(dep);
+      if (!Number.isInteger(d) || d === id) return;
+      const row = this.db.prepare('SELECT project_id FROM findings WHERE id = ?').get(d);
+      if (row && row.project_id === P) this.db.prepare("INSERT OR IGNORE INTO finding_deps (finding_id, dep_type, dep_ref, dep_hash, inferred, created_at) VALUES (?, 'finding', ?, '', ?, ?)")
+        .run(id, String(d), inferred ? 1 : 0, ts);
+    };
+    const explicit = new Set((Array.isArray(depends_on) ? depends_on : [depends_on]).map(Number));
+    for (const d of explicit) addF(d, false);
+    if (tok) for (const b of briefed) {
+      if (explicit.has(Number(b))) continue;
+      const r = this.db.prepare('SELECT subject, claim FROM findings WHERE id = ?').get(Number(b));
+      if (r && (r.subject === subject || jaccard(tok.content, claimTokens(r.claim).content) >= 0.2)) addF(b, true);
+    }
+    const cands = new Set((Array.isArray(files) ? files : [files]).map(String));
+    const fromText = (s) => { const m = PATHISH.exec(String(s).trim()); if (m) cands.add(m[0]); };
+    fromText(subject.split('#')[0]);
+    for (const e of evidence) fromText(e);
+    const linked = [];
+    for (const c of cands) {
+      if (!c) continue;
+      const p = isAbsolute(c) ? c : root ? join(root, c) : null;
+      if (!p || !existsSync(p)) continue;
+      try { if (!statSync(p).isFile()) continue; } catch { continue; }
+      const explicitFile = (Array.isArray(files) ? files : [files]).map(String).includes(c);
+      this.db.prepare("INSERT OR REPLACE INTO finding_deps (finding_id, dep_type, dep_ref, dep_hash, inferred, created_at) VALUES (?, 'file', ?, ?, ?, ?)")
+        .run(id, truePath(p), fileHash(p), explicitFile ? 0 : 1, ts);
+      linked.push(truePath(p));
+    }
+    // F2: an absence/uniqueness/recency claim also rests on its directories' listings
+    // (the file's folder and its parent, never the root itself or above it).
+    if (claim && SCOPE_CLAIM.test(claim)) {
+      const top = root ? truePath(root) : null;
+      const dirs = new Set();
+      for (const p of linked) for (let d = dirname(p), k = 0; k < 2; k++, d = dirname(d)) {
+        if (top && (d === top || !d.startsWith(top + '/'))) break;
+        dirs.add(d);
+      }
+      for (const d of dirs) this.db.prepare("INSERT OR REPLACE INTO finding_deps (finding_id, dep_type, dep_ref, dep_hash, inferred, created_at) VALUES (?, 'dir', ?, ?, 1, ?)")
+        .run(id, d, dirHash(d), ts);
+    }
+  }
+
+  // Follow superseded_by to the finding that currently stands for `id` (or null if retracted).
+  _successor(id) {
+    for (let cur = id, hops = 0; cur != null && hops < 50; hops++) {
+      const r = this.db.prepare('SELECT id, status, superseded_by FROM findings WHERE id = ?').get(cur);
+      if (!r || r.status === 'retracted') return null;
+      if (r.status !== 'superseded') return r.id;
+      cur = r.superseded_by;
+    }
+    return null;
+  }
+
+  // Re-anchor a finding's dependencies to NOW: file hashes re-read, finding deps
+  // moved to their current successor (dropped if that was retracted).
+  _reanchor(id, ts = now()) {
+    for (const d of this.db.prepare("SELECT dep_type, dep_ref FROM finding_deps WHERE finding_id = ? AND dep_type IN ('file', 'dir')").all(id))
+      this.db.prepare('UPDATE finding_deps SET dep_hash = ? WHERE finding_id = ? AND dep_type = ? AND dep_ref = ?')
+        .run(d.dep_type === 'dir' ? dirHash(d.dep_ref) : fileHash(d.dep_ref), id, d.dep_type, d.dep_ref);
+    for (const d of this.db.prepare("SELECT dep_ref, inferred FROM finding_deps WHERE finding_id = ? AND dep_type = 'finding'").all(id)) {
+      const succ = this._successor(Number(d.dep_ref));
+      if (succ === Number(d.dep_ref)) continue;
+      this.db.prepare("DELETE FROM finding_deps WHERE finding_id = ? AND dep_type = 'finding' AND dep_ref = ?").run(id, d.dep_ref);
+      if (succ != null && succ !== id) this.db.prepare("INSERT OR IGNORE INTO finding_deps (finding_id, dep_type, dep_ref, dep_hash, inferred, created_at) VALUES (?, 'finding', ?, '', ?, ?)")
+        .run(id, String(succ), d.inferred, ts);
+    }
+  }
+
+  _confirm(id, detail, ts = now()) {
+    this._reanchor(id, ts);
+    this.db.prepare("UPDATE findings SET status = 'active', suspect_since = '', updated_at = ? WHERE id = ?").run(ts, id);
+    this._event(id, 'confirmed', { detail }, ts);
+  }
+
+  // Deterministic staleness: re-hash every file an ACTIVE finding was built on;
+  // a changed or missing file turns those findings suspect. No model calls.
+  checkStale({ project_id = null, all = false } = {}) {
+    const P = project_id ?? this.currentProjectId();
+    const rows = this.db.prepare(`SELECT d.finding_id, d.dep_type, d.dep_ref, d.dep_hash FROM finding_deps d JOIN findings f ON f.id = d.finding_id
+      WHERE d.dep_type IN ('file', 'dir') AND f.status = 'active' ${all ? '' : 'AND f.project_id = ?'}`).all(...(all ? [] : [P]));
+    const cur = new Map(), changed = new Set(), suspected = [];
+    this._tx(() => {
+      const ts = now();
+      for (const r of rows) {
+        const k = `${r.dep_type}:${r.dep_ref}`;
+        if (!cur.has(k)) cur.set(k, !existsSync(r.dep_ref) ? '' : r.dep_type === 'dir' ? dirHash(r.dep_ref) : fileHash(r.dep_ref));
+        const h = cur.get(k);
+        if (h === r.dep_hash) continue;
+        changed.add(r.dep_ref);
+        const detail = r.dep_type === 'dir' ? (h ? 'a file was added or removed in a directory it rests on' : 'a directory it rests on is gone')
+          : h ? 'source file changed' : 'source file missing';
+        if (this._markSuspect(r.finding_id, { cause_file: r.dep_ref, detail }, ts)) suspected.push(r.finding_id);
+      }
+    });
+    const files = [...cur.keys()].filter((k) => k.startsWith('file:')).length;
+    return { files_checked: files, dirs_checked: cur.size - files, changed_files: [...changed], suspected };
+  }
+
+  // Settle a finding (normally a suspect one) after re-evaluation — or edit a
+  // live one directly ('revised' with a new claim):
+  //   confirmed — still true: back to active, re-anchored to the current files
+  //   revised   — replaced by `claim` (history kept); ITS dependents turn suspect
+  //   retracted — no longer true; its dependents turn suspect
+  //   unsure    — stays suspect; the reason is logged
+  resolveFinding(id, { verdict, claim = '', reason = '', source = '', evidence = [] } = {}) {
+    if (!RESOLVE_VERDICTS.has(verdict)) throw new Error(`verdict must be ${[...RESOLVE_VERDICTS].join('|')}`);
+    const row = this.db.prepare('SELECT * FROM findings WHERE id = ?').get(id);
+    if (!row) throw new Error(`no finding with id ${id}`);
+    if (!['active', 'suspect'].includes(row.status)) throw new Error(`finding #${id} is ${row.status}; only active or suspect findings can be resolved`);
+    const why = String(reason ?? '').trim().slice(0, 500);
+    let newId = null, suspected = [];
+    this._tx(() => {
+      const ts = now();
+      if (verdict === 'confirmed') {
+        this._confirm(id, why || 're-evaluated: still true', ts);
+        this._dropFalseContradictions(id, row.conflicts_with, ts);
+      } else if (verdict === 'unsure') this._event(id, 'unsure', { detail: why }, ts);
+      else if (verdict === 'retracted') {
+        this.db.prepare("UPDATE findings SET status = 'retracted', note = ?, suspect_since = '', updated_at = ? WHERE id = ?").run(why || 'retracted on re-evaluation', ts, id);
+        this._event(id, 'retracted', { detail: why }, ts);
+        suspected = this._cascade(id, `#${id} was retracted${why ? `: ${why}` : ''}`, ts);
+      } else {
+        const text = String(claim ?? '').trim();
+        if (!text) throw new Error('a revised finding needs the new claim');
+        if (text.length > 2000) throw new Error('claim is over 2000 chars');
+        const tok = claimTokens(text);
+        const hash = createHash('sha256').update(`${row.subject}\u0000${tok.canon}`).digest('hex');
+        const ev = [...new Set([...parseArr(row.evidence), ...(Array.isArray(evidence) ? evidence : [evidence]).map(String).filter(Boolean)])].slice(0, 20);
+        newId = Number(this.db.prepare(`INSERT INTO findings (project_id, plan_id, step_id, kind, subject, slot, claim, evidence, source, claim_hash,
+            status, conflicts_with, impact, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?, 'active', '[]', ?, ?, ?)`)
+          .run(row.project_id, row.plan_id, row.step_id, row.kind, row.subject, row.slot, text, JSON.stringify(ev),
+            String(source || row.source).slice(0, 120), hash, row.impact ?? 'normal', ts, ts).lastInsertRowid);
+        // the revision stands on what the original stood on (re-anchored to now)
+        this.db.prepare(`INSERT INTO finding_deps (finding_id, dep_type, dep_ref, dep_hash, inferred, created_at)
+          SELECT ?, dep_type, dep_ref, dep_hash, inferred, ? FROM finding_deps WHERE finding_id = ?`).run(newId, ts, id);
+        this._reanchor(newId, ts);
+        this.db.prepare("UPDATE findings SET status = 'superseded', superseded_by = ?, suspect_since = '', updated_at = ? WHERE id = ?").run(newId, ts, id);
+        this._event(id, 'revised', { detail: `→ #${newId}${why ? `: ${why}` : ''}` }, ts);
+        suspected = this._cascade(id, `#${id} was revised to #${newId}`, ts);
+      }
+    });
+    return { finding: this.getFinding(newId ?? id), ...(newId ? { replaced: id } : {}), suspected };
+  }
+
+  // Work queue for re-evaluation: each suspect finding with WHY it is suspect
+  // (the fact or file that changed) and what it stands on.
+  // `id`: just that one finding (fresh causes, right before re-evaluating it).
+  suspectQueue({ limit = 20, plan_id = null, all = false, id = null } = {}) {
+    const P = this._findingScope({ plan_id }).project_id;
+    const rows = id != null
+      ? this.db.prepare("SELECT * FROM findings WHERE status = 'suspect' AND id = ?").all(Number(id))
+      : this.db.prepare(`SELECT * FROM findings WHERE status = 'suspect' ${all ? '' : 'AND project_id = ?'} ORDER BY suspect_since, id LIMIT ?`)
+        .all(...(all ? [] : [P]), Math.max(1, Math.min(Number(limit) || 20, 200)));
+    return rows.map((r) => {
+      const causes = this.db.prepare("SELECT cause_finding_id, cause_file, detail FROM finding_events WHERE finding_id = ? AND event = 'suspect' AND created_at >= ? ORDER BY id")
+        .all(r.id, r.suspect_since).map((e) => {
+          const c = e.cause_finding_id != null ? this.db.prepare('SELECT id, subject, claim, status, superseded_by FROM findings WHERE id = ?').get(e.cause_finding_id) : null;
+          const now_ = c?.superseded_by ? this.db.prepare('SELECT id, claim FROM findings WHERE id = ?').get(this._successor(c.id) ?? -1) : null;
+          return { detail: e.detail, ...(e.cause_file ? { file: e.cause_file } : {}),
+            ...(c ? { finding: { id: c.id, subject: c.subject, claim: c.claim, status: c.status, ...(now_ ? { now: { id: now_.id, claim: now_.claim } } : {}) } } : {}) };
+        });
+      return { ...this._findingRow(r), causes };
+    });
+  }
+
+  // root: directory that relative evidence/subject paths resolve against (enables
+  // file staleness). briefed: ids of findings the reporter was shown — a new
+  // finding that shares their subject or wording is linked as built on them.
+  absorbFindings(list, { plan_id = null, step_id = null, source = '', dry_run = false,
+    route = DEFAULT_FINDING_ROUTE, threshold = DEFAULT_NEAR_THRESHOLD, root = null, briefed = [] } = {}) {
+    if (!Array.isArray(list)) throw new Error('findings must be an array');
+    if (list.length > 200) throw new Error('at most 200 findings per call');
+    const R = FINDING_ROUTES[route];
+    if (!R) throw new Error(`unknown route "${route}" (${Object.keys(FINDING_ROUTES).join('|')})`);
+    const t = Number(threshold);
+    if (!(t > 0 && t <= 1)) throw new Error('threshold must be in (0, 1]');
+    // _tx runs nested calls inline, so a dry run inside an outer transaction
+    // could not roll its own writes back — refuse rather than silently commit.
+    if (dry_run && this._inTx) throw new Error('dry_run cannot run inside another transaction');
+    const scope = this._findingScope({ plan_id, step_id });
+    const DRY = Symbol('dry-run');
+    let results = [];
+    try {
+      this._tx(() => {
+        const r0 = root ?? this.getProjectRoot(scope.project_id); // the project's source root by default
+        const ctx = { root: r0 ? resolve(String(r0)) : null, briefed: (Array.isArray(briefed) ? briefed : []).map(Number).filter(Number.isInteger) };
+        results = list.map((raw, i) => this._absorbOne(raw, i, scope, String(source ?? '').slice(0, 120), R, t, ctx));
+        if (dry_run) throw DRY; // roll everything back, keep the computed outcomes
+      });
+    } catch (e) { if (e !== DRY) throw e; }
+    const counts = {};
+    for (const r of results) counts[r.outcome] = (counts[r.outcome] || 0) + 1;
+    return { dry_run: !!dry_run, route, threshold: t, project_id: scope.project_id, counts, results };
+  }
+
+  // One finding, in order: validate → exact duplicate → explicit supersede →
+  // slot supersede → near-duplicate (guarded) → new. Runs inside absorbFindings'
+  // transaction, so earlier items in the same batch are visible to later ones.
+  _absorbOne(raw, index, scope, source, R, threshold, ctx = { root: null, briefed: [] }) {
+    const reject = (reason) => ({ index, outcome: 'rejected', reason });
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return reject('not an object');
+    const claim = String(raw.claim ?? '').trim();
+    if (!claim) return reject('claim is required');
+    if (claim.length > 2000) return reject('claim is over 2000 chars — findings must be atomic; split it');
+    const kind = String(raw.kind ?? 'fact').trim().toLowerCase();
+    if (!FINDING_KINDS.has(kind)) return reject(`bad kind "${kind}" (${[...FINDING_KINDS].join('|')})`);
+    const subject = normSubject(raw.subject).slice(0, 300);
+    const slot = String(raw.slot ?? '').trim().toLowerCase().slice(0, 80);
+    const ev = [...new Set((Array.isArray(raw.evidence) ? raw.evidence : raw.evidence == null ? [] : [raw.evidence])
+      .map((e) => String(e).trim().slice(0, 300)).filter(Boolean))].slice(0, 20);
+    const tok = claimTokens(claim);
+    if (!tok.content.size && !tok.numbers.size) return reject('claim has no content words');
+    const impact = String(raw.impact ?? 'normal').trim().toLowerCase();
+    if (!['normal', 'high'].includes(impact)) return reject(`bad impact "${impact}" (normal|high)`);
+    const deps = { depends_on: raw.depends_on ?? [], files: raw.files ?? [], evidence: ev, subject, claim, tok, P: scope.project_id, ...ctx };
+
+    const P = scope.project_id, ts = now();
+    const hash = createHash('sha256').update(`${subject}\u0000${tok.canon}`).digest('hex');
+    const warn = [];
+    const suspected = new Set();
+    const merge = (row, outcome, extra = {}) => {
+      const evidence = [...new Set([...parseArr(row.evidence), ...ev])].slice(0, 20);
+      this.db.prepare('UPDATE findings SET evidence = ?, seen_count = seen_count + 1, updated_at = ? WHERE id = ?')
+        .run(JSON.stringify(evidence), ts, row.id);
+      return { index, outcome, id: row.id, ...extra, ...(warn.length ? { warnings: warn } : {}) };
+    };
+    const insert = (conflicts = []) => {
+      const id = Number(this.db.prepare(`INSERT INTO findings
+          (project_id, plan_id, step_id, kind, subject, slot, claim, evidence, source, claim_hash, status, conflicts_with, impact, created_at, updated_at)
+          VALUES (?,?,?,?,?,?,?,?,?,?, 'active', ?, ?, ?, ?)`)
+        .run(P, scope.plan_id, scope.step_id, kind, subject, slot, claim, JSON.stringify(ev), source, hash,
+          JSON.stringify(conflicts), impact, ts, ts).lastInsertRowid);
+      this._linkDeps(id, deps, ts);
+      return id;
+    };
+    // A replaced finding's dependents were built on something that changed.
+    const supersede = (oldId, newId) => {
+      this.db.prepare("UPDATE findings SET status = 'superseded', superseded_by = ?, suspect_since = '', updated_at = ? WHERE id = ?").run(newId, ts, oldId);
+      for (const s of this._cascade(oldId, `#${oldId} was superseded by #${newId}`, ts)) suspected.add(s);
+    };
+    const done = (outcome, id, extra = {}) => {
+      // the frog rule runs last, so the rows this finding just replaced are already settled
+      if (impact === 'high' && id != null) for (const s of this._impactSweep(id, subject, P, ts)) suspected.add(s);
+      return { index, outcome, id, ...extra, ...(suspected.size ? { suspected: [...suspected] } : {}), ...(warn.length ? { warnings: warn } : {}) };
+    };
+
+    // 1. exact: the same canonical claim about the same subject is already known.
+    //    A fresh report of a SUSPECT finding is an independent re-check — it
+    //    confirms it (re-anchored to the files as they are now).
+    const dup = this.db.prepare(`SELECT * FROM findings WHERE project_id = ? AND claim_hash = ? AND ${LIVE} ORDER BY status = 'active' DESC, id LIMIT 1`).get(P, hash);
+    if (dup) {
+      this._linkDeps(dup.id, deps, ts);
+      if (dup.status === 'suspect') { this._confirm(dup.id, `re-reported${source ? ` by ${source}` : ''}`, ts); return merge(dup, 'confirmed'); }
+      return merge(dup, 'duplicate');
+    }
+
+    // 2. explicit: the reporter names the finding this one corrects
+    if (raw.supersedes != null) {
+      const old = this.db.prepare('SELECT id, status, project_id FROM findings WHERE id = ?').get(Number(raw.supersedes));
+      if (!old || old.project_id !== P) warn.push(`supersedes #${raw.supersedes} ignored: no such finding in this project`);
+      else if (!['active', 'suspect'].includes(old.status)) warn.push(`supersedes #${raw.supersedes} ignored: it is already ${old.status}`);
+      else { const id = insert(); supersede(old.id, id); return done('superseded', id, { superseded: [old.id] }); }
+    }
+
+    // 3. slot: a single-valued aspect of the subject — the newest report wins, history kept
+    if (R.slots && slot && subject) {
+      const olds = this.db.prepare(`SELECT id FROM findings WHERE project_id = ? AND subject = ? AND slot = ? AND ${LIVE}`).all(P, subject, slot);
+      if (olds.length) {
+        // Revert guard: arrival order is not truth. A report that re-asserts a
+        // value this slot ALREADY moved past is most likely stale (an agent read
+        // old docs), so it must not overwrite the current value. Flag it for
+        // review instead. A genuine revert still lands, as a visible conflict.
+        if (R.revert) {
+          const past = this.db.prepare("SELECT id, claim, claim_hash FROM findings WHERE project_id = ? AND subject = ? AND slot = ? AND status = 'superseded'")
+            .all(P, subject, slot).find((p) => {
+              if (p.claim_hash === hash) return true;
+              const pt = claimTokens(p.claim);
+              return sameSet(pt.numbers, tok.numbers) && pt.negative === tok.negative && jaccard(pt.content, tok.content) >= threshold;
+            });
+          if (past) {
+            const ids = olds.map((o) => o.id), id = insert(ids);
+            for (const o of ids) {
+              const row = this.db.prepare('SELECT conflicts_with FROM findings WHERE id = ?').get(o);
+              this.db.prepare('UPDATE findings SET conflicts_with = ?, updated_at = ? WHERE id = ?')
+                .run(JSON.stringify([...new Set([...parseArr(row.conflicts_with), id])]), ts, o);
+            }
+            return done('conflict', id, { conflicts_with: ids, reason: `re-asserts superseded finding #${past.id} — possibly a stale report` });
+          }
+        }
+        const id = insert();
+        for (const o of olds) supersede(o.id, id);
+        return done('superseded', id, { superseded: olds.map((o) => o.id) });
+      }
+    }
+
+    // 4. near: a paraphrase of something known about this subject. With guards on,
+    //    "similar words but different numbers or opposite polarity" is a
+    //    CONFLICT (both kept, cross-linked) — never a merge.
+    if (R.near) {
+      const cands = this.db.prepare(`SELECT * FROM findings WHERE project_id = ? AND subject = ? AND kind = ? AND ${LIVE}
+        ORDER BY id DESC LIMIT 500`).all(P, subject, kind);
+      let best = null;
+      for (const c of cands) {
+        const ct = claimTokens(c.claim), s = jaccard(tok.content, ct.content);
+        if (R.subst && isSubstitution(tok.content, ct.content)) continue; // swapped words: a different fact
+        if (s >= threshold && (!best || s > best.s)) best = { c, ct, s };
+      }
+      if (best) {
+        const similarity = Math.round(best.s * 100) / 100;
+        const agrees = !R.guards || (sameSet(tok.numbers, best.ct.numbers) && tok.negative === best.ct.negative);
+        if (agrees) return merge(best.c, 'near_duplicate', { similarity });
+        const id = insert([best.c.id]);
+        const cw = [...new Set([...parseArr(best.c.conflicts_with), id])];
+        this.db.prepare('UPDATE findings SET conflicts_with = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(cw), ts, best.c.id);
+        return done('conflict', id, { conflicts_with: [best.c.id], similarity });
+      }
+    }
+
+    // 5. genuinely new
+    return done('created', insert());
+  }
+
+  retractFinding(id, reason = '') {
+    const r = this.db.prepare('SELECT id FROM findings WHERE id = ?').get(id);
+    if (!r) throw new Error(`no finding with id ${id}`);
+    const why = String(reason ?? '').trim();
+    if (!why) throw new Error('a reason is required to retract a finding');
+    const prev = this.db.prepare('SELECT status FROM findings WHERE id = ?').get(id).status;
+    let suspected = [];
+    this._tx(() => {
+      const ts = now();
+      this.db.prepare("UPDATE findings SET status = 'retracted', note = ?, suspect_since = '', updated_at = ? WHERE id = ?").run(why.slice(0, 500), ts, id);
+      this._event(id, 'retracted', { detail: why }, ts);
+      if (prev === 'active' || prev === 'suspect') suspected = this._cascade(id, `#${id} was retracted: ${why}`.slice(0, 500), ts);
+    });
+    return { ...this.getFinding(id), suspected };
+  }
+
+  // Browse/search findings. `subject` is a prefix ("src/db.mjs" also matches
+  // "src/db.mjs#recall"); `query` ranks with the ledger's shared lexical ranker.
+  // status 'any' includes superseded + retracted (the full history); 'live' =
+  // active + suspect (what the brain holds now, suspect ones to be flagged).
+  queryFindings({ subject = '', kind = '', status = 'active', query = '', limit = 20, all = false, plan_id = null } = {}) {
+    if (status !== 'any' && status !== 'live' && !FINDING_STATUS.has(status)) throw new Error(`bad status "${status}" (active|suspect|live|superseded|retracted|any)`);
+    if (kind && !FINDING_KINDS.has(kind)) throw new Error(`bad kind "${kind}"`);
+    const where = [], args = [];
+    if (!all) { where.push('project_id = ?'); args.push(this._findingScope({ plan_id }).project_id); }
+    if (status === 'live') where.push(LIVE);
+    else if (status !== 'any') { where.push('status = ?'); args.push(status); }
+    if (kind) { where.push('kind = ?'); args.push(kind); }
+    if (subject) { where.push("subject LIKE ? ESCAPE '\\'"); args.push(normSubject(subject).replace(/[\\%_]/g, '\\$&') + '%'); }
+    const rows = this.db.prepare(`SELECT * FROM findings ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+      ORDER BY id DESC LIMIT 5000`).all(...args);
+    const cap = Math.max(1, Math.min(Number(limit) || 20, 200));
+    const q = [...new Set(tokenize(query))];
+    if (!q.length) return rows.slice(0, cap).map((r) => this._findingRow(r));
+    return idfRank(rows.map((r) => ({ doc: r, toks: new Set(tokenize(`${r.subject} ${r.claim}`)) })), q, cap)
+      .map((x) => ({ ...this._findingRow(x.doc), score: Math.round(x.score * 100) / 100 }));
   }
 
   // ---- prior-plan discovery (planning preflight) -------------------------
@@ -3682,6 +4505,93 @@ export class Store {
     if (step_id != null) rows = rows.filter((r) => r.step_id === Number(step_id));
     const capped = rows.slice(0, Math.max(1, Number(limit) || 100));
     return capped.map((r) => this._activityRow(r, { stale_after_ms, include_events, events_limit }));
+  }
+
+  // ---- graph views (the board's Graph explorer) ------------------------------
+  // Read-only node/edge projections for visual navigation. Ids are namespaced
+  // ('f:12' finding, 'file:<path>', 'dir:<path>', 's:34' step, 'p:5' plan,
+  // 'c:<node_id>' code) so one canvas can mix kinds.
+
+  // The brain: findings + the files/dirs/findings they rest on + the step each was
+  // learned in. status 'live' (default) = active + suspect; 'any' adds history
+  // (superseded/retracted, with supersede edges).
+  brainGraph({ project_id = null, status = 'live', limit = 600 } = {}) {
+    const P = project_id ?? this.currentProjectId();
+    const statusSql = status === 'any' ? '' : status === 'live' ? `AND ${LIVE}` : 'AND status = ?';
+    const rows = this.db.prepare(`SELECT * FROM findings WHERE project_id = ? ${statusSql} ORDER BY id DESC LIMIT ?`)
+      .all(...[P, ...(status !== 'any' && status !== 'live' ? [status] : []), Math.max(1, Math.min(Number(limit) || 600, 2000))]);
+    const root = this.getProjectRoot(P);
+    const rel = (p) => (root && p.startsWith(root + '/') ? p.slice(root.length + 1) : p);
+    const nodes = new Map(), edges = [];
+    const add = (n) => { if (!nodes.has(n.id)) nodes.set(n.id, n); return n.id; };
+    const ids = new Set(rows.map((r) => r.id));
+    for (const r of rows) {
+      const conflicts = this._liveConflicts(r.conflicts_with);
+      add({ id: `f:${r.id}`, type: 'finding', fid: r.id, kind: r.kind, label: r.subject || r.kind, claim: r.claim,
+        status: r.status === 'active' && conflicts.length ? 'conflict' : r.status, seen: r.seen_count, step_id: r.step_id, impact: r.impact });
+      for (const c of conflicts) if (ids.has(Number(c)) && r.id < Number(c)) edges.push({ from: `f:${r.id}`, to: `f:${c}`, type: 'conflict' });
+      if (r.superseded_by && ids.has(r.superseded_by)) edges.push({ from: `f:${r.id}`, to: `f:${r.superseded_by}`, type: 'superseded_by' });
+    }
+    const deps = rows.length ? this.db.prepare(`SELECT finding_id, dep_type, dep_ref, inferred FROM finding_deps WHERE finding_id IN (${rows.map(() => '?').join(',')})`)
+      .all(...rows.map((r) => r.id)) : [];
+    for (const d of deps) {
+      if (d.dep_type === 'finding') {
+        if (ids.has(Number(d.dep_ref))) edges.push({ from: `f:${d.finding_id}`, to: `f:${d.dep_ref}`, type: 'depends_on', inferred: !!d.inferred });
+      } else {
+        const id = add({ id: `${d.dep_type}:${d.dep_ref}`, type: d.dep_type, label: rel(d.dep_ref).split('/').pop() || rel(d.dep_ref), path: rel(d.dep_ref) });
+        edges.push({ from: `f:${d.finding_id}`, to: id, type: d.dep_type === 'dir' ? 'in_dir' : 'rests_on' });
+      }
+    }
+    const stepIds = [...new Set(rows.map((r) => r.step_id).filter(Boolean))];
+    if (stepIds.length) for (const s of this.db.prepare(`SELECT id, plan_id, idx, title, status FROM steps WHERE id IN (${stepIds.map(() => '?').join(',')})`).all(...stepIds))
+      add({ id: `s:${s.id}`, type: 'step', sid: s.id, plan_id: s.plan_id, label: s.title, status: s.status });
+    for (const r of rows) if (r.step_id && nodes.has(`s:${r.step_id}`)) edges.push({ from: `f:${r.id}`, to: `s:${r.step_id}`, type: 'learned_in' });
+    const counts = {};
+    for (const n of nodes.values()) if (n.type === 'finding') counts[n.status] = (counts[n.status] || 0) + 1;
+    return { kind: 'brain', project_id: P, root, nodes: [...nodes.values()], edges, counts };
+  }
+
+  // A plan's steps and the links between them (builds_on/blocks/references,
+  // incl. links to other plans) plus the idx sequence as faint 'next' edges.
+  planStepGraph(planId) {
+    this._mustPlan(planId);
+    const steps = this.db.prepare('SELECT id, idx, title, status, role FROM steps WHERE plan_id = ? ORDER BY idx, id').all(planId);
+    const nodes = steps.map((s) => ({ id: `s:${s.id}`, type: 'step', sid: s.id, plan_id: planId, idx: s.idx, label: `${s.idx}. ${s.title}`, status: s.status, role: s.role }));
+    const edges = [];
+    for (let i = 1; i < steps.length; i++) edges.push({ from: `s:${steps[i - 1].id}`, to: `s:${steps[i].id}`, type: 'next' });
+    const ids = new Set(steps.map((s) => s.id)), extra = new Map();
+    const links = steps.length ? this.db.prepare(`SELECT from_step_id, to_step_id, to_plan_id, relation FROM links WHERE from_step_id IN (${steps.map(() => '?').join(',')})`)
+      .all(...steps.map((s) => s.id)) : [];
+    for (const l of links) {
+      if (l.to_step_id) {
+        if (!ids.has(l.to_step_id) && !extra.has(`s:${l.to_step_id}`)) {
+          const t = this.db.prepare('SELECT id, plan_id, idx, title, status FROM steps WHERE id = ?').get(l.to_step_id);
+          if (t) extra.set(`s:${t.id}`, { id: `s:${t.id}`, type: 'step', sid: t.id, plan_id: t.plan_id, label: `#${t.plan_id}·${t.idx}. ${t.title}`, status: t.status, external: true });
+        }
+        edges.push({ from: `s:${l.from_step_id}`, to: `s:${l.to_step_id}`, type: l.relation });
+      } else if (l.to_plan_id) {
+        if (!extra.has(`p:${l.to_plan_id}`)) {
+          const p = this.db.prepare('SELECT id, title, status FROM plans WHERE id = ?').get(l.to_plan_id);
+          if (p) extra.set(`p:${p.id}`, { id: `p:${p.id}`, type: 'plan', pid: p.id, label: `plan #${p.id} ${p.title}`, status: p.status, external: true });
+        }
+        edges.push({ from: `s:${l.from_step_id}`, to: `p:${l.to_plan_id}`, type: l.relation });
+      }
+    }
+    return { kind: 'steps', plan_id: planId, nodes: [...nodes, ...extra.values()], edges };
+  }
+
+  // A plan's code graph (graphify / native extractor), trimmed to the highest-degree
+  // nodes so the canvas stays navigable; edges only among the kept nodes.
+  codeGraph(planId, { limit = 250 } = {}) {
+    this._mustPlan(planId);
+    const cap = Math.max(10, Math.min(Number(limit) || 250, 1500));
+    const rows = this.db.prepare('SELECT node_id, label, kind, source_file, source_location, community, degree FROM graph_nodes WHERE plan_id = ? ORDER BY degree DESC, node_id LIMIT ?').all(planId, cap);
+    const keep = new Set(rows.map((r) => r.node_id));
+    const edges = this.db.prepare('SELECT src, tgt, relation, confidence FROM graph_edges WHERE plan_id = ?').all(planId)
+      .filter((e) => keep.has(e.src) && keep.has(e.tgt)).map((e) => ({ from: `c:${e.src}`, to: `c:${e.tgt}`, type: e.relation, inferred: e.confidence !== 'EXTRACTED' }));
+    const total = this.db.prepare('SELECT COUNT(*) n FROM graph_nodes WHERE plan_id = ?').get(planId).n;
+    return { kind: 'code', plan_id: planId, total, nodes: rows.map((r) => ({ id: `c:${r.node_id}`, type: 'code', label: r.label, kind: r.kind,
+      path: r.source_file, loc: r.source_location, community: r.community, degree: r.degree })), edges };
   }
 
   // Cheap "what's happening now" snapshot for the board's Live mode. `rev` changes

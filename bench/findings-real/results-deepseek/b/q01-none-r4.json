@@ -1,0 +1,20 @@
+{
+  "phase": "b",
+  "tag": "q01-none-r4",
+  "model": "deepseek-v4-pro",
+  "is_error": false,
+  "subtype": "success",
+  "result": "The property name is `all_blocked`.\n\nANSWER: all_blocked",
+  "cost": 0.001131856,
+  "turns": 3,
+  "tin": 3911,
+  "tout": 137,
+  "cache_hit": 3584,
+  "cache_miss": 327,
+  "tool_calls": 2,
+  "peak": true,
+  "exit": 0,
+  "stderr": "",
+  "duration_ms": 4179,
+  "prompt": "Answer this question about the codebase in the current directory (plan-ledger, a Node.js app).\nYou may read files. Do not modify anything.\n\nQuestion: When every remaining step of a plan is blocked, what property name does Store.nextStep put on the object it returns to signal that? Give the exact property name.\n\nBe precise. The FINAL LINE of your output MUST be exactly:\nANSWER: <your answer>"
+}

@@ -1,0 +1,20 @@
+{
+  "phase": "h3b-pilot",
+  "tag": "h03-none-r1",
+  "model": "deepseek-v4-pro",
+  "is_error": false,
+  "subtype": "success",
+  "result": "The code at line 417 adds a 2-minute buffer past the reset time.\n\nANSWER: 2",
+  "cost": 0.00349668,
+  "turns": 3,
+  "tin": 3968,
+  "tout": 179,
+  "cache_hit": 1920,
+  "cache_miss": 2048,
+  "tool_calls": 3,
+  "peak": true,
+  "exit": 0,
+  "stderr": "",
+  "duration_ms": 4754,
+  "prompt": "Answer this question about the codebase in the current directory (plan-ledger, a Node.js app).\nYou may read files. Do not modify anything.\n\nQuestion: In the orchestrator runner, a usage-limit error message says the limit 'resets at 3pm' and the runner parses that time. How many minutes after 3pm will the runner wake up to retry?\n\nBe precise. The FINAL LINE of your output MUST be exactly:\nANSWER: <your answer>"
+}

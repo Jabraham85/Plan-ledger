@@ -221,7 +221,12 @@ tool('next_step', {
       `a failed approach), dispatch policy selected "${dispatchRole || 'orchestrator'}" (${policy.selection_mode})` +
       `${policy.warnings?.length ? ` with warnings: ${policy.warnings.join(' | ')}` : ''}; ${dispatch}` +
       `then record_attempt(${step.id}, ...) noting the role + review rounds. After ` +
-      `that, call next_step(${plan_id}) again — do not end your turn while workable steps remain.`,
+      `that, call next_step(${plan_id}) again — do not end your turn while workable steps remain.` +
+      (step.brain?.length
+        ? ` BRAIN: \`brain\` holds ${step.brain.length} recorded fact(s) about this step's code — put them in the brief ` +
+          `(verify any marked suspect/conflict before relying on it). When the step teaches durable truths, ` +
+          `absorb_findings(step_id: ${step.id}, …) with subject + evidence (path:line), and depends_on the brain ids you relied on.`
+        : ` When the step teaches durable truths, absorb_findings(step_id: ${step.id}, …) with subject + evidence (path:line).`),
   };
 });
 
@@ -980,6 +985,116 @@ tool('recall', {
   },
 }, ({ query, limit, all }) => store.recall(query, limit ?? 8, all));
 
+// ---- findings: the brain's write-back channel (plan #134) -----------------
+
+const FINDING_ITEM = z.object({
+  claim: z.string().describe('ONE atomic truth, stated so it is still true tomorrow — e.g. "recall() only returns ACTIVE findings". Not a diary of actions.'),
+  kind: z.enum(['fact', 'decision', 'lesson', 'failure', 'warning']).optional().describe('default fact'),
+  subject: z.string().optional().describe('what it is about, as a stable anchor: a path, path#symbol, config key, or topic (e.g. "src/db.mjs#recall", "config.yaml#context"). Dedup and correction are scoped by subject — always set it.'),
+  slot: z.string().optional().describe('for a single-valued aspect of the subject (a setting, a version, a default): a newer finding with the same subject+slot SUPERSEDES the old one'),
+  evidence: z.union([z.string(), z.array(z.string())]).optional().describe('where it was verified: file:line, command, test name, URL'),
+  supersedes: z.number().int().optional().describe('id of an existing finding this one corrects'),
+  depends_on: z.array(z.number().int()).optional().describe('ids of findings this one was BUILT ON (e.g. from your brief). If any of them later changes, this one is re-opened for re-evaluation.'),
+  files: z.array(z.string()).optional().describe('source files this truth rests on (relative to root). Paths in subject/evidence are linked automatically; if a linked file changes, the finding turns suspect.'),
+  impact: z.enum(['normal', 'high']).optional().describe('high = changes what everything about this subject means (e.g. "the princess is a frog"): every finding on or naming the subject is re-opened for re-evaluation. Use rarely.'),
+});
+
+tool('absorb_findings', {
+  title: 'Absorb findings into the brain (dedup, no model calls)',
+  description:
+    'Write back what you LEARNED — durable, evidenced, subject-anchored truths — so later work is briefed with it. ' +
+    'Each item is deduplicated against what the project already knows: identical or paraphrased claims merge ' +
+    '(evidence added, seen_count bumped); similar claims with different numbers or opposite polarity are kept as a ' +
+    'CONFLICT for review, never silently merged; a same subject+slot value supersedes the old one. Nothing is deleted. ' +
+    'Per-item outcome: created | duplicate | near_duplicate | superseded | conflict | confirmed | rejected. Use dry_run to preview. ' +
+    'Truth maintenance: when a finding is superseded or retracted, the findings built on it (depends_on) turn SUSPECT and are ' +
+    'listed in "suspected"; re-reporting a suspect finding verbatim confirms it.',
+  inputSchema: {
+    findings: z.array(FINDING_ITEM).max(200),
+    plan_id: z.number().int().optional().describe('provenance + project scope (default: current project)'),
+    step_id: z.number().int().optional().describe('provenance; implies its plan and project'),
+    source: z.string().max(120).optional().describe('who learned it, e.g. "runner:implementer" or "chat"'),
+    dry_run: z.boolean().optional().describe('report outcomes without writing'),
+    root: z.string().optional().describe('absolute project directory that relative file paths resolve against (enables file staleness checks); defaults to the project root set with set_project_root'),
+    briefed: z.array(z.number().int()).optional().describe('ids of findings you were shown before doing the work; related ones are linked as dependencies'),
+  },
+}, ({ findings, ...opts }) => store.absorbFindings(findings, opts));
+
+tool('query_findings', {
+  title: 'Query findings',
+  description:
+    'Browse or search the brain\'s findings. `subject` is a prefix ("src/db.mjs" also matches "src/db.mjs#recall"); ' +
+    '`query` ranks lexically. Default shows ACTIVE findings in the current project; "live" adds SUSPECT ones (something ' +
+    'they were built on changed — verify before relying); "any" includes the superseded and retracted history. ' +
+    'Findings with a non-empty conflicts_with disagree with another finding.',
+  inputSchema: {
+    subject: z.string().optional(),
+    kind: z.enum(['fact', 'decision', 'lesson', 'failure', 'warning']).optional(),
+    status: z.enum(['active', 'suspect', 'live', 'superseded', 'retracted', 'any']).optional(),
+    query: z.string().optional(),
+    limit: z.number().int().positive().max(200).optional(),
+    plan_id: z.number().int().optional().describe('scope to this plan\'s project'),
+    all: z.boolean().optional().describe('search across ALL projects'),
+  },
+}, (args) => store.queryFindings(args));
+
+tool('retract_finding', {
+  title: 'Retract a finding',
+  description: 'Mark a finding as wrong (it stays in history with your reason, and stops being recalled). ' +
+    'To REPLACE a finding with a corrected one, absorb the new one with `supersedes` instead.',
+  inputSchema: {
+    finding_id: z.number().int(),
+    reason: z.string().describe('why it is wrong — required'),
+  },
+}, ({ finding_id, reason }) => store.retractFinding(finding_id, reason));
+
+tool('set_project_root', {
+  title: 'Set where a project\'s source lives',
+  description: 'Record the absolute directory of a project\'s source tree. Findings absorbed without an explicit root ' +
+    'then link to the files in their subject/evidence automatically, so the brain notices when that code changes ' +
+    '(check_stale) and next_step briefs them as SUSPECT until re-checked. Pass an empty root to clear it.',
+  inputSchema: {
+    project_id: z.number().int().optional().describe('default: the current project'),
+    root: z.string().describe('absolute path, e.g. C:/Users/me/Documents/MyGame'),
+  },
+}, ({ project_id, root }) => store.setProjectRoot(project_id ?? store.currentProjectId(), root));
+
+tool('check_stale', {
+  title: 'Check findings against their source files',
+  description: 'Re-hash every source file an active finding was built on. Findings whose file changed or vanished turn SUSPECT ' +
+    '(re-evaluate them with suspect_findings + resolve_finding). Deterministic, no model calls. Run before briefing from the brain.',
+  inputSchema: {
+    project_id: z.number().int().optional(),
+    all: z.boolean().optional().describe('check every project'),
+  },
+}, (args) => store.checkStale(args));
+
+tool('suspect_findings', {
+  title: 'List findings that need re-evaluation',
+  description: 'The re-evaluation queue: SUSPECT findings with WHY (the changed file, or the finding that was revised/retracted/' +
+    'added with high impact — with its current value). Check each against the source, then call resolve_finding.',
+  inputSchema: {
+    limit: z.number().int().positive().max(200).optional(),
+    plan_id: z.number().int().optional(),
+    all: z.boolean().optional(),
+  },
+}, (args) => store.suspectQueue(args));
+
+tool('resolve_finding', {
+  title: 'Resolve (re-evaluate or edit) a finding',
+  description: 'Settle a finding after checking it: "confirmed" (still true → active, re-anchored to current files), "revised" ' +
+    '(replace with `claim`; history kept), "retracted" (no longer true), "unsure" (stays suspect, reason logged). ' +
+    'Revising or retracting re-opens the findings built on it (returned as "suspected") — re-evaluate those next. ' +
+    'Also the way to EDIT a live finding: verdict "revised" with the new claim.',
+  inputSchema: {
+    finding_id: z.number().int(),
+    verdict: z.enum(['confirmed', 'revised', 'retracted', 'unsure']),
+    claim: z.string().optional().describe('the corrected claim (required for revised)'),
+    reason: z.string().optional().describe('what you checked / why'),
+    evidence: z.array(z.string()).optional(),
+    source: z.string().max(120).optional(),
+  },
+}, ({ finding_id, ...opts }) => store.resolveFinding(finding_id, opts));
 tool('planner_start', {
   title: 'Planning preflight: discover relevant prior plans',
   description:

@@ -60,6 +60,9 @@ Operational fields: `plan_id`, `step_id`, `run_id`, `session_ref`, `role`, `agen
 - You're continuing work → `list_plans` to orient, `open_plan` the relevant one, then work it.
 - Mid-task you learn something the *next* step needs → `write_carry_forward` into that step.
   This is how context survives a reset: write it forward, don't hold it in your head.
+- You learn a **durable truth** any future work should know (how the code behaves, a decision, a
+  pitfall) → `absorb_findings`. Carry-forward is for the next step; findings are for the project.
+  `recall` and every future brief surface them. See `docs/FINDINGS.md`.
 
 ## Approval boundary
 
@@ -153,7 +156,8 @@ Never enter this loop for a `draft` plan. Present it and wait for approval first
    a `what_tried` specific enough that "don't repeat this" is actionable, plus a `layman` param:
    a plain-English "what was done + thoughts" summary in basic terms for a human skimmer (distinct
    from `what_tried`) — every dispatched step gets one. `pass` finishes the step; `fail`/`partial`
-   keeps it open and remembered.
+   keeps it open and remembered. If the step taught durable truths, `absorb_findings` them too
+   (subject + evidence each; `slot` for settings, `supersedes` to correct) — it dedups for you.
 6. `write_carry_forward` anything the next step needs; `link_items` with relation `builds_on`
    when a step depends on earlier work. Then loop to 1, or stop if the user wanted a single
    step. Working-loop tool results carry a `directive` — follow it; don't end your turn while

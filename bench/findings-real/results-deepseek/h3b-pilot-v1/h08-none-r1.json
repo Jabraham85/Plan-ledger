@@ -1,0 +1,20 @@
+{
+  "phase": "h3b-pilot",
+  "tag": "h08-none-r1",
+  "model": "deepseek-v4-pro",
+  "is_error": false,
+  "subtype": "success",
+  "result": "ANSWER: index 4, Security (Certificate Table)",
+  "cost": 0.0013822160000000001,
+  "turns": 2,
+  "tin": 1857,
+  "tout": 60,
+  "cache_hit": 1024,
+  "cache_miss": 833,
+  "tool_calls": 1,
+  "peak": true,
+  "exit": 0,
+  "stderr": "",
+  "duration_ms": 2951,
+  "prompt": "Answer this question about the codebase in the current directory (plan-ledger, a Node.js app).\nYou may read files. Do not modify anything.\n\nQuestion: The exe build strips the Authenticode signature with scripts/strip-signature.mjs. Which PE data-directory INDEX does it zero, and what is that directory called in the script's comment? Give the index number and the name.\n\nBe precise. The FINAL LINE of your output MUST be exactly:\nANSWER: <your answer>"
+}

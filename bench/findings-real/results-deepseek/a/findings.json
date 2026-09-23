@@ -1,0 +1,1172 @@
+[
+  {
+    "agent": "t1-r1",
+    "topic": "t1",
+    "rep": 1,
+    "is_error": false,
+    "parse_error": null,
+    "findings": [
+      {
+        "id": "t1-r1-1",
+        "kind": "fact",
+        "subject": "src/db.mjs#Store.nextStep",
+        "claim": "nextStep selects the lowest-idx step whose status is not done/skipped/blocked and whose builds_on/blocks dependencies are all done/skipped; it returns null when no steps remain, {all_blocked:true} when only blocked/dependency-waiting steps remain, or a full step object otherwise",
+        "evidence": "src/db.mjs:704-740"
+      },
+      {
+        "id": "t1-r1-2",
+        "kind": "fact",
+        "subject": "src/db.mjs#Store._unmetDeps",
+        "claim": "A step's dependency gate only considers outbound links with relation builds_on or blocks that point to a step (to_step_id) whose status is not done/skipped; plan-level links (to_plan_id only) are ignored and never gate a step",
+        "evidence": "src/db.mjs:696-701"
+      },
+      {
+        "id": "t1-r1-3",
+        "kind": "fact",
+        "subject": "src/db.mjs#Store.nextStep",
+        "claim": "Blocked steps and dependency-waiting steps are both skipped and reported in skipped_blocked_steps with a reason of 'blocked' or 'dependency' (the latter carrying waiting_on_step_ids), but only for steps with idx lower than the chosen workable step",
+        "evidence": "src/db.mjs:714-738"
+      },
+      {
+        "id": "t1-r1-4",
+        "kind": "fact",
+        "subject": "src/db.mjs#Store.readySteps",
+        "claim": "readySteps returns every pending, non-blocked step whose deps are satisfied (not just the lowest-idx one), using the same _depsSatisfied gate as nextStep so the two agree by construction",
+        "evidence": "src/db.mjs:747-757"
+      },
+      {
+        "id": "t1-r1-5",
+        "kind": "fact",
+        "subject": "src/db.mjs#Store.recordAttempt",
+        "claim": "A passing attempt sets the step to done and a failing attempt sets it to failed (still retryable, not blocked); blocked is only set explicitly via setStepStatus",
+        "evidence": "src/db.mjs:672-675"
+      },
+      {
+        "id": "t1-r1-6",
+        "kind": "fact",
+        "subject": "src/db.mjs#Store.nextPlan",
+        "claim": "nextPlan skips plans with status done/abandoned/blocked and returns the oldest plan whose nextStep yields a workable step (not all_blocked), so blocked plans and all-blocked plans are both bypassed",
+        "evidence": "src/db.mjs:466-479"
+      },
+      {
+        "id": "t1-r1-7",
+        "kind": "fact",
+        "subject": "src/server.mjs#next_step tool",
+        "claim": "The next_step tool maps nextStep's three shapes to directives: null → set_plan_status done + next_plan; all_blocked → set_plan_status blocked + next_plan; a step → set_step_status in_progress, work, record_attempt, then call next_step again",
+        "evidence": "src/server.mjs:140-181"
+      },
+      {
+        "id": "t1-r1-8",
+        "kind": "fact",
+        "subject": "src/server.mjs#set_step_status tool",
+        "claim": "Setting a step to blocked returns a directive to write_carry_forward the unblock note then call next_step, since blocked steps are skipped by nextStep",
+        "evidence": "src/server.mjs:718-722"
+      }
+    ]
+  },
+  {
+    "agent": "t2-r1",
+    "topic": "t2",
+    "rep": 1,
+    "is_error": false,
+    "parse_error": null,
+    "findings": [
+      {
+        "id": "t2-r1-1",
+        "kind": "fact",
+        "subject": "scripts/runner.mjs#maxAttempts",
+        "claim": "Per-step spawn cap defaults to 2 and is set via --max-attempts; a step is paused for a human when the spawn counter exceeds it",
+        "evidence": "scripts/runner.mjs:90,324"
+      },
+      {
+        "id": "t2-r1-2",
+        "kind": "fact",
+        "subject": "scripts/runner.mjs#spawns",
+        "claim": "The per-step attempt counter is a local Map keyed by step.id, reset each workPlan call, so it only counts spawns within the current run (not DB attempts)",
+        "evidence": "scripts/runner.mjs:314,322-323"
+      },
+      {
+        "id": "t2-r1-3",
+        "kind": "fact",
+        "subject": "scripts/runner.mjs#retryOnLimit",
+        "claim": "Usage/rate-limit retry is opt-in via --retry-on-limit; without it a limit stop breaks the loop immediately",
+        "evidence": "scripts/runner.mjs:94,489"
+      },
+      {
+        "id": "t2-r1-4",
+        "kind": "fact",
+        "subject": "scripts/runner.mjs#maxRetries",
+        "claim": "Retry safety cap defaults to 48 retries (--max-retries), and sleep interval defaults to 30 minutes (--retry-minutes), ~24h total",
+        "evidence": "scripts/runner.mjs:95-96"
+      },
+      {
+        "id": "t2-r1-5",
+        "kind": "fact",
+        "subject": "scripts/runner.mjs#budgetOrLimitStop",
+        "claim": "A limit stop is detected only from structured signals (HTTP 429, stop_reason, or free-text result when isError); a successful agent merely mentioning 'rate limit' does not stop the run",
+        "evidence": "scripts/runner.mjs:290-301"
+      },
+      {
+        "id": "t2-r1-6",
+        "kind": "fact",
+        "subject": "scripts/runner.mjs#msUntilReset",
+        "claim": "When the limit message names a reset time, the runner sleeps until just past it (2-min buffer) instead of the fixed cadence, sanity-capped at 12h",
+        "evidence": "scripts/runner.mjs:408-419"
+      },
+      {
+        "id": "t2-r1-7",
+        "kind": "fact",
+        "subject": "scripts/runner.mjs#budgetUsd",
+        "claim": "--budget is a per-agent USD cap passed to claude as --max-budget-usd, distinct from the whole-run --max-total-usd ceiling",
+        "evidence": "scripts/runner.mjs:100,239,279"
+      },
+      {
+        "id": "t2-r1-8",
+        "kind": "fact",
+        "subject": "scripts/runner.mjs#stopKind",
+        "claim": "Only stopKind==='limit' is retryable; a 'budget' stop (spend ceiling) breaks the loop even with --retry-on-limit",
+        "evidence": "scripts/runner.mjs:489"
+      }
+    ]
+  },
+  {
+    "agent": "t3-r1",
+    "topic": "t3",
+    "rep": 1,
+    "is_error": false,
+    "parse_error": null,
+    "findings": [
+      {
+        "id": "t3-r1-1",
+        "kind": "fact",
+        "subject": "src/db.mjs#defaultDbPath",
+        "claim": "defaultDbPath() returns process.env.PLAN_LEDGER_DB if set, else join(homedir(), 'Documents', 'plan-ledger', 'data', 'plan-ledger.db')",
+        "evidence": "src/db.mjs:21-24"
+      },
+      {
+        "id": "t3-r1-2",
+        "kind": "fact",
+        "subject": "config key PLAN_LEDGER_DB",
+        "claim": "PLAN_LEDGER_DB env var overrides the default DB location and is the single shared override for every entry point",
+        "evidence": "src/db.mjs:17-23"
+      },
+      {
+        "id": "t3-r1-3",
+        "kind": "fact",
+        "subject": "src/db.mjs#defaultDbPath",
+        "claim": "The default path is deliberately NOT import.meta-relative because import.meta is undefined inside the packaged SEA exe",
+        "evidence": "src/db.mjs:19-20"
+      },
+      {
+        "id": "t3-r1-4",
+        "kind": "fact",
+        "subject": "src/db.mjs#Store constructor",
+        "claim": "Store constructor mkdirSync(dirname(dbPath), {recursive:true}) for any path except ':memory:', then opens DatabaseSync(dbPath)",
+        "evidence": "src/db.mjs:336-338"
+      },
+      {
+        "id": "t3-r1-5",
+        "kind": "fact",
+        "subject": "src/db.mjs#Store constructor",
+        "claim": "Store sets PRAGMA journal_mode=WAL, foreign_keys=ON, busy_timeout=3000, journal_size_limit=4194304, then executes SCHEMA and _migrate()",
+        "evidence": "src/db.mjs:339-344"
+      },
+      {
+        "id": "t3-r1-6",
+        "kind": "fact",
+        "subject": "src/db.mjs#Store constructor",
+        "claim": "Store supports an in-memory database via the ':memory:' path, which skips mkdirSync",
+        "evidence": "src/db.mjs:337"
+      },
+      {
+        "id": "t3-r1-7",
+        "kind": "fact",
+        "subject": "src/db.mjs#_migrate",
+        "claim": "_migrate() runs on every Store construction, backfilling project_id=1 and adding missing columns via PRAGMA table_info checks, then bumps PRAGMA user_version",
+        "evidence": "src/db.mjs:383-412"
+      },
+      {
+        "id": "t3-r1-8",
+        "kind": "warning",
+        "subject": "README.md#db location",
+        "claim": "README.md says the DB lives at ./data/plan-ledger.db, which contradicts the actual homedir default in defaultDbPath()",
+        "evidence": "README.md:93 vs src/db.mjs:23"
+      }
+    ]
+  },
+  {
+    "agent": "t4-r1",
+    "topic": "t4",
+    "rep": 1,
+    "is_error": false,
+    "parse_error": null,
+    "findings": [
+      {
+        "id": "t4-r1-1",
+        "kind": "fact",
+        "subject": "scripts/build-exe.mjs#build pipeline",
+        "claim": "The exe build bundles web/app.mjs with esbuild (platform node, format cjs, .html loader text) into build/board-bundle.cjs, then generates a SEA blob via `node --experimental-sea-config sea-config.json`",
+        "evidence": "scripts/build-exe.mjs:24-32"
+      },
+      {
+        "id": "t4-r1-2",
+        "kind": "failure",
+        "subject": "scripts/build-exe.mjs#sea-config.json",
+        "claim": "The build references sea-config.json but no such file exists anywhere in the repository, so step 2/5 (SEA blob generation) would fail",
+        "evidence": "scripts/build-exe.mjs:32; repo listing has no sea-config.json"
+      },
+      {
+        "id": "t4-r1-3",
+        "kind": "fact",
+        "subject": "scripts/build-exe.mjs#exe clone",
+        "claim": "On win32 the build first taskkills any running 'Plan Ledger.exe' (/F), then copies process.execPath to dist/Plan Ledger.exe, retrying up to 15 times with 350ms sleeps to handle the Windows file lock (EBUSY)",
+        "evidence": "scripts/build-exe.mjs:34-39"
+      },
+      {
+        "id": "t4-r1-4",
+        "kind": "fact",
+        "subject": "scripts/build-exe.mjs#sentinel fuse",
+        "claim": "The SEA sentinel fuse is auto-detected from the binary by locating the 'NODE_SEA_FUSE_' marker and reading trailing hex chars, rather than hardcoding the documented constant",
+        "evidence": "scripts/build-exe.mjs:44-52"
+      },
+      {
+        "id": "t4-r1-5",
+        "kind": "fact",
+        "subject": "scripts/strip-signature.mjs#signature strip",
+        "claim": "strip-signature.mjs removes the Authenticode signature in place by zeroing the Security data-directory entry, clearing the PE checksum, and truncating the file at the certificate offset",
+        "evidence": "scripts/strip-signature.mjs:23-30"
+      },
+      {
+        "id": "t4-r1-6",
+        "kind": "fact",
+        "subject": "scripts/build-exe.mjs#boot-test",
+        "claim": "The build boot-tests the real exe by spawning it with PLAN_LEDGER_WEB_PORT=4399 and PLAN_LEDGER_NO_OPEN=1, polling http://localhost:4399/api/plans up to 20×300ms, and exits 1 (fails the build) if it never serves",
+        "evidence": "scripts/build-exe.mjs:59-74"
+      },
+      {
+        "id": "t4-r1-7",
+        "kind": "fact",
+        "subject": "web/board.mjs#route",
+        "claim": "GET /api/plans is served by the board server and returns store.listPlans(), which is the endpoint the boot-test probes",
+        "evidence": "web/board.mjs:28"
+      },
+      {
+        "id": "t4-r1-8",
+        "kind": "fact",
+        "subject": "web/app.mjs#port slot",
+        "claim": "The packaged exe's default web port is 4319 (PLAN_LEDGER_WEB_PORT env override), overridden to 4399 only during the boot-test",
+        "evidence": "web/app.mjs:13; scripts/build-exe.mjs:60-61"
+      }
+    ]
+  },
+  {
+    "agent": "t5-r1",
+    "topic": "t5",
+    "rep": 1,
+    "is_error": false,
+    "parse_error": null,
+    "findings": [
+      {
+        "id": "t5-r1-1",
+        "kind": "fact",
+        "subject": "src/db.mjs#tokenize",
+        "claim": "tokenize lowercases, splits on non-[a-z0-9_], drops tokens of length <=2 and a STOP set, and is exported so the RAG ranker/expander tokenize identically to getLessons/recall",
+        "evidence": "src/db.mjs:224"
+      },
+      {
+        "id": "t5-r1-2",
+        "kind": "fact",
+        "subject": "src/db.mjs#idfRank",
+        "claim": "idfRank is a shared IDF-weighted lexical ranker: score = sum of idf(t) for query tokens present in the doc, idf(t)=log(1+N/df(t)), keeps score>0, sorts desc, caps at limit, with a tieBreak callback",
+        "evidence": "src/db.mjs:229-238"
+      },
+      {
+        "id": "t5-r1-3",
+        "kind": "fact",
+        "subject": "src/db.mjs#getLessons",
+        "claim": "getLessons ranks non-pass attempts across plans by IDF lexical match of terms (or a step's title+tools) against step_title+what_tried+result, excluding the step's own attempts and scoping to the current project unless all=true",
+        "evidence": "src/db.mjs:763-787"
+      },
+      {
+        "id": "t5-r1-4",
+        "kind": "fact",
+        "subject": "src/db.mjs#getLessons",
+        "claim": "getLessons tie-breaks equal scores by created_at descending (newest first) via (a,b)=>(a.created_at<b.created_at?1:-1)",
+        "evidence": "src/db.mjs:780"
+      },
+      {
+        "id": "t5-r1-5",
+        "kind": "fact",
+        "subject": "src/db.mjs#recall",
+        "claim": "recall builds docs from plans, steps, attempts, and active findings, tokenizes each doc's text, and ranks with the same idfRank, returning type/id/plan_id/step_id/title/status/snippet/score",
+        "evidence": "src/db.mjs:1071-1101"
+      },
+      {
+        "id": "t5-r1-6",
+        "kind": "fact",
+        "subject": "src/db.mjs#recall",
+        "claim": "recall only includes findings with status='active' (superseded/retracted never resurface) and marks a finding 'conflict' when conflicts_with is non-empty",
+        "evidence": "src/db.mjs:1087-1090"
+      },
+      {
+        "id": "t5-r1-7",
+        "kind": "fact",
+        "subject": "src/db.mjs#currentProjectId",
+        "claim": "currentProjectId reads settings key 'current_project' and defaults to 1; recall/getLessons scope to this project unless all=true",
+        "evidence": "src/db.mjs:417-420"
+      },
+      {
+        "id": "t5-r1-8",
+        "kind": "fact",
+        "subject": "src/db.mjs#recall",
+        "claim": "recall returns {query, hits:[]} immediately when the tokenized query is empty, and scores are rounded to 2 decimals",
+        "evidence": "src/db.mjs:1072-1073,1098"
+      }
+    ]
+  },
+  {
+    "agent": "t6-r1",
+    "topic": "t6",
+    "rep": 1,
+    "is_error": false,
+    "parse_error": null,
+    "findings": [
+      {
+        "id": "t6-r1-1",
+        "kind": "fact",
+        "subject": "scripts/runner-lib.mjs#parseVerdict",
+        "claim": "The inject-mode result contract requires the agent's final line to match /^\\s*VERDICT:\\s*(pass|fail|partial)\\s*(?:[—–-]+\\s*(.*))?$/i; a missing marker returns verdict 'fail' with what_tried null",
+        "evidence": "scripts/runner-lib.mjs:52-59"
+      },
+      {
+        "id": "t6-r1-2",
+        "kind": "fact",
+        "subject": "scripts/runner-lib.mjs#parseVerdict",
+        "claim": "The verdict is case-insensitive and normalized to lowercase; the what_tried text is optional and trimmed, defaulting to null",
+        "evidence": "scripts/runner-lib.mjs:55-56"
+      },
+      {
+        "id": "t6-r1-3",
+        "kind": "fact",
+        "subject": "scripts/runner-lib.mjs#parseFindings",
+        "claim": "FINDINGS is an optional single-line JSON array on the line immediately before VERDICT; a missing or malformed line never fails the step, it only returns empty findings with an error reason",
+        "evidence": "scripts/runner-lib.mjs:14-30"
+      },
+      {
+        "id": "t6-r1-4",
+        "kind": "fact",
+        "subject": "scripts/runner-lib.mjs#parseFindings",
+        "claim": "parseFindings scans lines bottom-up, keeps only object (non-array) items, and truncates to FINDINGS_MAX=20, reporting a truncation or dropped-item error string",
+        "evidence": "scripts/runner-lib.mjs:13,24-27"
+      },
+      {
+        "id": "t6-r1-5",
+        "kind": "fact",
+        "subject": "scripts/runner-lib.mjs#parseVerify",
+        "claim": "A VERIFY command is declared by an optional /^VERIFY:\\s*(.+)$/m line in step.context, same shape as the RAG: convention, and is left in context verbatim",
+        "evidence": "scripts/runner-lib.mjs:61-71"
+      },
+      {
+        "id": "t6-r1-6",
+        "kind": "fact",
+        "subject": "scripts/runner-lib.mjs#runVerify",
+        "claim": "runVerify executes the VERIFY command with shell:true (deliberate, trusted step-author input) and a 10-minute default timeout, returning ok/code and the last 500 chars of combined output",
+        "evidence": "scripts/runner-lib.mjs:77-81"
+      },
+      {
+        "id": "t6-r1-7",
+        "kind": "fact",
+        "subject": "scripts/runner-lib.mjs#applyVerifyGate",
+        "claim": "The VERIFY gate only downgrades a claimed 'pass' to 'fail' when the command exits non-zero; it is a no-op when there is no VERIFY command or the claimed verdict was not 'pass'",
+        "evidence": "scripts/runner-lib.mjs:88-97"
+      },
+      {
+        "id": "t6-r1-8",
+        "kind": "fact",
+        "subject": "scripts/runner.mjs#inject gate",
+        "claim": "In inject mode the runner treats an errored run or a missing VERDICT marker as fail, then applies applyVerifyGate with cwd=process.cwd() before recording the attempt",
+        "evidence": "scripts/runner.mjs:331-338"
+      }
+    ]
+  },
+  {
+    "agent": "t1-r2",
+    "topic": "t1",
+    "rep": 2,
+    "is_error": false,
+    "parse_error": null,
+    "findings": [
+      {
+        "id": "t1-r2-1",
+        "kind": "fact",
+        "subject": "src/db.mjs#Store.nextStep",
+        "claim": "nextStep returns the lowest-idx step whose status is not done/skipped/blocked and whose builds_on/blocks dependencies are all done/skipped; it returns null when no steps remain, {all_blocked:true} when every remaining step is blocked or dependency-waiting, or a full step object otherwise",
+        "evidence": "src/db.mjs:704-740"
+      },
+      {
+        "id": "t1-r2-2",
+        "kind": "fact",
+        "subject": "src/db.mjs#Store._unmetDeps",
+        "claim": "A step is dependency-gated only by outbound builds_on/blocks links to a to_step_id whose status is not done/skipped; plan-level links (to_plan_id only) are ignored and never gate a step",
+        "evidence": "src/db.mjs:696-701"
+      },
+      {
+        "id": "t1-r2-3",
+        "kind": "fact",
+        "subject": "src/db.mjs#Store.nextStep",
+        "claim": "Blocked steps are skipped (not returned as workable) and reported in skipped_blocked_steps with reason 'blocked', while dependency-waiting steps get reason 'dependency' plus waiting_on_step_ids",
+        "evidence": "src/db.mjs:714-738"
+      },
+      {
+        "id": "t1-r2-4",
+        "kind": "fact",
+        "subject": "src/db.mjs#Store.recordAttempt",
+        "claim": "A passing attempt sets the step to 'done' but a failing attempt sets it to 'failed' (not 'blocked'), so failed steps remain retryable and are still returned by nextStep",
+        "evidence": "src/db.mjs:672-675"
+      },
+      {
+        "id": "t1-r2-5",
+        "kind": "fact",
+        "subject": "src/db.mjs#Store.readySteps",
+        "claim": "readySteps returns every pending non-blocked step whose deps are satisfied (the full concurrently-launchable frontier), using the same _depsSatisfied gate as nextStep so the two agree",
+        "evidence": "src/db.mjs:747-757"
+      },
+      {
+        "id": "t1-r2-6",
+        "kind": "fact",
+        "subject": "src/db.mjs#Store.nextPlan",
+        "claim": "nextPlan skips plans with status done/abandoned/blocked and also skips a plan whose nextStep returns all_blocked, advancing to the next workable plan",
+        "evidence": "src/db.mjs:473-477"
+      },
+      {
+        "id": "t1-r2-7",
+        "kind": "fact",
+        "subject": "src/server.mjs#next_step tool",
+        "claim": "The next_step tool maps nextStep's three shapes to directives: null→complete (set plan done), all_blocked→set plan blocked and call next_plan, step→work it and call next_step again",
+        "evidence": "src/server.mjs:140-181"
+      },
+      {
+        "id": "t1-r2-8",
+        "kind": "fact",
+        "subject": "src/db.mjs#Store.getStep",
+        "claim": "getStep caps embedded attempts to the last 10 (oldest→newest) and includes attempts_total, links, notes, and file_refs in the full step payload nextStep hands out",
+        "evidence": "src/db.mjs:582-608"
+      }
+    ]
+  },
+  {
+    "agent": "t2-r2",
+    "topic": "t2",
+    "rep": 2,
+    "is_error": false,
+    "parse_error": null,
+    "findings": [
+      {
+        "id": "t2-r2-1",
+        "kind": "fact",
+        "subject": "scripts/runner.mjs#maxAttempts",
+        "claim": "Per-step spawn cap defaults to 2 and is set by --max-attempts; the counter is a per-workPlan local Map keyed by step.id, so it resets each time workPlan is (re)entered",
+        "evidence": "scripts/runner.mjs:90,314,322-323"
+      },
+      {
+        "id": "t2-r2-2",
+        "kind": "fact",
+        "subject": "scripts/runner.mjs#attempt cap check",
+        "claim": "The cap is enforced BEFORE spawning: if n > maxAttempts the step is paused for a human and workPlan returns 'paused'",
+        "evidence": "scripts/runner.mjs:324"
+      },
+      {
+        "id": "t2-r2-3",
+        "kind": "fact",
+        "subject": "scripts/runner.mjs#failed cap check",
+        "claim": "A second cap check after the attempt pauses when the step status is 'failed' and n >= maxAttempts",
+        "evidence": "scripts/runner.mjs:396"
+      },
+      {
+        "id": "t2-r2-4",
+        "kind": "fact",
+        "subject": "scripts/runner.mjs#retryOnLimit",
+        "claim": "Retry-on-limit is opt-in via --retry-on-limit; without it a usage/rate-limit stop breaks the loop immediately",
+        "evidence": "scripts/runner.mjs:94,489"
+      },
+      {
+        "id": "t2-r2-5",
+        "kind": "fact",
+        "subject": "scripts/runner.mjs#retryMinutes/maxRetries",
+        "claim": "--retry-minutes defaults to 30 and --max-retries defaults to 48 (≈24h safety cap)",
+        "evidence": "scripts/runner.mjs:95-96"
+      },
+      {
+        "id": "t2-r2-6",
+        "kind": "fact",
+        "subject": "scripts/runner.mjs#limit detection",
+        "claim": "A limit stop requires a structured signal (HTTP 429, stop_reason matching the regex, or isError with result matching); a successful agent merely mentioning 'rate limit' does not stop the run",
+        "evidence": "scripts/runner.mjs:294-297"
+      },
+      {
+        "id": "t2-r2-7",
+        "kind": "fact",
+        "subject": "scripts/runner.mjs#msUntilReset",
+        "claim": "When the limit message names a reset time, sleep targets just past it (2-min buffer); otherwise falls back to --retry-minutes; parses are sanity-capped at 12h",
+        "evidence": "scripts/runner.mjs:408-419"
+      },
+      {
+        "id": "t2-r2-8",
+        "kind": "fact",
+        "subject": "src/db.mjs#recordAttempt",
+        "claim": "recordAttempt sets the step status to 'done' on verdict pass and 'failed' on fail/partial (failed is still retryable, not blocked)",
+        "evidence": "src/db.mjs:674-675"
+      }
+    ]
+  },
+  {
+    "agent": "t3-r2",
+    "topic": "t3",
+    "rep": 2,
+    "is_error": false,
+    "parse_error": null,
+    "findings": [
+      {
+        "id": "t3-r2-1",
+        "kind": "fact",
+        "subject": "src/db.mjs#defaultDbPath",
+        "claim": "defaultDbPath() returns process.env.PLAN_LEDGER_DB if set, else join(homedir(),'Documents','plan-ledger','data','plan-ledger.db')",
+        "evidence": "src/db.mjs:21-24"
+      },
+      {
+        "id": "t3-r2-2",
+        "kind": "fact",
+        "subject": "src/db.mjs#defaultDbPath",
+        "claim": "The default DB path is deliberately NOT import.meta-relative because import.meta is undefined inside the packaged SEA exe",
+        "evidence": "src/db.mjs:17-20"
+      },
+      {
+        "id": "t3-r2-3",
+        "kind": "fact",
+        "subject": "src/db.mjs#Store constructor",
+        "claim": "Store constructor mkdirSync(dirname(dbPath), {recursive:true}) unless dbPath is ':memory:', then opens DatabaseSync(dbPath)",
+        "evidence": "src/db.mjs:336-338"
+      },
+      {
+        "id": "t3-r2-4",
+        "kind": "fact",
+        "subject": "src/db.mjs#Store constructor",
+        "claim": "Store sets PRAGMA journal_mode=WAL, foreign_keys=ON, busy_timeout=3000, journal_size_limit=4194304, then execs SCHEMA and runs _migrate()",
+        "evidence": "src/db.mjs:339-344"
+      },
+      {
+        "id": "t3-r2-5",
+        "kind": "fact",
+        "subject": "src/db.mjs#Store",
+        "claim": "Store uses Node's built-in node:sqlite DatabaseSync (synchronous API, no native deps)",
+        "evidence": "src/db.mjs:2,11"
+      },
+      {
+        "id": "t3-r2-6",
+        "kind": "fact",
+        "subject": "src/db.mjs#Store.USER_VERSION",
+        "claim": "Migrations are gated by PRAGMA user_version; current USER_VERSION is 4",
+        "evidence": "src/db.mjs:381,383-384"
+      },
+      {
+        "id": "t3-r2-7",
+        "kind": "fact",
+        "subject": "src/db.mjs#defaultDbPath usage",
+        "claim": "Every entry point (server.mjs, web/server.mjs, web/app.mjs, scripts/runner.mjs, scripts/build-graph.mjs, scripts/seed-templates.mjs) constructs Store via new Store(defaultDbPath())",
+        "evidence": "src/server.mjs:24-25, web/server.mjs:17-20, web/app.mjs:15, scripts/runner.mjs:107-108, scripts/build-graph.mjs:10, scripts/seed-templates.mjs:5"
+      },
+      {
+        "id": "t3-r2-8",
+        "kind": "warning",
+        "subject": "src/server.mjs#comment",
+        "claim": "The header comment claims the DB is './data/plan-ledger.db next to this file' but the code actually uses defaultDbPath() (homedir Documents path), so the comment is stale/misleading",
+        "evidence": "src/server.mjs:9 vs src/server.mjs:24-25"
+      }
+    ]
+  },
+  {
+    "agent": "t4-r2",
+    "topic": "t4",
+    "rep": 2,
+    "is_error": false,
+    "parse_error": null,
+    "findings": [
+      {
+        "id": "t4-r2-1",
+        "kind": "fact",
+        "subject": "scripts/build-exe.mjs#build pipeline",
+        "claim": "The exe is built in 6 stages: esbuild bundle of web/app.mjs, Node SEA blob generation, clone of node.exe, Authenticode signature strip, postject blob injection, and a boot-test of the real exe",
+        "evidence": "scripts/build-exe.mjs:23-75"
+      },
+      {
+        "id": "t4-r2-2",
+        "kind": "warning",
+        "subject": "scripts/build-exe.mjs#sea-config.json",
+        "claim": "The build invokes `node --experimental-sea-config sea-config.json` but no sea-config.json exists in the repository, so step 2/5 would fail unless the file is supplied externally",
+        "evidence": "scripts/build-exe.mjs:32"
+      },
+      {
+        "id": "t4-r2-3",
+        "kind": "fact",
+        "subject": "scripts/build-exe.mjs#sentinel fuse",
+        "claim": "The SEA sentinel fuse is auto-detected from the cloned binary by searching for the `NODE_SEA_FUSE_` marker followed by hex chars, rather than hardcoding the documented constant",
+        "evidence": "scripts/build-exe.mjs:44-52"
+      },
+      {
+        "id": "t4-r2-4",
+        "kind": "fact",
+        "subject": "scripts/build-exe.mjs#boot-test",
+        "claim": "The boot-test spawns the real exe on port 4399 with PLAN_LEDGER_WEB_PORT=4399 and PLAN_LEDGER_NO_OPEN=1, polls GET /api/plans up to 20 times at 300ms, and exits 1 if the exe crashes or never serves",
+        "evidence": "scripts/build-exe.mjs:59-74"
+      },
+      {
+        "id": "t4-r2-5",
+        "kind": "fact",
+        "subject": "scripts/strip-signature.mjs#PE signature strip",
+        "claim": "strip-signature.mjs zeroes the PE Security data-directory entry (index 4), clears the optional-header checksum, and truncates the file at the certificate offset to remove the Authenticode blob",
+        "evidence": "scripts/strip-signature.mjs:14-30"
+      },
+      {
+        "id": "t4-r2-6",
+        "kind": "fact",
+        "subject": "web/app.mjs#SEA entry point",
+        "claim": "web/app.mjs is the packaged exe entry point; it inlines index.html at bundle time via esbuild loader .html=text and defaults the web port to 4319 via PLAN_LEDGER_WEB_PORT",
+        "evidence": "web/app.mjs:13, scripts/build-exe.mjs:27"
+      },
+      {
+        "id": "t4-r2-7",
+        "kind": "fact",
+        "subject": "web/board.mjs#/api/plans route",
+        "claim": "The boot-test's GET /api/plans endpoint is served by createBoardServer, which routes it to store.listPlans() and binds to 127.0.0.1",
+        "evidence": "web/board.mjs:28, web/server.mjs:25"
+      },
+      {
+        "id": "t4-r2-8",
+        "kind": "fact",
+        "subject": "package.json#build:exe",
+        "claim": "The npm script `build:exe` runs `node scripts/build-exe.mjs`, and the build depends on devDependencies esbuild and postject",
+        "evidence": "package.json:14,27-29"
+      }
+    ]
+  },
+  {
+    "agent": "t5-r2",
+    "topic": "t5",
+    "rep": 2,
+    "is_error": false,
+    "parse_error": null,
+    "findings": [
+      {
+        "id": "t5-r2-1",
+        "kind": "fact",
+        "subject": "src/db.mjs#tokenize",
+        "claim": "tokenize lowercases, splits on non-alphanumeric/underscore, keeps tokens longer than 2 chars, and drops a STOP set of common words",
+        "evidence": "src/db.mjs:224"
+      },
+      {
+        "id": "t5-r2-2",
+        "kind": "fact",
+        "subject": "src/db.mjs#idfRank",
+        "claim": "idfRank scores each entry as the sum of IDF weights of query tokens present in the entry, filters score>0, sorts descending, and slices to limit",
+        "evidence": "src/db.mjs:229-238"
+      },
+      {
+        "id": "t5-r2-3",
+        "kind": "fact",
+        "subject": "src/db.mjs#idfRank",
+        "claim": "idfRank computes IDF as log(1 + N/df) where N is entry count and df is document frequency of the token",
+        "evidence": "src/db.mjs:232"
+      },
+      {
+        "id": "t5-r2-4",
+        "kind": "fact",
+        "subject": "src/db.mjs#getLessons",
+        "claim": "getLessons ranks non-pass attempts across all plans by IDF-weighted lexical match of terms (or step title+tools), excluding the step's own attempts and scoping to the current project unless all=true",
+        "evidence": "src/db.mjs:763-780"
+      },
+      {
+        "id": "t5-r2-5",
+        "kind": "fact",
+        "subject": "src/db.mjs#getLessons",
+        "claim": "getLessons tie-breaks equal scores by created_at descending (newest first) and returns score rounded to 2 decimals",
+        "evidence": "src/db.mjs:780-785"
+      },
+      {
+        "id": "t5-r2-6",
+        "kind": "fact",
+        "subject": "src/db.mjs#recall",
+        "claim": "recall builds candidate docs from plans, steps, attempts, and active findings, scoped to the current project unless all=true, and ranks them with the shared idfRank",
+        "evidence": "src/db.mjs:1071-1095"
+      },
+      {
+        "id": "t5-r2-7",
+        "kind": "fact",
+        "subject": "src/db.mjs#recall",
+        "claim": "recall only includes findings with status 'active', and surfaces a finding with non-empty conflicts_with as status 'conflict'",
+        "evidence": "src/db.mjs:1087-1090"
+      },
+      {
+        "id": "t5-r2-8",
+        "kind": "fact",
+        "subject": "src/db.mjs#currentProjectId",
+        "claim": "currentProjectId reads the settings key 'current_project' and defaults to project id 1 when unset",
+        "evidence": "src/db.mjs:417-420"
+      }
+    ]
+  },
+  {
+    "agent": "t6-r2",
+    "topic": "t6",
+    "rep": 2,
+    "is_error": false,
+    "parse_error": null,
+    "findings": [
+      {
+        "id": "t6-r2-1",
+        "kind": "fact",
+        "subject": "scripts/runner-lib.mjs#parseVerdict",
+        "claim": "Scans output lines bottom-up for a case-insensitive `VERDICT: pass|fail|partial — <what>` line; no marker resolves to {verdict:'fail', what_tried:null}",
+        "evidence": "scripts/runner-lib.mjs:52-59"
+      },
+      {
+        "id": "t6-r2-2",
+        "kind": "fact",
+        "subject": "scripts/runner-lib.mjs#parseFindings",
+        "claim": "Scans bottom-up for a `FINDINGS:` line, JSON.parses it as a single-line array, drops non-object items, and caps at FINDINGS_MAX=20; malformed/missing line never fails the step",
+        "evidence": "scripts/runner-lib.mjs:14-30"
+      },
+      {
+        "id": "t6-r2-3",
+        "kind": "fact",
+        "subject": "scripts/runner-lib.mjs#FINDINGS_MAX",
+        "claim": "FINDINGS_MAX is 20, the hard cap on absorbed findings per output",
+        "evidence": "scripts/runner-lib.mjs:13"
+      },
+      {
+        "id": "t6-r2-4",
+        "kind": "fact",
+        "subject": "scripts/runner-lib.mjs#parseVerify",
+        "claim": "Extracts an optional `VERIFY: <command>` first-line convention from step.context via /^VERIFY:\\s*(.+)$/m, returning the trimmed command or null",
+        "evidence": "scripts/runner-lib.mjs:66-71"
+      },
+      {
+        "id": "t6-r2-5",
+        "kind": "fact",
+        "subject": "scripts/runner-lib.mjs#runVerify",
+        "claim": "Runs the VERIFY command with spawnSync shell:true (deliberate, trusted step-author input) and a 10-minute default timeout, returning {ok, code, tail} where tail is the last 500 chars of combined stdout/stderr",
+        "evidence": "scripts/runner-lib.mjs:73-81"
+      },
+      {
+        "id": "t6-r2-6",
+        "kind": "fact",
+        "subject": "scripts/runner-lib.mjs#applyVerifyGate",
+        "claim": "Only acts when a verifyCmd exists AND the claimed verdict is 'pass'; a failing VERIFY downgrades verdict to 'fail' and appends the command's output tail to resultText, otherwise it is a no-op",
+        "evidence": "scripts/runner-lib.mjs:88-97"
+      },
+      {
+        "id": "t6-r2-7",
+        "kind": "fact",
+        "subject": "scripts/runner.mjs#workPlan inject branch",
+        "claim": "In inject mode the runner parses the agent's VERDICT line, applies the VERIFY gate, and records the gated verdict via recordAttempt with executor 'runner-inject'; a missing VERDICT line or errored run becomes fail",
+        "evidence": "scripts/runner.mjs:327-351"
+      },
+      {
+        "id": "t6-r2-8",
+        "kind": "fact",
+        "subject": "scripts/runner.mjs#workPlan MCP branch",
+        "claim": "In MCP mode the VERIFY gate re-runs after the agent exits: if the step reached status 'done' but VERIFY fails, the runner records an overriding fail attempt with executor 'runner-mcp'",
+        "evidence": "scripts/runner.mjs:373-388"
+      }
+    ]
+  },
+  {
+    "agent": "t1-r3",
+    "topic": "t1",
+    "rep": 3,
+    "is_error": false,
+    "parse_error": null,
+    "findings": [
+      {
+        "id": "t1-r3-1",
+        "kind": "fact",
+        "subject": "src/db.mjs#Store.nextStep",
+        "claim": "nextStep selects steps with status NOT IN ('done','skipped') ordered by idx,id and returns the first (lowest-idx) step that is not 'blocked' and whose deps are satisfied",
+        "evidence": "src/db.mjs:706-722"
+      },
+      {
+        "id": "t1-r3-2",
+        "kind": "fact",
+        "subject": "src/db.mjs#Store._unmetDeps",
+        "claim": "a step's dependency gate is an outbound builds_on/blocks link to a step whose status is not done/skipped; plan-level links (to_plan_id only, no to_step_id) are ignored and never gate a step",
+        "evidence": "src/db.mjs:696-702"
+      },
+      {
+        "id": "t1-r3-3",
+        "kind": "fact",
+        "subject": "src/db.mjs#Store.nextStep",
+        "claim": "nextStep returns one of three shapes: a step object, {all_blocked:true, blocked_steps:[...]}, or null (plan complete)",
+        "evidence": "src/db.mjs:709,728-739"
+      },
+      {
+        "id": "t1-r3-4",
+        "kind": "fact",
+        "subject": "src/db.mjs#Store.nextStep",
+        "claim": "blocked steps and dependency-waiting steps are both skipped and reported with reason 'blocked' or 'dependency' (the latter carrying waiting_on_step_ids)",
+        "evidence": "src/db.mjs:714-727"
+      },
+      {
+        "id": "t1-r3-5",
+        "kind": "fact",
+        "subject": "src/db.mjs#Store.nextStep",
+        "claim": "skipped_blocked_steps is attached to the returned step only for blocked/dep-waiting steps whose idx is lower than the workable step's idx",
+        "evidence": "src/db.mjs:737-738"
+      },
+      {
+        "id": "t1-r3-6",
+        "kind": "fact",
+        "subject": "src/db.mjs#Store.readySteps",
+        "claim": "readySteps returns EVERY pending non-blocked step with satisfied deps (the concurrent frontier), not just the lowest-idx one, using the same _depsSatisfied gate as nextStep",
+        "evidence": "src/db.mjs:747-757"
+      },
+      {
+        "id": "t1-r3-7",
+        "kind": "fact",
+        "subject": "src/db.mjs#Store.recordAttempt",
+        "claim": "a passing attempt sets the step to 'done' and a failing attempt sets it to 'failed' (still retryable), never 'blocked'",
+        "evidence": "src/db.mjs:672-675"
+      },
+      {
+        "id": "t1-r3-8",
+        "kind": "fact",
+        "subject": "src/db.mjs#Store.nextPlan",
+        "claim": "nextPlan skips plans with status blocked and plans whose nextStep returns all_blocked, advancing to the next workable plan",
+        "evidence": "src/db.mjs:472-477"
+      }
+    ]
+  },
+  {
+    "agent": "t2-r3",
+    "topic": "t2",
+    "rep": 3,
+    "is_error": false,
+    "parse_error": null,
+    "findings": [
+      {
+        "id": "t2-r3-1",
+        "kind": "fact",
+        "subject": "scripts/runner.mjs#maxAttempts",
+        "claim": "Per-step spawn cap defaults to 2 and is set via --max-attempts; a step is paused for a human when the spawn counter n exceeds maxAttempts",
+        "evidence": "scripts/runner.mjs:90,324"
+      },
+      {
+        "id": "t2-r3-2",
+        "kind": "fact",
+        "subject": "scripts/runner.mjs#maxSteps",
+        "claim": "--max-steps caps total steps per run (default Infinity via 0||Infinity); workPlan returns 'paused' when ran reaches maxSteps",
+        "evidence": "scripts/runner.mjs:91,315,398"
+      },
+      {
+        "id": "t2-r3-3",
+        "kind": "fact",
+        "subject": "scripts/runner.mjs#maxTotalUsd",
+        "claim": "--max-total-usd is a hard whole-run spend ceiling (0 = none); budgetOrLimitStop stops the run when usage.cost >= maxTotalUsd and warns at 95%",
+        "evidence": "scripts/runner.mjs:93,302-304"
+      },
+      {
+        "id": "t2-r3-4",
+        "kind": "fact",
+        "subject": "scripts/runner.mjs#budgetUsd",
+        "claim": "--budget is a per-agent USD cap passed to claude as --max-budget-usd, distinct from the whole-run --max-total-usd ceiling",
+        "evidence": "scripts/runner.mjs:100,239,279"
+      },
+      {
+        "id": "t2-r3-5",
+        "kind": "fact",
+        "subject": "scripts/runner.mjs#retryOnLimit",
+        "claim": "--retry-on-limit enables a sleep+retry loop only for usage/rate-limit stops (stopKind==='limit'); budget and failure stops are never retried",
+        "evidence": "scripts/runner.mjs:94,489"
+      },
+      {
+        "id": "t2-r3-6",
+        "kind": "fact",
+        "subject": "scripts/runner.mjs#maxRetries",
+        "claim": "--max-retries caps the retry loop at 48 (default), with --retry-minutes default 30 min per sleep (48×30min ≈ 24h)",
+        "evidence": "scripts/runner.mjs:95-96,490"
+      },
+      {
+        "id": "t2-r3-7",
+        "kind": "fact",
+        "subject": "scripts/runner.mjs#msUntilReset",
+        "claim": "When a limit message names a reset time, msUntilReset sleeps until just past it (2-min buffer) instead of the fixed cadence, sanity-capped at 12h",
+        "evidence": "scripts/runner.mjs:408-418"
+      },
+      {
+        "id": "t2-r3-8",
+        "kind": "fact",
+        "subject": "scripts/runner.mjs#budgetOrLimitStop",
+        "claim": "Limit detection trusts structured signals (HTTP 429 / stop_reason) and only regexes free-text result when the run errored, so a successful agent merely mentioning 'rate limit' does not stop the run",
+        "evidence": "scripts/runner.mjs:290-301"
+      }
+    ]
+  },
+  {
+    "agent": "t3-r3",
+    "topic": "t3",
+    "rep": 3,
+    "is_error": false,
+    "parse_error": null,
+    "findings": [
+      {
+        "id": "t3-r3-1",
+        "kind": "fact",
+        "subject": "src/db.mjs#defaultDbPath",
+        "claim": "defaultDbPath() returns process.env.PLAN_LEDGER_DB if set, else join(homedir(), 'Documents', 'plan-ledger', 'data', 'plan-ledger.db')",
+        "evidence": "src/db.mjs:21-24"
+      },
+      {
+        "id": "t3-r3-2",
+        "kind": "fact",
+        "subject": "config key PLAN_LEDGER_DB",
+        "claim": "PLAN_LEDGER_DB env var overrides the default SQLite DB location",
+        "evidence": "src/db.mjs:22"
+      },
+      {
+        "id": "t3-r3-3",
+        "kind": "fact",
+        "subject": "src/db.mjs#Store constructor",
+        "claim": "Store constructor mkdirSync(dirname(dbPath), {recursive:true}) for non-:memory: paths, then opens DatabaseSync(dbPath)",
+        "evidence": "src/db.mjs:336-338"
+      },
+      {
+        "id": "t3-r3-4",
+        "kind": "fact",
+        "subject": "src/db.mjs#Store constructor",
+        "claim": "Store constructor sets PRAGMA journal_mode=WAL, foreign_keys=ON, busy_timeout=3000, journal_size_limit=4194304, then exec(SCHEMA) and _migrate()",
+        "evidence": "src/db.mjs:339-344"
+      },
+      {
+        "id": "t3-r3-5",
+        "kind": "fact",
+        "subject": "src/db.mjs#Store.USER_VERSION",
+        "claim": "Migrations are gated on PRAGMA user_version; Store.USER_VERSION is 4",
+        "evidence": "src/db.mjs:381-384,412"
+      },
+      {
+        "id": "t3-r3-6",
+        "kind": "fact",
+        "subject": "src/db.mjs#defaultDbPath",
+        "claim": "The DB path is deliberately NOT import.meta-relative because import.meta is undefined inside the packaged SEA exe",
+        "evidence": "src/db.mjs:17-20"
+      },
+      {
+        "id": "t3-r3-7",
+        "kind": "warning",
+        "subject": "README.md#DB location",
+        "claim": "README.md and src/server.mjs comment say the DB lives at ./data/plan-ledger.db, but defaultDbPath() actually returns the homedir Documents path",
+        "evidence": "README.md:93 vs src/db.mjs:23"
+      },
+      {
+        "id": "t3-r3-8",
+        "kind": "fact",
+        "subject": "src/db.mjs#Store constructor",
+        "claim": "All entry points (server.mjs, web/app.mjs, web/server.mjs, scripts/runner.mjs, build-graph.mjs, seed-templates.mjs) construct Store via defaultDbPath()",
+        "evidence": "src/server.mjs:24-25, web/app.mjs:15, web/server.mjs:17-20, scripts/runner.mjs:107-108"
+      }
+    ]
+  },
+  {
+    "agent": "t4-r3",
+    "topic": "t4",
+    "rep": 3,
+    "is_error": false,
+    "parse_error": null,
+    "findings": [
+      {
+        "id": "t4-r3-1",
+        "kind": "fact",
+        "subject": "scripts/build-exe.mjs#build pipeline",
+        "claim": "The exe build runs 6 stages: esbuild bundle, SEA blob generation, clone node.exe, strip Authenticode signature, detect sentinel fuse, postject inject, then boot-test",
+        "evidence": "scripts/build-exe.mjs:23-59"
+      },
+      {
+        "id": "t4-r3-2",
+        "kind": "fact",
+        "subject": "scripts/build-exe.mjs#fuse detection",
+        "claim": "The SEA sentinel fuse is auto-detected from the binary by scanning for the 'NODE_SEA_FUSE_' marker followed by hex chars, rather than hardcoding the documented constant",
+        "evidence": "scripts/build-exe.mjs:44-52"
+      },
+      {
+        "id": "t4-r3-3",
+        "kind": "fact",
+        "subject": "scripts/build-exe.mjs#boot-test",
+        "claim": "The self-test spawns the real exe on port 4399 with PLAN_LEDGER_WEB_PORT=4399 and PLAN_LEDGER_NO_OPEN=1, polling GET /api/plans up to 20 times at 300ms intervals, and exits 1 if it never serves",
+        "evidence": "scripts/build-exe.mjs:60-74"
+      },
+      {
+        "id": "t4-r3-4",
+        "kind": "fact",
+        "subject": "scripts/build-exe.mjs#windows lock",
+        "claim": "On win32 the build taskkills any running 'Plan Ledger.exe' then retries copyFileSync up to 15 times with 350ms sleeps to handle the post-kill file lock",
+        "evidence": "scripts/build-exe.mjs:37-39"
+      },
+      {
+        "id": "t4-r3-5",
+        "kind": "fact",
+        "subject": "scripts/strip-signature.mjs#PE handling",
+        "claim": "strip-signature.mjs zeroes the Security data-directory entry and the PE checksum, then truncates the file at the certificate offset to remove the Authenticode blob",
+        "evidence": "scripts/strip-signature.mjs:23-30"
+      },
+      {
+        "id": "t4-r3-6",
+        "kind": "fact",
+        "subject": "web/app.mjs#port default",
+        "claim": "The packaged exe entry point defaults to port 4319 via PLAN_LEDGER_WEB_PORT and binds 127.0.0.1, opening the browser unless PLAN_LEDGER_NO_OPEN is set",
+        "evidence": "web/app.mjs:13,64"
+      },
+      {
+        "id": "t4-r3-7",
+        "kind": "warning",
+        "subject": "scripts/build-exe.mjs#sea-config.json",
+        "claim": "The build references sea-config.json (line 32) but no such file exists in the repository, so step 2/5 would fail unless it is generated or supplied externally",
+        "evidence": "scripts/build-exe.mjs:32; grep found no sea-config.json"
+      },
+      {
+        "id": "t4-r3-8",
+        "kind": "fact",
+        "subject": "scripts/build-exe.mjs#sea blob",
+        "claim": "The injected blob is read from build/sea-prep.blob, which is expected to be produced by 'node --experimental-sea-config' and is not otherwise generated by any repo script",
+        "evidence": "scripts/build-exe.mjs:32,55"
+      }
+    ]
+  },
+  {
+    "agent": "t5-r3",
+    "topic": "t5",
+    "rep": 3,
+    "is_error": false,
+    "parse_error": null,
+    "findings": [
+      {
+        "id": "t5-r3-1",
+        "kind": "fact",
+        "subject": "src/db.mjs#tokenize",
+        "claim": "tokenize lowercases, splits on non-alphanumeric/underscore, keeps tokens longer than 2 chars, and drops a STOP set of common words",
+        "evidence": "src/db.mjs:224"
+      },
+      {
+        "id": "t5-r3-2",
+        "kind": "fact",
+        "subject": "src/db.mjs#idfRank",
+        "claim": "idfRank scores each entry as the sum of IDF weights (log(1+N/df)) of query tokens present in the entry, keeps score>0, sorts descending, and slices to limit",
+        "evidence": "src/db.mjs:229-238"
+      },
+      {
+        "id": "t5-r3-3",
+        "kind": "fact",
+        "subject": "src/db.mjs#getLessons",
+        "claim": "getLessons ranks non-pass attempts across plans using idfRank over step_title+what_tried+result, excluding the step's own attempts and (unless all=true) other projects",
+        "evidence": "src/db.mjs:763-787"
+      },
+      {
+        "id": "t5-r3-4",
+        "kind": "fact",
+        "subject": "src/db.mjs#getLessons",
+        "claim": "when step_id is given, getLessons appends the step's title and tools to the query terms and scopes to that step's project",
+        "evidence": "src/db.mjs:766-769"
+      },
+      {
+        "id": "t5-r3-5",
+        "kind": "fact",
+        "subject": "src/db.mjs#getLessons",
+        "claim": "getLessons tie-breaks equal scores by created_at descending (newer first)",
+        "evidence": "src/db.mjs:780"
+      },
+      {
+        "id": "t5-r3-6",
+        "kind": "fact",
+        "subject": "src/db.mjs#recall",
+        "claim": "recall builds a single ranked index of plan, step, attempt, and active finding docs (each with a concatenated text field) and ranks them with the same idfRank",
+        "evidence": "src/db.mjs:1071-1101"
+      },
+      {
+        "id": "t5-r3-7",
+        "kind": "fact",
+        "subject": "src/db.mjs#recall",
+        "claim": "recall only includes findings with status 'active', and surfaces findings with non-empty conflicts_with as status 'conflict'",
+        "evidence": "src/db.mjs:1087-1090"
+      },
+      {
+        "id": "t5-r3-8",
+        "kind": "fact",
+        "subject": "src/db.mjs#currentProjectId",
+        "claim": "project scoping defaults to the settings key 'current_project' (or 1 if unset), and NULL project_id is treated as project 1 in both recall and getLessons",
+        "evidence": "src/db.mjs:417-420, src/db.mjs:777, src/db.mjs:1075"
+      }
+    ]
+  },
+  {
+    "agent": "t6-r3",
+    "topic": "t6",
+    "rep": 3,
+    "is_error": false,
+    "parse_error": null,
+    "findings": [
+      {
+        "id": "t6-r3-1",
+        "kind": "fact",
+        "subject": "scripts/runner-lib.mjs#parseVerdict",
+        "claim": "The inject-mode result contract requires the agent's final line to match /^\\s*VERDICT:\\s*(pass|fail|partial)\\s*(?:[—–-]+\\s*(.*))?$/i; a missing marker resolves to verdict 'fail' with null what_tried",
+        "evidence": "scripts/runner-lib.mjs:52-59"
+      },
+      {
+        "id": "t6-r3-2",
+        "kind": "fact",
+        "subject": "scripts/runner-lib.mjs#parseFindings",
+        "claim": "The FINDINGS line is optional and strictly additive — malformed JSON, non-array, or non-object items never fail the step; they return empty findings plus an error string the runner only logs",
+        "evidence": "scripts/runner-lib.mjs:14-30"
+      },
+      {
+        "id": "t6-r3-3",
+        "kind": "fact",
+        "subject": "scripts/runner-lib.mjs#FINDINGS_MAX",
+        "claim": "At most 20 findings are kept per output (FINDINGS_MAX=20), and the parser scans lines from the bottom up, taking the last FINDINGS line found",
+        "evidence": "scripts/runner-lib.mjs:13,16,25,27"
+      },
+      {
+        "id": "t6-r3-4",
+        "kind": "fact",
+        "subject": "scripts/runner-lib.mjs#parseVerify",
+        "claim": "VERIFY is an optional first-line convention in step.context parsed via /^VERIFY:\\s*(.+)$/m, left verbatim in context and never stripped",
+        "evidence": "scripts/runner-lib.mjs:61-71"
+      },
+      {
+        "id": "t6-r3-5",
+        "kind": "fact",
+        "subject": "scripts/runner-lib.mjs#runVerify",
+        "claim": "runVerify runs the VERIFY command with shell:true (deliberate, trusted step-author input) and a 10-minute default timeout, returning ok/code/tail where tail is the last 500 chars of combined stdout+stderr",
+        "evidence": "scripts/runner-lib.mjs:77-81"
+      },
+      {
+        "id": "t6-r3-6",
+        "kind": "fact",
+        "subject": "scripts/runner-lib.mjs#applyVerifyGate",
+        "claim": "The VERIFY gate only downgrades a claimed 'pass' to 'fail' when the command exits non-zero; it is a no-op when there is no VERIFY command or the claimed verdict was not 'pass'",
+        "evidence": "scripts/runner-lib.mjs:88-97"
+      },
+      {
+        "id": "t6-r3-7",
+        "kind": "fact",
+        "subject": "scripts/runner.mjs#workPlan",
+        "claim": "In inject mode the runner parses the verdict, applies the VERIFY gate, records the attempt with executor 'runner-inject', and absorbs findings only when the run did not error (res.isError false)",
+        "evidence": "scripts/runner.mjs:327-351"
+      },
+      {
+        "id": "t6-r3-8",
+        "kind": "fact",
+        "subject": "scripts/runner.mjs#workPlan",
+        "claim": "In MCP mode the VERIFY gate re-checks after the agent exits: if the step status is 'done' but VERIFY fails, the runner records an overriding fail attempt with executor 'runner-mcp'",
+        "evidence": "scripts/runner.mjs:373-386"
+      }
+    ]
+  }
+]

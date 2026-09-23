@@ -1,0 +1,206 @@
+{
+  "h01": {
+    "lines": [
+      "\nWhat the project already knows (recorded findings — check any marked CONFLICT before relying on it):",
+      "- [fact] scripts/strip-signature.mjs#pe signature strip: strip-signature.mjs zeroes the PE Security data-directory entry (index 4), clears the optional-header checksum, and truncates the file at the certificate offset to remove the Authenticode blob",
+      "- [fact] web/app.mjs#port default: The packaged exe entry point defaults to port 4319 via PLAN_LEDGER_WEB_PORT and binds 127.0.0.1, opening the browser unless PLAN_LEDGER_NO_OPEN is set",
+      "- [fact] web/app.mjs#port slot: The packaged exe's default web port is 4319 (PLAN_LEDGER_WEB_PORT env override), overridden to 4399 only during the boot-test",
+      "- [fact] scripts/runner-lib.mjs#findings_max: FINDINGS_MAX is 20, the hard cap on absorbed findings per output",
+      "- [fact] scripts/build-exe.mjs#build pipeline: The exe is built in 6 stages: esbuild bundle of web/app.mjs, Node SEA blob generation, clone of node.exe, Authenticode signature strip, postject blob injection, and a boot-test of the real exe"
+    ],
+    "finding_ids": [
+      74,
+      120,
+      32,
+      88,
+      70
+    ]
+  },
+  "h02": {
+    "lines": [
+      "\nWhat the project already knows (recorded findings — check any marked CONFLICT before relying on it):",
+      "- [fact] scripts/strip-signature.mjs#pe signature strip: strip-signature.mjs zeroes the PE Security data-directory entry (index 4), clears the optional-header checksum, and truncates the file at the certificate offset to remove the Authenticode blob",
+      "- [fact] scripts/build-exe.mjs#build pipeline: The exe build runs 6 stages: esbuild bundle, SEA blob generation, clone node.exe, strip Authenticode signature, detect sentinel fuse, postject inject, then boot-test",
+      "- [fact] scripts/build-exe.mjs#build pipeline: The exe is built in 6 stages: esbuild bundle of web/app.mjs, Node SEA blob generation, clone of node.exe, Authenticode signature strip, postject blob injection, and a boot-test of the real exe",
+      "- [fact] scripts/strip-signature.mjs#pe handling: strip-signature.mjs zeroes the Security data-directory entry and the PE checksum, then truncates the file at the certificate offset to remove the Authenticode blob",
+      "- [fact] scripts/strip-signature.mjs#signature strip: strip-signature.mjs removes the Authenticode signature in place by zeroing the Security data-directory entry, clearing the PE checksum, and truncating the file at the certificate offset"
+    ],
+    "finding_ids": [
+      74,
+      115,
+      70,
+      119,
+      29
+    ]
+  },
+  "h03": {
+    "lines": [
+      "\nWhat the project already knows (recorded findings — check any marked CONFLICT before relying on it):",
+      "- [fact] scripts/strip-signature.mjs#pe signature strip: strip-signature.mjs zeroes the PE Security data-directory entry (index 4), clears the optional-header checksum, and truncates the file at the certificate offset to remove the Authenticode blob",
+      "- [fact] src/db.mjs#store.getstep: getStep caps embedded attempts to the last 10 (oldest→newest) and includes attempts_total, links, notes, and file_refs in the full step payload nextStep hands out",
+      "- [fact] scripts/build-exe.mjs#exe clone: On win32 the build first taskkills any running 'Plan Ledger.exe' (/F), then copies process.execPath to dist/Plan Ledger.exe, retrying up to 15 times with 350ms sleeps to handle the Windows file lock (",
+      "- [fact] scripts/build-exe.mjs#windows lock: On win32 the build taskkills any running 'Plan Ledger.exe' then retries copyFileSync up to 15 times with 350ms sleeps to handle the post-kill file lock",
+      "- [fact] scripts/strip-signature.mjs#pe handling: strip-signature.mjs zeroes the Security data-directory entry and the PE checksum, then truncates the file at the certificate offset to remove the Authenticode blob"
+    ],
+    "finding_ids": [
+      74,
+      56,
+      27,
+      118,
+      119
+    ]
+  },
+  "h04": {
+    "lines": [
+      "\nWhat the project already knows (recorded findings — check any marked CONFLICT before relying on it):",
+      "- [fact] scripts/runner.mjs#msuntilreset: When the limit message names a reset time, sleep targets just past it (2-min buffer); otherwise falls back to --retry-minutes; parses are sanity-capped at 12h",
+      "- [fact] scripts/strip-signature.mjs#pe signature strip: strip-signature.mjs zeroes the PE Security data-directory entry (index 4), clears the optional-header checksum, and truncates the file at the certificate offset to remove the Authenticode blob",
+      "- [fact] scripts/strip-signature.mjs#pe handling: strip-signature.mjs zeroes the Security data-directory entry and the PE checksum, then truncates the file at the certificate offset to remove the Authenticode blob",
+      "- [fact] scripts/build-exe.mjs#boot-test: The self-test spawns the real exe on port 4399 with PLAN_LEDGER_WEB_PORT=4399 and PLAN_LEDGER_NO_OPEN=1, polling GET /api/plans up to 20 times at 300ms intervals, and exits 1 if it never serves",
+      "- [fact] scripts/build-exe.mjs#boot-test: The build boot-tests the real exe by spawning it with PLAN_LEDGER_WEB_PORT=4399 and PLAN_LEDGER_NO_OPEN=1, polling http://localhost:4399/api/plans up to 20×300ms, and exits 1 (fails the build) if it n"
+    ],
+    "finding_ids": [
+      62,
+      74,
+      119,
+      117,
+      30
+    ]
+  },
+  "h05": {
+    "lines": [
+      "\nWhat the project already knows (recorded findings — check any marked CONFLICT before relying on it):",
+      "- [fact] web/app.mjs#port default: The packaged exe entry point defaults to port 4319 via PLAN_LEDGER_WEB_PORT and binds 127.0.0.1, opening the browser unless PLAN_LEDGER_NO_OPEN is set",
+      "- [fact] web/app.mjs#port slot: The packaged exe's default web port is 4319 (PLAN_LEDGER_WEB_PORT env override), overridden to 4399 only during the boot-test",
+      "- [fact] scripts/runner-lib.mjs#findings_max: FINDINGS_MAX is 20, the hard cap on absorbed findings per output",
+      "- [fact] web/app.mjs#sea entry point: web/app.mjs is the packaged exe entry point; it inlines index.html at bundle time via esbuild loader .html=text and defaults the web port to 4319 via PLAN_LEDGER_WEB_PORT",
+      "- [fact] scripts/runner-lib.mjs#findings_max: At most 20 findings are kept per output (FINDINGS_MAX=20), and the parser scans lines from the bottom up, taking the last FINDINGS line found"
+    ],
+    "finding_ids": [
+      120,
+      32,
+      88,
+      75,
+      131
+    ]
+  },
+  "h06": {
+    "lines": [
+      "\nWhat the project already knows (recorded findings — check any marked CONFLICT before relying on it):",
+      "- [fact] scripts/build-exe.mjs#boot-test: The self-test spawns the real exe on port 4399 with PLAN_LEDGER_WEB_PORT=4399 and PLAN_LEDGER_NO_OPEN=1, polling GET /api/plans up to 20 times at 300ms intervals, and exits 1 if it never serves",
+      "- [fact] scripts/build-exe.mjs#boot-test: The boot-test spawns the real exe on port 4399 with PLAN_LEDGER_WEB_PORT=4399 and PLAN_LEDGER_NO_OPEN=1, polls GET /api/plans up to 20 times at 300ms, and exits 1 if the exe crashes or never serves",
+      "- [fact] scripts/build-exe.mjs#boot-test: The build boot-tests the real exe by spawning it with PLAN_LEDGER_WEB_PORT=4399 and PLAN_LEDGER_NO_OPEN=1, polling http://localhost:4399/api/plans up to 20×300ms, and exits 1 (fails the build) if it n",
+      "- [fact] web/app.mjs#port slot: The packaged exe's default web port is 4319 (PLAN_LEDGER_WEB_PORT env override), overridden to 4399 only during the boot-test",
+      "- [fact] src/db.mjs#store constructor: Store constructor sets PRAGMA journal_mode=WAL, foreign_keys=ON, busy_timeout=3000, journal_size_limit=4194304, then exec(SCHEMA) and _migrate()"
+    ],
+    "finding_ids": [
+      117,
+      73,
+      30,
+      32,
+      110
+    ]
+  },
+  "h07": {
+    "lines": [
+      "\nWhat the project already knows (recorded findings — check any marked CONFLICT before relying on it):",
+      "- [fact] scripts/runner-lib.mjs#findings_max: At most 20 findings are kept per output (FINDINGS_MAX=20), and the parser scans lines from the bottom up, taking the last FINDINGS line found",
+      "- [fact] scripts/runner-lib.mjs#findings_max: FINDINGS_MAX is 20, the hard cap on absorbed findings per output",
+      "- [fact] src/db.mjs#tokenize: tokenize lowercases, splits on non-[a-z0-9_], drops tokens of length <=2 and a STOP set, and is exported so the RAG ranker/expander tokenize identically to getLessons/recall",
+      "- [fact] scripts/runner.mjs#maxretries: --max-retries caps the retry loop at 48 (default), with --retry-minutes default 30 min per sleep (48×30min ≈ 24h)",
+      "- [fact] scripts/runner.mjs#budgetorlimitstop: Limit detection trusts structured signals (HTTP 429 / stop_reason) and only regexes free-text result when the run errored, so a successful agent merely mentioning 'rate limit' does not stop the run"
+    ],
+    "finding_ids": [
+      131,
+      88,
+      33,
+      105,
+      107
+    ]
+  },
+  "h08": {
+    "lines": [
+      "\nWhat the project already knows (recorded findings — check any marked CONFLICT before relying on it):",
+      "- [fact] scripts/strip-signature.mjs#pe signature strip: strip-signature.mjs zeroes the PE Security data-directory entry (index 4), clears the optional-header checksum, and truncates the file at the certificate offset to remove the Authenticode blob",
+      "- [fact] web/app.mjs#port default: The packaged exe entry point defaults to port 4319 via PLAN_LEDGER_WEB_PORT and binds 127.0.0.1, opening the browser unless PLAN_LEDGER_NO_OPEN is set",
+      "- [fact] web/app.mjs#port slot: The packaged exe's default web port is 4319 (PLAN_LEDGER_WEB_PORT env override), overridden to 4399 only during the boot-test",
+      "- [fact] scripts/runner.mjs#msuntilreset: When the limit message names a reset time, sleep targets just past it (2-min buffer); otherwise falls back to --retry-minutes; parses are sanity-capped at 12h",
+      "- [fact] web/app.mjs#sea entry point: web/app.mjs is the packaged exe entry point; it inlines index.html at bundle time via esbuild loader .html=text and defaults the web port to 4319 via PLAN_LEDGER_WEB_PORT"
+    ],
+    "finding_ids": [
+      74,
+      120,
+      32,
+      62,
+      75
+    ]
+  },
+  "h09": {
+    "lines": [
+      "\nWhat the project already knows (recorded findings — check any marked CONFLICT before relying on it):",
+      "- [fact] scripts/strip-signature.mjs#pe signature strip: strip-signature.mjs zeroes the PE Security data-directory entry (index 4), clears the optional-header checksum, and truncates the file at the certificate offset to remove the Authenticode blob",
+      "- [fact] scripts/runner.mjs#msuntilreset: When the limit message names a reset time, sleep targets just past it (2-min buffer); otherwise falls back to --retry-minutes; parses are sanity-capped at 12h",
+      "- [fact] src/db.mjs#store.getstep: getStep caps embedded attempts to the last 10 (oldest→newest) and includes attempts_total, links, notes, and file_refs in the full step payload nextStep hands out",
+      "- [fact] scripts/build-exe.mjs#boot-test: The self-test spawns the real exe on port 4399 with PLAN_LEDGER_WEB_PORT=4399 and PLAN_LEDGER_NO_OPEN=1, polling GET /api/plans up to 20 times at 300ms intervals, and exits 1 if it never serves",
+      "- [fact] scripts/build-exe.mjs#boot-test: The build boot-tests the real exe by spawning it with PLAN_LEDGER_WEB_PORT=4399 and PLAN_LEDGER_NO_OPEN=1, polling http://localhost:4399/api/plans up to 20×300ms, and exits 1 (fails the build) if it n"
+    ],
+    "finding_ids": [
+      74,
+      62,
+      56,
+      117,
+      30
+    ]
+  },
+  "h10": {
+    "lines": [
+      "\nWhat the project already knows (recorded findings — check any marked CONFLICT before relying on it):",
+      "- [fact] scripts/strip-signature.mjs#pe signature strip: strip-signature.mjs zeroes the PE Security data-directory entry (index 4), clears the optional-header checksum, and truncates the file at the certificate offset to remove the Authenticode blob",
+      "- [fact] scripts/build-exe.mjs#exe clone: On win32 the build first taskkills any running 'Plan Ledger.exe' (/F), then copies process.execPath to dist/Plan Ledger.exe, retrying up to 15 times with 350ms sleeps to handle the Windows file lock (",
+      "- [fact] scripts/build-exe.mjs#windows lock: On win32 the build taskkills any running 'Plan Ledger.exe' then retries copyFileSync up to 15 times with 350ms sleeps to handle the post-kill file lock",
+      "- [fact] scripts/strip-signature.mjs#pe handling: strip-signature.mjs zeroes the Security data-directory entry and the PE checksum, then truncates the file at the certificate offset to remove the Authenticode blob",
+      "- [fact] scripts/strip-signature.mjs#signature strip: strip-signature.mjs removes the Authenticode signature in place by zeroing the Security data-directory entry, clearing the PE checksum, and truncating the file at the certificate offset"
+    ],
+    "finding_ids": [
+      74,
+      27,
+      118,
+      119,
+      29
+    ]
+  },
+  "h11": {
+    "lines": [
+      "\nWhat the project already knows (recorded findings — check any marked CONFLICT before relying on it):",
+      "- [fact] scripts/strip-signature.mjs#pe signature strip: strip-signature.mjs zeroes the PE Security data-directory entry (index 4), clears the optional-header checksum, and truncates the file at the certificate offset to remove the Authenticode blob",
+      "- [fact] scripts/strip-signature.mjs#pe handling: strip-signature.mjs zeroes the Security data-directory entry and the PE checksum, then truncates the file at the certificate offset to remove the Authenticode blob",
+      "- [fact] scripts/build-exe.mjs#build pipeline: The exe build runs 6 stages: esbuild bundle, SEA blob generation, clone node.exe, strip Authenticode signature, detect sentinel fuse, postject inject, then boot-test",
+      "- [fact] scripts/build-exe.mjs#build pipeline: The exe is built in 6 stages: esbuild bundle of web/app.mjs, Node SEA blob generation, clone of node.exe, Authenticode signature strip, postject blob injection, and a boot-test of the real exe",
+      "- [fact] scripts/strip-signature.mjs#signature strip: strip-signature.mjs removes the Authenticode signature in place by zeroing the Security data-directory entry, clearing the PE checksum, and truncating the file at the certificate offset"
+    ],
+    "finding_ids": [
+      74,
+      119,
+      115,
+      70,
+      29
+    ]
+  },
+  "h12": {
+    "lines": [
+      "\nWhat the project already knows (recorded findings — check any marked CONFLICT before relying on it):",
+      "- [fact] scripts/strip-signature.mjs#pe signature strip: strip-signature.mjs zeroes the PE Security data-directory entry (index 4), clears the optional-header checksum, and truncates the file at the certificate offset to remove the Authenticode blob",
+      "- [fact] scripts/runner.mjs#msuntilreset: When the limit message names a reset time, sleep targets just past it (2-min buffer); otherwise falls back to --retry-minutes; parses are sanity-capped at 12h",
+      "- [fact] scripts/strip-signature.mjs#pe handling: strip-signature.mjs zeroes the Security data-directory entry and the PE checksum, then truncates the file at the certificate offset to remove the Authenticode blob",
+      "- [fact] scripts/strip-signature.mjs#signature strip: strip-signature.mjs removes the Authenticode signature in place by zeroing the Security data-directory entry, clearing the PE checksum, and truncating the file at the certificate offset",
+      "- [fact] scripts/runner.mjs#maxretries: --max-retries caps the retry loop at 48 (default), with --retry-minutes default 30 min per sleep (48×30min ≈ 24h)"
+    ],
+    "finding_ids": [
+      74,
+      62,
+      119,
+      29,
+      105
+    ]
+  }
+}

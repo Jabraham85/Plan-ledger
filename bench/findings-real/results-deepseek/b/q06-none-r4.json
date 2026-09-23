@@ -1,0 +1,20 @@
+{
+  "phase": "b",
+  "tag": "q06-none-r4",
+  "model": "deepseek-v4-pro",
+  "is_error": false,
+  "subtype": "success",
+  "result": "ANSWER: PLAN_LEDGER_DB",
+  "cost": 0.004577056,
+  "turns": 4,
+  "tin": 8110,
+  "tout": 226,
+  "cache_hit": 5504,
+  "cache_miss": 2606,
+  "tool_calls": 4,
+  "peak": true,
+  "exit": 0,
+  "stderr": "",
+  "duration_ms": 5632,
+  "prompt": "Answer this question about the codebase in the current directory (plan-ledger, a Node.js app).\nYou may read files. Do not modify anything.\n\nQuestion: Which environment variable overrides the default plan-ledger database path? Give its exact name.\n\nBe precise. The FINAL LINE of your output MUST be exactly:\nANSWER: <your answer>"
+}

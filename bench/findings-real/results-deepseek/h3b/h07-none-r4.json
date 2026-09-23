@@ -1,0 +1,20 @@
+{
+  "phase": "h3b",
+  "tag": "h07-none-r4",
+  "model": "deepseek-v4-pro",
+  "is_error": false,
+  "subtype": "success",
+  "result": "All values confirmed:\n\n1. tokenize minimum length: `w.length > 2` → 3\n2. Store.recall default limit: 8\n3. Store.getLessons default limit: 5\n4. FINDINGS_MAX: 20\n5. --max-retries default: 48\n\nANSWER: 3,8,5,20,48",
+  "cost": 0.0028795360000000002,
+  "turns": 4,
+  "tin": 15336,
+  "tout": 482,
+  "cache_hit": 15104,
+  "cache_miss": 232,
+  "tool_calls": 8,
+  "peak": true,
+  "exit": 0,
+  "stderr": "",
+  "duration_ms": 8569,
+  "prompt": "Answer this question about the codebase in the current directory (plan-ledger, a Node.js app).\nYou may read files. Do not modify anything.\n\nQuestion: Find these five values in the plan-ledger codebase:\n(1) minimum length (in characters) of a token kept by the ledger tokenize()\n(2) default result limit of Store.recall\n(3) default result limit of Store.getLessons\n(4) maximum number of findings absorbed from one agent output (FINDINGS_MAX)\n(5) the runner's default --max-retries\nGive exactly five numbers, in this order, comma-separated, with no units.\n\nBe precise. The FINAL LINE of your output MUST be exactly:\nANSWER: <your answer>"
+}

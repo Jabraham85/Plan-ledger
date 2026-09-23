@@ -1,0 +1,20 @@
+{
+  "phase": "h3b",
+  "tag": "h06-none-r5",
+  "model": "deepseek-v4-pro",
+  "is_error": false,
+  "subtype": "success",
+  "result": "All values found:\n\n1. journal_size_limit = 4194304 bytes = 4 MiB\n2. busy_timeout = 3000 ms\n3. boot-test port = 4399\n4. --retry-minutes default = 30\n5. VERIFY output tail = 500 chars\n\nANSWER: 4, 3000, 4399, 30, 500",
+  "cost": 0.003284424,
+  "turns": 4,
+  "tin": 12044,
+  "tout": 403,
+  "cache_hit": 11136,
+  "cache_miss": 908,
+  "tool_calls": 6,
+  "peak": true,
+  "exit": 0,
+  "stderr": "",
+  "duration_ms": 6985,
+  "prompt": "Answer this question about the codebase in the current directory (plan-ledger, a Node.js app).\nYou may read files. Do not modify anything.\n\nQuestion: Find these five values in the plan-ledger codebase:\n(1) WAL journal_size_limit set by the Store, in whole MiB\n(2) SQLite busy_timeout in milliseconds set by the Store\n(3) the port the exe build boot-test uses (scripts/build-exe.mjs)\n(4) the runner's default --retry-minutes\n(5) maximum number of characters of VERIFY output appended when the gate fails\nGive exactly five numbers, in this order, comma-separated, with no units.\n\nBe precise. The FINAL LINE of your output MUST be exactly:\nANSWER: <your answer>"
+}

@@ -1,0 +1,20 @@
+{
+  "phase": "b",
+  "tag": "q07-brain-r3",
+  "model": "deepseek-v4-pro",
+  "is_error": false,
+  "subtype": "success",
+  "result": "ANSWER: 4399",
+  "cost": 0.0006811200000000001,
+  "turns": 2,
+  "tin": 2117,
+  "tout": 85,
+  "cache_hit": 1920,
+  "cache_miss": 197,
+  "tool_calls": 1,
+  "peak": true,
+  "exit": 0,
+  "stderr": "",
+  "duration_ms": 2709,
+  "prompt": "Answer this question about the codebase in the current directory (plan-ledger, a Node.js app).\nYou may read files. Do not modify anything.\n\nQuestion: Which TCP port does the exe build script use to boot-test the freshly built exe?\n\nWhat the project already knows (recorded findings — check any marked CONFLICT before relying on it):\n- [fact] scripts/build-exe.mjs#build pipeline: The exe is built in 6 stages: esbuild bundle of web/app.mjs, Node SEA blob generation, clone of node.exe, Authenticode signature strip, postject blob injection, and a boot-test of the real exe\n- [fact] scripts/build-exe.mjs#boot-test: The self-test spawns the real exe on port 4399 with PLAN_LEDGER_WEB_PORT=4399 and PLAN_LEDGER_NO_OPEN=1, polling GET /api/plans up to 20 times at 300ms intervals, and exits 1 if it never serves\n- [fact] scripts/build-exe.mjs#boot-test: The boot-test spawns the real exe on port 4399 with PLAN_LEDGER_WEB_PORT=4399 and PLAN_LEDGER_NO_OPEN=1, polls GET /api/plans up to 20 times at 300ms, and exits 1 if the exe crashes or never serves\n- [fact] web/app.mjs#port slot: The packaged exe's default web port is 4319 (PLAN_LEDGER_WEB_PORT env override), overridden to 4399 only during the boot-test\n- [fact] scripts/build-exe.mjs#build pipeline: The exe build runs 6 stages: esbuild bundle, SEA blob generation, clone node.exe, strip Authenticode signature, detect sentinel fuse, postject inject, then boot-test\n\nBe precise. The FINAL LINE of your output MUST be exactly:\nANSWER: <your answer>"
+}

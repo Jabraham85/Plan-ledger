@@ -1,0 +1,20 @@
+{
+  "phase": "b",
+  "tag": "q11-none-r4",
+  "model": "deepseek-v4-pro",
+  "is_error": false,
+  "subtype": "success",
+  "result": "The default `timeoutMs` is `10 * 60 * 1000` = 600,000 ms = 10 minutes.\n\nANSWER: 10 minutes",
+  "cost": 0.001114168,
+  "turns": 3,
+  "tin": 2718,
+  "tout": 159,
+  "cache_hit": 2432,
+  "cache_miss": 286,
+  "tool_calls": 2,
+  "peak": true,
+  "exit": 0,
+  "stderr": "",
+  "duration_ms": 4003,
+  "prompt": "Answer this question about the codebase in the current directory (plan-ledger, a Node.js app).\nYou may read files. Do not modify anything.\n\nQuestion: What is runVerify's default timeout, expressed in minutes?\n\nBe precise. The FINAL LINE of your output MUST be exactly:\nANSWER: <your answer>"
+}

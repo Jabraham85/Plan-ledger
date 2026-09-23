@@ -1,0 +1,25 @@
+{
+  "_note": "Answers verified by hand against the snapshot BEFORE any run (2026-09-22). Grading: 'name' = expected token appears in the ANSWER line; 'number' = expected value is the FIRST number in the ANSWER line.",
+  "topics": [
+    { "id": "t1", "brief": "chooses the next step of a plan and handles blocked steps — start at Store.nextStep in src/db.mjs" },
+    { "id": "t2", "brief": "handles usage limits, retries and per-step attempt caps in the orchestrator — scripts/runner.mjs" },
+    { "id": "t3", "brief": "configures and locates its SQLite database — the Store constructor and defaultDbPath in src/db.mjs" },
+    { "id": "t4", "brief": "builds and self-tests the Windows exe — scripts/build-exe.mjs" },
+    { "id": "t5", "brief": "searches and ranks recall and lessons — Store.recall and Store.getLessons in src/db.mjs" },
+    { "id": "t6", "brief": "defines and enforces the inject-mode agent output contract and the VERIFY gate — scripts/runner-lib.mjs" }
+  ],
+  "questions": [
+    { "id": "q01", "topic": "t1", "type": "name",   "expect": "all_blocked",           "q": "When every remaining step of a plan is blocked, what property name does Store.nextStep put on the object it returns to signal that? Give the exact property name." },
+    { "id": "q02", "topic": "t1", "type": "name",   "expect": "skipped_blocked_steps", "q": "When Store.nextStep returns a workable step after skipping blocked ones, what property on the returned step lists the skipped blocked steps? Give the exact property name." },
+    { "id": "q03", "topic": "t2", "type": "number", "expect": "30",                    "q": "What is the orchestrator runner's default value for --retry-minutes?" },
+    { "id": "q04", "topic": "t2", "type": "number", "expect": "48",                    "q": "What is the orchestrator runner's default value for --max-retries?" },
+    { "id": "q05", "topic": "t3", "type": "number", "expect": "3000",                  "q": "What PRAGMA busy_timeout value, in milliseconds, does the Store set on its SQLite connection?" },
+    { "id": "q06", "topic": "t3", "type": "name",   "expect": "PLAN_LEDGER_DB",        "q": "Which environment variable overrides the default plan-ledger database path? Give its exact name." },
+    { "id": "q07", "topic": "t4", "type": "number", "expect": "4399",                  "q": "Which TCP port does the exe build script use to boot-test the freshly built exe?" },
+    { "id": "q08", "topic": "t4", "type": "name",   "expect": "NODE_SEA_FUSE_",        "q": "What byte-marker prefix does the exe build script search the node binary for, to auto-detect the SEA fuse? Give the exact marker text." },
+    { "id": "q09", "topic": "t5", "type": "number", "expect": "8",                     "q": "What is the default `limit` parameter of Store.recall?" },
+    { "id": "q10", "topic": "t5", "type": "number", "expect": "5",                     "q": "What is the default `limit` parameter of Store.getLessons?" },
+    { "id": "q11", "topic": "t6", "type": "number", "expect": "10",                    "q": "What is runVerify's default timeout, expressed in minutes?" },
+    { "id": "q12", "topic": "t6", "type": "name",   "expect": "fail",                  "q": "What verdict does parseVerdict return when the agent's output contains no VERDICT line? Give the single word." }
+  ]
+}

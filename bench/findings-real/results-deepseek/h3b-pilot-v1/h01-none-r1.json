@@ -1,0 +1,20 @@
+{
+  "phase": "h3b-pilot",
+  "tag": "h01-none-r1",
+  "model": "deepseek-v4-pro",
+  "is_error": false,
+  "subtype": "success",
+  "result": "The question: runner started with `--retry-on-limit` and otherwise default flags. Every agent run keeps failing with a usage-limit error whose message contains NO parseable reset time.\n\nSo `msUntilReset(stopAll)` returns null, so `sleepMs = retryMinutes * 60000`.\n\nDefault `retryMinutes = 30`, default `maxRetries = 48`.\n\nThe retry loop: `retries` starts at 0. Each iteration: runOnce, then check `if (retries >= maxRetries) break`. So it sleeps `maxRetries` times before giving up.\n\nTotal sleep = 48 × 30 min = 1440 min = 24 hours.\n\nLet me verify the loop logic carefully. `retries` increments before sleeping. It sleeps when `retries < maxRetries`. So it sleeps 48 times (retries 1..48), each 30 min = 1440 min = 24 hours.\n\nANSWER: 24 hoursANSWER: 24 hours",
+  "cost": 0.015396215999999999,
+  "turns": 3,
+  "tin": 18487,
+  "tout": 324,
+  "cache_hit": 8064,
+  "cache_miss": 10423,
+  "tool_calls": 2,
+  "peak": true,
+  "exit": 0,
+  "stderr": "",
+  "duration_ms": 7627,
+  "prompt": "Answer this question about the codebase in the current directory (plan-ledger, a Node.js app).\nYou may read files. Do not modify anything.\n\nQuestion: The orchestrator runner (scripts/runner.mjs) is started with --retry-on-limit and otherwise default flags. Every agent run keeps failing with a usage-limit error whose message contains NO parseable reset time. What is the maximum total time, in hours, that the runner will spend sleeping between retries before it gives up?\n\nBe precise. The FINAL LINE of your output MUST be exactly:\nANSWER: <your answer>"
+}

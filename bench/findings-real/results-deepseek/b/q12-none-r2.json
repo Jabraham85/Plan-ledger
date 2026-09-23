@@ -1,0 +1,20 @@
+{
+  "phase": "b",
+  "tag": "q12-none-r2",
+  "model": "deepseek-v4-pro",
+  "is_error": false,
+  "subtype": "success",
+  "result": "ANSWER: fail",
+  "cost": 0.000981904,
+  "turns": 3,
+  "tin": 3076,
+  "tout": 130,
+  "cache_hit": 2816,
+  "cache_miss": 260,
+  "tool_calls": 2,
+  "peak": true,
+  "exit": 0,
+  "stderr": "",
+  "duration_ms": 3812,
+  "prompt": "Answer this question about the codebase in the current directory (plan-ledger, a Node.js app).\nYou may read files. Do not modify anything.\n\nQuestion: What verdict does parseVerdict return when the agent's output contains no VERDICT line? Give the single word.\n\nBe precise. The FINAL LINE of your output MUST be exactly:\nANSWER: <your answer>"
+}

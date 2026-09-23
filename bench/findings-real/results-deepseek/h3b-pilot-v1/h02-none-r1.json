@@ -1,0 +1,20 @@
+{
+  "phase": "h3b-pilot",
+  "tag": "h02-none-r1",
+  "model": "deepseek-v4-pro",
+  "is_error": false,
+  "subtype": "success",
+  "result": "The retry loop is gated by `retryOnLimit` (line 489). Without `--retry-on-limit`, `retryOnLimit` is `false`, so the loop breaks immediately after the first `runOnce()` returns with a limit stop — no sleep, no retry.\n\nANSWER: 0",
+  "cost": 0.014738855999999998,
+  "turns": 3,
+  "tin": 18430,
+  "tout": 177,
+  "cache_hit": 8064,
+  "cache_miss": 10366,
+  "tool_calls": 2,
+  "peak": true,
+  "exit": 0,
+  "stderr": "",
+  "duration_ms": 4599,
+  "prompt": "Answer this question about the codebase in the current directory (plan-ledger, a Node.js app).\nYou may read files. Do not modify anything.\n\nQuestion: The orchestrator runner (scripts/runner.mjs) is started WITHOUT --retry-on-limit and with otherwise default flags. An agent run hits a usage-limit error. How many times will the runner sleep and retry before it stops?\n\nBe precise. The FINAL LINE of your output MUST be exactly:\nANSWER: <your answer>"
+}

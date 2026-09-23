@@ -1,0 +1,20 @@
+{
+  "phase": "b",
+  "tag": "q08-none-r4",
+  "model": "deepseek-v4-pro",
+  "is_error": false,
+  "subtype": "success",
+  "result": "ANSWER: NODE_SEA_FUSE_",
+  "cost": 0.004999280000000001,
+  "turns": 3,
+  "tin": 7608,
+  "tout": 170,
+  "cache_hit": 4480,
+  "cache_miss": 3128,
+  "tool_calls": 3,
+  "peak": true,
+  "exit": 0,
+  "stderr": "",
+  "duration_ms": 4293,
+  "prompt": "Answer this question about the codebase in the current directory (plan-ledger, a Node.js app).\nYou may read files. Do not modify anything.\n\nQuestion: What byte-marker prefix does the exe build script search the node binary for, to auto-detect the SEA fuse? Give the exact marker text.\n\nBe precise. The FINAL LINE of your output MUST be exactly:\nANSWER: <your answer>"
+}

@@ -1,0 +1,20 @@
+{
+  "phase": "b",
+  "tag": "q03-brain-r4",
+  "model": "deepseek-v4-pro",
+  "is_error": false,
+  "subtype": "success",
+  "result": "ANSWER: 30",
+  "cost": 0.001152536,
+  "turns": 3,
+  "tin": 3272,
+  "tout": 149,
+  "cache_hit": 2944,
+  "cache_miss": 328,
+  "tool_calls": 2,
+  "peak": true,
+  "exit": 0,
+  "stderr": "",
+  "duration_ms": 4526,
+  "prompt": "Answer this question about the codebase in the current directory (plan-ledger, a Node.js app).\nYou may read files. Do not modify anything.\n\nQuestion: What is the orchestrator runner's default value for --retry-minutes?\n\nWhat the project already knows (recorded findings — check any marked CONFLICT before relying on it):\n- [fact] scripts/runner.mjs#maxretries: --max-retries caps the retry loop at 48 (default), with --retry-minutes default 30 min per sleep (48×30min ≈ 24h)\n- [fact] scripts/runner.mjs#msuntilreset: When the limit message names a reset time, sleep targets just past it (2-min buffer); otherwise falls back to --retry-minutes; parses are sanity-capped at 12h\n- [fact] scripts/runner.mjs#retryminutes/maxretries: --retry-minutes defaults to 30 and --max-retries defaults to 48 (≈24h safety cap)\n- [fact] scripts/runner.mjs#maxretries: Retry safety cap defaults to 48 retries (--max-retries), and sleep interval defaults to 30 minutes (--retry-minutes), ~24h total\n- [fact] scripts/runner.mjs#retryonlimit: --retry-on-limit enables a sleep+retry loop only for usage/rate-limit stops (stopKind==='limit'); budget and failure stops are never retried\n\nBe precise. The FINAL LINE of your output MUST be exactly:\nANSWER: <your answer>"
+}

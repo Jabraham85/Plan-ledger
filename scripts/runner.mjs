@@ -47,7 +47,8 @@ import { reapLoop } from '../src/supervisor.mjs';
 import { runParallelSupervisor, clampMaxWorkers } from '../src/parallel-supervisor.mjs';
 import { DEFAULT_STAFF_ROLES, resolveRole, listCursorModels } from '../src/roles.mjs';
 import { evaluateDispatchPolicy } from '../src/dispatch-policy.mjs';
-import { parseVerify, applyVerifyGate, formatUsageLine, appendUsageToLatestAttempt } from './runner-lib.mjs';
+import { parseVerify, applyVerifyGate, formatUsageLine, appendUsageToLatestAttempt,
+  parseFindings, formatFindingLines, pickBrief, FINDINGS_INSTRUCTIONS } from './runner-lib.mjs';
 import {
   runDispatchPreflight,
   parseGovernanceHints,
@@ -236,6 +237,37 @@ function lessonLines(step) {
        ...ls.map((l) => `- tried: ${oneLine(l.what_tried)} → ${oneLine(l.result || l.verdict)}`)]
     : [];
 }
+// Brief in (plan #134): the brain's relevant LIVE findings for this step, ranked
+// against the step's own words. First re-hash the source files findings rest on
+// (schema v5), so anything whose file changed is briefed as SUSPECT, not as fact.
+// Remembers which findings were briefed, so what the agent learns can be linked
+// to them. Never breaks the brief if the query fails.
+const briefedIds = new Map(); // step.id → finding ids shown in its brief
+function findingLines(step) {
+  try {
+    const st = store.checkStale();
+    if (st.suspected.length) console.log(`  🧠 ${st.suspected.length} finding(s) now suspect — source changed: ${st.changed_files.join(', ')}`);
+    const q = `${step.title}\n${step.context || ''}\n${step.acceptance_criteria || ''}`;
+    const hits = pickBrief((text, k) => store.queryFindings({ plan_id: step.plan_id, query: text, limit: k, status: 'live' }), q, { limit: 5 });
+    briefedIds.set(step.id, hits.map((h) => h.id));
+    return formatFindingLines(hits);
+  } catch { return []; }
+}
+// Findings out (plan #134): absorb the agent's FINDINGS line. Never fails the step.
+// root = the agent's working directory, so file paths in its evidence are linked
+// (and later checked for staleness).
+function absorbFrom(step, text) {
+  const pf = parseFindings(text);
+  if (pf.error) console.log(`  ⚠ findings: ${pf.error}`);
+  if (!pf.findings.length) return;
+  try {
+    const r = store.absorbFindings(pf.findings, { step_id: step.id, source: `runner:${step.role || 'agent'}`,
+      root: process.cwd(), briefed: briefedIds.get(step.id) || [] });
+    console.log(`  🧠 findings absorbed: ${Object.entries(r.counts).map(([k, n]) => `${n} ${k}`).join(', ')}`);
+    const re = [...new Set(r.results.flatMap((x) => x.suspected || []))];
+    if (re.length) console.log(`  🧠 re-opened for re-evaluation: ${re.map((i) => `#${i}`).join(', ')}`);
+  } catch (e) { console.log(`  ⚠ findings not absorbed: ${e.message}`); }
+}
 function fileRefLines(step) {
   const refs = step.file_refs || [];
   return refs.length
@@ -253,6 +285,7 @@ function buildPrompt(step, dispatch) {
     ...roleLines(r, dispatch.policy),
     ``,
     ...lessonLines(step),
+    ...findingLines(step),
     ...fileRefLines(step),
     ``,
     `1. Call get_step(${step.id}) for its full context, acceptance_criteria, carry_forward, attempts, and any lessons.`,
@@ -261,6 +294,8 @@ function buildPrompt(step, dispatch) {
     `4. Call record_attempt(${step.id}, …): verdict "pass" on success, "fail"/"partial" otherwise, with a specific what_tried.`,
     `   Always include executor: "runner-mcp"${dispatchRole ? ` and role: "${dispatchRole}"` : ''} in the record_attempt arguments.`,
     `5. If anything must reach the next step, call write_carry_forward.`,
+    `6. If you learned DURABLE truths (facts, decisions, lessons, pitfalls — not a log of actions), call ` +
+      `absorb_findings(step_id: ${step.id}, source: "runner:mcp", findings: [...]) with subject + evidence for each.`,
     `Keep your context small — do not load other plans or steps.`,
   ].join('\n');
 }
@@ -334,6 +369,7 @@ function buildDirectPrompt(step, dispatch) {
     step.acceptance_criteria ? `\nAcceptance: ${step.acceptance_criteria}` : '',
     step.carry_forward ? `\nCarried context: ${step.carry_forward}` : '',
     ...lessonLines(step),
+    ...findingLines(step),
     ...fileRefLines(step),
     // B2: state the REAL permission set — inject agents get whatever --allowed-tools
     // the runner was passed (default Write,Read); never contradict it in the prompt.
@@ -343,6 +379,7 @@ function buildDirectPrompt(step, dispatch) {
     verifyCmd ? `\nThis step will be VERIFIED after you finish by running: \`${verifyCmd}\` (in this working ` +
       `directory) — it must exit 0. A "VERDICT: pass" is OVERRIDDEN to "fail" if that command fails, so make ` +
       `sure it actually passes before you report pass.` : '',
+    ...FINDINGS_INSTRUCTIONS,
     `The FINAL LINE of your output MUST be exactly one machine-checkable JSON contract:`,
     `COMPLETION_JSON: {"contract_version":1,"verdict":"pass|fail|partial|blocked","summary":"<short user-facing summary>","outputs":["<key output>"],"artifacts":[{"path":"<relative-or-absolute-path>","kind":"file","note":"<why it matters>"}],"commands":[{"command":"<important command you ran>","exit_code":0}],"unresolved_gaps":["<gap>"],"session_id":"<if known>"}`,
     `Do not add text after COMPLETION_JSON. Unsupported pass claims are rejected by governance gates.`,
@@ -620,6 +657,9 @@ async function workPlan(pid) {
         terminal_summary: safeActivitySummary(summary),
       });
       if (escalation.escalate) console.log(`  ⛔ ${escalation.recommendation}`);
+      // Write-back: absorb durable findings from any agent whose output parsed —
+      // a failing step can still teach true pitfalls. An errored run is skipped.
+      if (!res.isError) absorbFrom(step, res.result);
       if (budgetOrLimitStop(res)) return 'paused';
     } else {
       // Latest attempt id BEFORE the spawn — lets us tell whether the in-agent

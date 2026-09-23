@@ -1,0 +1,866 @@
+{
+  "_note": "Written 2026-09-23 BEFORE any run (see PREREG.md). code: findings about the frozen snapshot + edits with ground truth. stories: facts + a twist. label change = must be revised/retracted (checks apply to a revision); keep = must be confirmed if flagged; either = ambiguous, reported only. heldout2 mustNot phrases target the ORIGINAL positive wording, so a negated revision (\"no longer ...\") is not failed — fixed before any v3 run.",
+  "code": {
+    "findings": [
+      {
+        "fid": "F1",
+        "subject": "scripts/runner.mjs#maxRetries",
+        "claim": "the runner's --max-retries flag defaults to 48",
+        "evidence": [
+          "scripts/runner.mjs:96"
+        ],
+        "label": "change",
+        "accept": [
+          "revised"
+        ],
+        "must": [
+          "24"
+        ],
+        "mustNot": [
+          "48"
+        ]
+      },
+      {
+        "fid": "F2",
+        "subject": "scripts/runner.mjs#retryMinutes",
+        "claim": "the runner's --retry-minutes flag defaults to 30",
+        "evidence": [
+          "scripts/runner.mjs:95"
+        ],
+        "label": "keep"
+      },
+      {
+        "fid": "F3",
+        "subject": "scripts/runner.mjs#maxAttempts",
+        "claim": "the runner's --max-attempts flag defaults to 2",
+        "evidence": [
+          "scripts/runner.mjs:90"
+        ],
+        "label": "keep"
+      },
+      {
+        "fid": "F4",
+        "subject": "scripts/runner.mjs#permissionMode",
+        "claim": "the runner's --permission-mode flag defaults to acceptEdits",
+        "evidence": [
+          "scripts/runner.mjs:98"
+        ],
+        "label": "change",
+        "accept": [
+          "revised"
+        ],
+        "must": [
+          "default"
+        ],
+        "mustNot": [
+          "acceptedits"
+        ]
+      },
+      {
+        "fid": "F5",
+        "subject": "scripts/runner.mjs#msUntilReset",
+        "claim": "after a parsed usage-limit reset time the runner waits an extra 2 minutes",
+        "evidence": [
+          "scripts/runner.mjs:417"
+        ],
+        "label": "keep"
+      },
+      {
+        "fid": "F6",
+        "subject": "scripts/runner.mjs#msUntilReset",
+        "claim": "a parsed reset wait longer than 12 hours is ignored in favour of --retry-minutes",
+        "evidence": [
+          "scripts/runner.mjs:418"
+        ],
+        "label": "keep"
+      },
+      {
+        "fid": "F7",
+        "subject": "ops#retry-window",
+        "claim": "with default flags and --retry-on-limit, the runner sleeps at most 24 hours in total before giving up",
+        "depends_on": [
+          "F1",
+          "F2"
+        ],
+        "label": "change",
+        "accept": [
+          "revised"
+        ],
+        "must": [
+          "12"
+        ],
+        "mustNot": [
+          "24 hours"
+        ]
+      },
+      {
+        "fid": "F8",
+        "subject": "src/db.mjs#Store",
+        "claim": "the Store sets the SQLite busy_timeout to 3000 milliseconds",
+        "evidence": [
+          "src/db.mjs:341"
+        ],
+        "label": "change",
+        "accept": [
+          "revised"
+        ],
+        "must": [
+          "5000"
+        ],
+        "mustNot": [
+          "3000"
+        ]
+      },
+      {
+        "fid": "F9",
+        "subject": "src/db.mjs#Store",
+        "claim": "the Store caps the WAL journal at 4194304 bytes with journal_size_limit",
+        "evidence": [
+          "src/db.mjs:342"
+        ],
+        "label": "keep"
+      },
+      {
+        "fid": "F10",
+        "subject": "src/db.mjs#getLessons",
+        "claim": "getLessons returns at most 5 lessons by default",
+        "evidence": [
+          "src/db.mjs:763"
+        ],
+        "label": "keep"
+      },
+      {
+        "fid": "F11",
+        "subject": "src/db.mjs#recall",
+        "claim": "recall returns at most 8 hits by default",
+        "evidence": [
+          "src/db.mjs:1071"
+        ],
+        "label": "keep"
+      },
+      {
+        "fid": "F12",
+        "subject": "src/db.mjs#recordAttempt",
+        "claim": "recording an attempt with any verdict other than pass sets the step status to failed",
+        "evidence": [
+          "src/db.mjs:675"
+        ],
+        "label": "keep"
+      },
+      {
+        "fid": "F13",
+        "subject": "scripts/runner-lib.mjs#FINDINGS_MAX",
+        "claim": "at most 20 findings are kept from one agent output",
+        "evidence": [
+          "scripts/runner-lib.mjs:13"
+        ],
+        "label": "keep"
+      },
+      {
+        "fid": "F14",
+        "subject": "scripts/runner-lib.mjs#runVerify",
+        "claim": "a step VERIFY command times out after 10 minutes by default",
+        "evidence": [
+          "scripts/runner-lib.mjs:77"
+        ],
+        "label": "keep"
+      },
+      {
+        "fid": "F15",
+        "subject": "scripts/runner-lib.mjs#runVerify",
+        "claim": "at most the last 500 characters of VERIFY output are kept",
+        "evidence": [
+          "scripts/runner-lib.mjs:80"
+        ],
+        "label": "keep"
+      },
+      {
+        "fid": "F16",
+        "subject": "web/app.mjs#port",
+        "claim": "the packaged board listens on port 4319 by default",
+        "evidence": [
+          "web/app.mjs:13"
+        ],
+        "label": "keep"
+      },
+      {
+        "fid": "F17",
+        "subject": "scripts/build-exe.mjs#boot-test",
+        "claim": "the exe build boot-test serves the board on port 4399",
+        "evidence": [
+          "scripts/build-exe.mjs:60"
+        ],
+        "label": "change",
+        "accept": [
+          "revised"
+        ],
+        "must": [
+          "4319"
+        ],
+        "mustNot": [
+          "4399"
+        ]
+      },
+      {
+        "fid": "F18",
+        "subject": "ops#ports",
+        "claim": "the packaged board and the build boot-test use different ports, so a running board cannot block the boot-test",
+        "depends_on": [
+          "F16",
+          "F17"
+        ],
+        "label": "change",
+        "accept": [
+          "revised",
+          "retracted"
+        ],
+        "must": [
+          "4319"
+        ],
+        "mustNot": [
+          "different ports"
+        ]
+      },
+      {
+        "fid": "F19",
+        "subject": "scripts/strip-signature.mjs",
+        "claim": "strip-signature zeroes PE data-directory index 4, the Security directory",
+        "evidence": [
+          "scripts/strip-signature.mjs:17"
+        ],
+        "label": "keep"
+      },
+      {
+        "fid": "F20",
+        "subject": "scripts/strip-signature.mjs",
+        "claim": "strip-signature clears the optional-header CheckSum at offset 64",
+        "evidence": [
+          "scripts/strip-signature.mjs:26"
+        ],
+        "label": "keep"
+      }
+    ],
+    "edits": [
+      {
+        "eid": "E1",
+        "file": "scripts/runner.mjs",
+        "find": "const maxRetries = Number(val('--max-retries', 48)) || 48; // safety cap (48 × 30min ≈ 24h)",
+        "replace": "const maxRetries = Number(val('--max-retries', 24)) || 24; // safety cap (24 × 30min ≈ 12h)"
+      },
+      {
+        "eid": "E2",
+        "file": "src/db.mjs",
+        "find": "PRAGMA busy_timeout = 3000;",
+        "replace": "PRAGMA busy_timeout = 5000;"
+      },
+      {
+        "eid": "E3",
+        "file": "scripts/build-exe.mjs",
+        "find": "const port = 4399;",
+        "replace": "const port = 4319;"
+      },
+      {
+        "eid": "E4",
+        "file": "scripts/runner-lib.mjs",
+        "find": "// runner-lib.mjs — pure, side-effect-free helpers",
+        "replace": "// (maintained by the plan-ledger team)\n// runner-lib.mjs — pure, side-effect-free helpers"
+      },
+      {
+        "eid": "E5a",
+        "file": "scripts/runner.mjs",
+        "find": "const permissionMode = val('--permission-mode', 'acceptEdits');",
+        "replace": "const permissionMode = val('--permission-mode', 'default');"
+      },
+      {
+        "eid": "E5b",
+        "file": "scripts/runner.mjs",
+        "find": "(default acceptEdits;",
+        "replace": "(default \"default\";"
+      }
+    ]
+  },
+  "stories": [
+    {
+      "sid": "frog",
+      "facts": [
+        {
+          "fid": "s1a",
+          "subject": "princess",
+          "claim": "the princess has long golden hair",
+          "label": "change",
+          "accept": [
+            "revised",
+            "retracted"
+          ]
+        },
+        {
+          "fid": "s1b",
+          "subject": "princess",
+          "claim": "the princess wore a silk gown to the ball",
+          "label": "change",
+          "accept": [
+            "revised",
+            "retracted"
+          ]
+        },
+        {
+          "fid": "s1c",
+          "subject": "princess#family",
+          "claim": "the princess's father is King Aldric",
+          "label": "keep"
+        },
+        {
+          "fid": "s1d",
+          "subject": "princess",
+          "claim": "the princess has lived in the castle since birth",
+          "label": "either"
+        },
+        {
+          "fid": "s1e",
+          "subject": "ball",
+          "claim": "the princess danced with the prince until midnight",
+          "label": "change",
+          "accept": [
+            "revised",
+            "retracted"
+          ]
+        },
+        {
+          "fid": "s1f",
+          "subject": "ball",
+          "claim": "the prince kissed her hand when they first met",
+          "label": "change",
+          "accept": [
+            "revised",
+            "retracted"
+          ]
+        },
+        {
+          "fid": "s1g",
+          "subject": "castle",
+          "claim": "the castle has four towers",
+          "label": "keep"
+        },
+        {
+          "fid": "s1h",
+          "subject": "kingdom",
+          "claim": "the kingdom has been at peace for ten years",
+          "label": "keep"
+        }
+      ],
+      "twist": {
+        "subject": "princess",
+        "claim": "the princess is actually a frog",
+        "impact": "high"
+      }
+    },
+    {
+      "sid": "heist",
+      "facts": [
+        {
+          "fid": "s2a",
+          "subject": "marco",
+          "claim": "Marco drove the getaway van",
+          "label": "keep"
+        },
+        {
+          "fid": "s2b",
+          "subject": "marco",
+          "claim": "Marco is loyal to the crew",
+          "label": "change",
+          "accept": [
+            "revised",
+            "retracted"
+          ]
+        },
+        {
+          "fid": "s2c",
+          "subject": "crew",
+          "claim": "the crew trusts Marco completely",
+          "label": "either"
+        },
+        {
+          "fid": "s2d",
+          "subject": "heist",
+          "claim": "the heist went unnoticed by the police",
+          "label": "change",
+          "accept": [
+            "revised",
+            "retracted"
+          ]
+        },
+        {
+          "fid": "s2e",
+          "subject": "marco#background",
+          "claim": "Marco has a long criminal record",
+          "label": "either"
+        },
+        {
+          "fid": "s2f",
+          "subject": "vault",
+          "claim": "the vault was on the third floor",
+          "label": "keep"
+        },
+        {
+          "fid": "s2g",
+          "subject": "crew",
+          "claim": "Marco recruited the safecracker, Ines",
+          "label": "keep"
+        }
+      ],
+      "twist": {
+        "subject": "marco",
+        "claim": "Marco is an undercover police officer",
+        "impact": "high"
+      }
+    },
+    {
+      "sid": "party",
+      "facts": [
+        {
+          "fid": "s3a",
+          "subject": "party",
+          "slot": "date",
+          "claim": "the party is on Saturday",
+          "label": "base"
+        },
+        {
+          "fid": "s3b",
+          "subject": "guests",
+          "claim": "guests must arrive by 6pm on Saturday",
+          "depends_on": [
+            "s3a"
+          ],
+          "label": "change",
+          "accept": [
+            "revised"
+          ],
+          "must": [
+            "sunday"
+          ],
+          "mustNot": [
+            "saturday"
+          ]
+        },
+        {
+          "fid": "s3c",
+          "subject": "catering",
+          "claim": "the caterer delivers the food on Saturday at 5pm",
+          "depends_on": [
+            "s3a"
+          ],
+          "label": "change",
+          "accept": [
+            "revised"
+          ],
+          "must": [
+            "sunday"
+          ],
+          "mustNot": [
+            "saturday"
+          ]
+        },
+        {
+          "fid": "s3d",
+          "subject": "venue",
+          "claim": "the party is held on the rooftop",
+          "label": "keep"
+        },
+        {
+          "fid": "s3e",
+          "subject": "music",
+          "claim": "the band plays from 7pm to 11pm",
+          "depends_on": [
+            "s3a"
+          ],
+          "label": "keep"
+        }
+      ],
+      "twist": {
+        "subject": "party",
+        "slot": "date",
+        "claim": "the party is on Sunday",
+        "impact": "normal"
+      }
+    }
+  ],
+  "heldout": [
+    {
+      "sid": "wedding",
+      "facts": [
+        {
+          "fid": "hA1",
+          "subject": "wedding",
+          "slot": "location",
+          "claim": "the wedding is in Lisbon",
+          "label": "base"
+        },
+        {
+          "fid": "hA2",
+          "subject": "travel",
+          "claim": "guests fly into Lisbon airport",
+          "depends_on": [
+            "hA1"
+          ],
+          "label": "change",
+          "accept": [
+            "revised"
+          ],
+          "must": [
+            "porto"
+          ],
+          "mustNot": [
+            "lisbon"
+          ]
+        },
+        {
+          "fid": "hA3",
+          "subject": "reception",
+          "claim": "the reception is at a hotel in central Lisbon",
+          "depends_on": [
+            "hA1"
+          ],
+          "label": "change",
+          "accept": [
+            "revised",
+            "retracted"
+          ],
+          "must": [
+            "porto"
+          ],
+          "mustNot": [
+            "lisbon"
+          ]
+        },
+        {
+          "fid": "hA4",
+          "subject": "ceremony",
+          "claim": "the ceremony starts at 4pm",
+          "depends_on": [
+            "hA1"
+          ],
+          "label": "keep"
+        },
+        {
+          "fid": "hA5",
+          "subject": "dress",
+          "claim": "the bride wears a blue dress",
+          "label": "keep"
+        }
+      ],
+      "twist": {
+        "subject": "wedding",
+        "slot": "location",
+        "claim": "the wedding is in Porto",
+        "impact": "normal"
+      }
+    },
+    {
+      "sid": "allergy",
+      "facts": [
+        {
+          "fid": "hB1",
+          "subject": "leo",
+          "claim": "Leo's favourite snack is peanut butter toast",
+          "label": "change",
+          "accept": [
+            "revised",
+            "retracted"
+          ],
+          "mustNot": [
+            "favourite snack is peanut"
+          ]
+        },
+        {
+          "fid": "hB2",
+          "subject": "leo",
+          "claim": "Leo packs peanut cookies for school every day",
+          "label": "change",
+          "accept": [
+            "revised",
+            "retracted"
+          ],
+          "mustNot": [
+            "packs peanut cookies"
+          ]
+        },
+        {
+          "fid": "hB3",
+          "subject": "leo",
+          "claim": "Leo is 9 years old",
+          "label": "keep"
+        },
+        {
+          "fid": "hB4",
+          "subject": "leo",
+          "claim": "Leo plays the violin",
+          "label": "keep"
+        },
+        {
+          "fid": "hB5",
+          "subject": "leo#family",
+          "claim": "Leo's older sister is Ana",
+          "label": "keep"
+        },
+        {
+          "fid": "hB6",
+          "subject": "school",
+          "claim": "the school cafeteria serves satay on Fridays",
+          "label": "keep"
+        }
+      ],
+      "twist": {
+        "subject": "leo",
+        "claim": "Leo is severely allergic to peanuts",
+        "impact": "high"
+      }
+    },
+    {
+      "sid": "acquisition",
+      "facts": [
+        {
+          "fid": "hC1",
+          "subject": "nimbus",
+          "claim": "Nimbus is an independent startup",
+          "label": "change",
+          "accept": [
+            "revised",
+            "retracted"
+          ],
+          "mustNot": [
+            "is an independent"
+          ]
+        },
+        {
+          "fid": "hC2",
+          "subject": "nimbus",
+          "claim": "investors can buy Nimbus shares directly from the company",
+          "label": "change",
+          "accept": [
+            "revised",
+            "retracted"
+          ],
+          "mustNot": [
+            "can buy nimbus shares directly"
+          ]
+        },
+        {
+          "fid": "hC3",
+          "subject": "nimbus",
+          "claim": "Nimbus sells weather-forecasting software",
+          "label": "keep"
+        },
+        {
+          "fid": "hC4",
+          "subject": "nimbus",
+          "claim": "Nimbus was founded in Oslo in 2019",
+          "label": "keep"
+        },
+        {
+          "fid": "hC5",
+          "subject": "nimbus#staff",
+          "claim": "Nimbus has 40 employees",
+          "label": "either"
+        },
+        {
+          "fid": "hC6",
+          "subject": "orbitel",
+          "claim": "Orbitel is a telecom company",
+          "label": "keep"
+        }
+      ],
+      "twist": {
+        "subject": "nimbus",
+        "claim": "Nimbus was acquired by Orbitel and no longer exists as an independent company",
+        "impact": "high"
+      }
+    }
+  ],
+  "heldout2": [
+    {
+      "sid": "office",
+      "facts": [
+        {
+          "fid": "kA1",
+          "subject": "office",
+          "slot": "location",
+          "claim": "the team office is in Berlin",
+          "label": "base"
+        },
+        {
+          "fid": "kA2",
+          "subject": "commute",
+          "claim": "the team commutes on the Berlin U-Bahn",
+          "depends_on": [
+            "kA1"
+          ],
+          "label": "change",
+          "accept": [
+            "revised",
+            "retracted"
+          ],
+          "mustNot": [
+            "team commutes on the berlin"
+          ]
+        },
+        {
+          "fid": "kA3",
+          "subject": "lunch",
+          "claim": "team lunches are at a cafe near Alexanderplatz",
+          "depends_on": [
+            "kA1"
+          ],
+          "label": "change",
+          "accept": [
+            "revised",
+            "retracted"
+          ],
+          "mustNot": [
+            "lunches are at a cafe near alexanderplatz"
+          ]
+        },
+        {
+          "fid": "kA4",
+          "subject": "standup",
+          "claim": "the daily standup is at 9:30",
+          "depends_on": [
+            "kA1"
+          ],
+          "label": "keep"
+        },
+        {
+          "fid": "kA5",
+          "subject": "lead",
+          "claim": "the team lead is Farah",
+          "label": "keep"
+        }
+      ],
+      "twist": {
+        "subject": "office",
+        "slot": "location",
+        "claim": "the team office is in Munich",
+        "impact": "normal"
+      }
+    },
+    {
+      "sid": "vegan",
+      "facts": [
+        {
+          "fid": "kB1",
+          "subject": "dana",
+          "claim": "Dana's signature dish is beef bourguignon",
+          "label": "change",
+          "accept": [
+            "revised",
+            "retracted"
+          ],
+          "mustNot": [
+            "signature dish is beef"
+          ]
+        },
+        {
+          "fid": "kB2",
+          "subject": "dana",
+          "claim": "Dana orders a cheese platter every Friday",
+          "label": "change",
+          "accept": [
+            "revised",
+            "retracted"
+          ],
+          "mustNot": [
+            "dana orders a cheese platter"
+          ]
+        },
+        {
+          "fid": "kB3",
+          "subject": "dana",
+          "claim": "Dana runs a restaurant in Lyon",
+          "label": "keep"
+        },
+        {
+          "fid": "kB4",
+          "subject": "dana",
+          "claim": "Dana trained as a chef in Paris",
+          "label": "keep"
+        },
+        {
+          "fid": "kB5",
+          "subject": "dana#restaurant",
+          "claim": "Dana's restaurant seats 60 guests",
+          "label": "keep"
+        },
+        {
+          "fid": "kB6",
+          "subject": "market",
+          "claim": "the Lyon market opens at 7am",
+          "label": "keep"
+        }
+      ],
+      "twist": {
+        "subject": "dana",
+        "claim": "Dana became strictly vegan last year",
+        "impact": "high"
+      }
+    },
+    {
+      "sid": "ship",
+      "facts": [
+        {
+          "fid": "kC1",
+          "subject": "aurora",
+          "claim": "the Aurora sails the Lisbon to Madeira route every week",
+          "label": "change",
+          "accept": [
+            "revised",
+            "retracted"
+          ],
+          "mustNot": [
+            "aurora sails the"
+          ]
+        },
+        {
+          "fid": "kC2",
+          "subject": "aurora",
+          "claim": "passengers can book cabins on the Aurora",
+          "label": "change",
+          "accept": [
+            "revised",
+            "retracted"
+          ],
+          "mustNot": [
+            "can book cabins"
+          ]
+        },
+        {
+          "fid": "kC3",
+          "subject": "aurora",
+          "claim": "the Aurora was built in 1978",
+          "label": "keep"
+        },
+        {
+          "fid": "kC4",
+          "subject": "aurora",
+          "claim": "the Aurora is 140 metres long",
+          "label": "keep"
+        },
+        {
+          "fid": "kC5",
+          "subject": "aurora#history",
+          "claim": "the Aurora's first captain was Ines Duarte",
+          "label": "keep"
+        },
+        {
+          "fid": "kC6",
+          "subject": "madeira",
+          "claim": "Madeira is a Portuguese island",
+          "label": "keep"
+        }
+      ],
+      "twist": {
+        "subject": "aurora",
+        "claim": "the Aurora was retired from service and is now a museum ship",
+        "impact": "high"
+      }
+    }
+  ]
+}

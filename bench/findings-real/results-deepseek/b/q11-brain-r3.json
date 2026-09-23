@@ -1,0 +1,20 @@
+{
+  "phase": "b",
+  "tag": "q11-brain-r3",
+  "model": "deepseek-v4-pro",
+  "is_error": false,
+  "subtype": "success",
+  "result": "The default timeout is `10 * 60 * 1000` ms = 600,000 ms = 10 minutes.\n\nANSWER: 10",
+  "cost": 0.001744864,
+  "turns": 3,
+  "tin": 3513,
+  "tout": 177,
+  "cache_hit": 2816,
+  "cache_miss": 697,
+  "tool_calls": 2,
+  "peak": true,
+  "exit": 0,
+  "stderr": "",
+  "duration_ms": 4657,
+  "prompt": "Answer this question about the codebase in the current directory (plan-ledger, a Node.js app).\nYou may read files. Do not modify anything.\n\nQuestion: What is runVerify's default timeout, expressed in minutes?\n\nWhat the project already knows (recorded findings — check any marked CONFLICT before relying on it):\n- [fact] scripts/runner-lib.mjs#runverify: runVerify runs the VERIFY command with shell:true (deliberate, trusted step-author input) and a 10-minute default timeout, returning ok/code/tail where tail is the last 500 chars of combined stdout+st\n- [fact] scripts/runner-lib.mjs#runverify: Runs the VERIFY command with spawnSync shell:true (deliberate, trusted step-author input) and a 10-minute default timeout, returning {ok, code, tail} where tail is the last 500 chars of combined stdou\n- [fact] scripts/runner-lib.mjs#runverify: runVerify executes the VERIFY command with shell:true (deliberate, trusted step-author input) and a 10-minute default timeout, returning ok/code and the last 500 chars of combined output\n- [fact] scripts/runner.mjs#maxretries: --max-retries caps the retry loop at 48 (default), with --retry-minutes default 30 min per sleep (48×30min ≈ 24h)\n- [fact] scripts/runner.mjs#msuntilreset: When the limit message names a reset time, sleep targets just past it (2-min buffer); otherwise falls back to --retry-minutes; parses are sanity-capped at 12h\n\nBe precise. The FINAL LINE of your output MUST be exactly:\nANSWER: <your answer>"
+}

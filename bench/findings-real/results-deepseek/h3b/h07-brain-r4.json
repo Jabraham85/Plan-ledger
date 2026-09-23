@@ -1,0 +1,20 @@
+{
+  "phase": "h3b",
+  "tag": "h07-brain-r4",
+  "model": "deepseek-v4-pro",
+  "is_error": false,
+  "subtype": "success",
+  "result": "I have all the values. Let me verify the tokenize minimum length: `w.length > 2` means tokens of length 3 or more are kept, so minimum length is 3.\n\n- (1) tokenize: `w.length > 2` → minimum length 3\n- (2) recall: `limit = 8`\n- (3) getLessons: `limit = 5`\n- (4) FINDINGS_MAX = 20\n- (5) --max-retries default = 48\n\nANSWER: 3, 8, 5, 20, 48",
+  "cost": 0.0015106959999999997,
+  "turns": 2,
+  "tin": 3679,
+  "tout": 310,
+  "cache_hit": 3584,
+  "cache_miss": 95,
+  "tool_calls": 4,
+  "peak": true,
+  "exit": 0,
+  "stderr": "",
+  "duration_ms": 4578,
+  "prompt": "Answer this question about the codebase in the current directory (plan-ledger, a Node.js app).\nYou may read files. Do not modify anything.\n\nQuestion: Find these five values in the plan-ledger codebase:\n(1) minimum length (in characters) of a token kept by the ledger tokenize()\n(2) default result limit of Store.recall\n(3) default result limit of Store.getLessons\n(4) maximum number of findings absorbed from one agent output (FINDINGS_MAX)\n(5) the runner's default --max-retries\nGive exactly five numbers, in this order, comma-separated, with no units.\n\nWhat the project already knows (recorded findings — check any marked CONFLICT before relying on it):\n- [fact] scripts/runner-lib.mjs#findings_max: At most 20 findings are kept per output (FINDINGS_MAX=20), and the parser scans lines from the bottom up, taking the last FINDINGS line found\n- [fact] scripts/runner-lib.mjs#findings_max: FINDINGS_MAX is 20, the hard cap on absorbed findings per output\n- [fact] src/db.mjs#tokenize: tokenize lowercases, splits on non-[a-z0-9_], drops tokens of length <=2 and a STOP set, and is exported so the RAG ranker/expander tokenize identically to getLessons/recall\n- [fact] scripts/runner.mjs#maxretries: --max-retries caps the retry loop at 48 (default), with --retry-minutes default 30 min per sleep (48×30min ≈ 24h)\n- [fact] scripts/runner.mjs#budgetorlimitstop: Limit detection trusts structured signals (HTTP 429 / stop_reason) and only regexes free-text result when the run errored, so a successful agent merely mentioning 'rate limit' does not stop the run\n\nBe precise. The FINAL LINE of your output MUST be exactly:\nANSWER: <your answer>"
+}

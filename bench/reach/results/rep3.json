@@ -1,0 +1,449 @@
+{
+  "rep": 3,
+  "model": "deepseek-v4-pro",
+  "scenarios": [
+    {
+      "sid": "frog",
+      "set": "dev",
+      "swept": [
+        "s1e",
+        "s1a",
+        "s1b",
+        "s1d",
+        "s1c"
+      ],
+      "reach": [
+        {
+          "id": 9,
+          "picked": [
+            "s1f"
+          ],
+          "opened": [
+            "s1f"
+          ],
+          "cost": 0.00019074
+        }
+      ],
+      "final": {
+        "s1a": {
+          "status": "active",
+          "revised": true,
+          "claim": "the princess has frog-like skin"
+        },
+        "s1b": {
+          "status": "retracted",
+          "revised": false,
+          "claim": "the princess wore a silk gown to the ball"
+        },
+        "s1c": {
+          "status": "retracted",
+          "revised": false,
+          "claim": "the princess's father is King Aldric"
+        },
+        "s1d": {
+          "status": "active",
+          "revised": true,
+          "claim": "the princess has lived in the castle since birth as a frog"
+        },
+        "s1e": {
+          "status": "active",
+          "revised": false,
+          "claim": "the princess danced with the prince until midnight"
+        },
+        "s1f": {
+          "status": "active",
+          "revised": true,
+          "claim": "the prince kissed her frog hand when they first met"
+        },
+        "s1g": {
+          "status": "active",
+          "revised": false,
+          "claim": "the castle has four towers"
+        },
+        "s1h": {
+          "status": "active",
+          "revised": false,
+          "claim": "the kingdom has been at peace for ten years"
+        }
+      },
+      "calls": [
+        {
+          "prompt": "A new fact changes what everything about \"princess\" means:\n  \"the princess is actually a frog\"\n\nFacts that name \"princess\" are already being re-checked. Below are OTHER recorded facts.\nList the ones the new fact may make false or misleading — typically because they refer to \"princess\"\nINDIRECTLY (a pronoun like \"she\"/\"he\"/\"they\", a role or title, a nickname) or describe something that depended on what\nwas believed before. Do NOT list facts that are unrelated to \"princess\", or that stay true as written.\n\n#6 [ball] the prince kissed her hand when they first met\n#8 [kingdom] the kingdom has been at peace for ten years\n#7 [castle] the castle has four towers\n\nThe FINAL LINE of your output MUST be exactly (an empty list is fine):\nREACH: [ids]",
+          "result": "#6 [ball] the prince kissed her hand when they first met\n\nREACH: [6]",
+          "cost": 0.00019074,
+          "peak": false
+        },
+        {
+          "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #1 (subject: princess): \"the princess has long golden hair\"\n\nWhy it is suspect:\n- a NEW fact about \"princess\" changes what everything about it means: \"the princess is actually a frog\"\n\nRe-read the fact in light of the change. Decide from what is given here; do not invent details.\nAsk: knowing the new information, would a careful record-keeper still write THIS fact exactly as it is?\n- If the fact was true BECAUSE of what changed (it followed from the old value, or assumed it), it must follow the new value.\n- If the fact is independent of the change (it would be written the same either way), leave it exactly as it is.\n- The new information is already recorded on its own — never add it to this fact just to mention it.\nDecide:\n- confirmed: it would still be written exactly as it is\n- revised: it would now be written differently — give it as one atomic sentence about the same subject, changing only what the new information changes\n- retracted: it would no longer be recorded at all, and nothing true is left to state\n- unsure: only if you genuinely cannot tell\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+          "result": "RESOLVE: {\"verdict\":\"revised\",\"claim\":\"the princess has frog-like skin\",\"reason\":\"The fact about long golden hair was based on the princess being a typical princess; knowing she is actually a frog changes what physical traits would be recorded.\"}",
+          "cost": 0.00017393200000000001,
+          "peak": false
+        },
+        {
+          "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #2 (subject: princess): \"the princess wore a silk gown to the ball\"\n\nWhy it is suspect:\n- a NEW fact about \"princess\" changes what everything about it means: \"the princess is actually a frog\"\n\nRe-read the fact in light of the change. Decide from what is given here; do not invent details.\nAsk: knowing the new information, would a careful record-keeper still write THIS fact exactly as it is?\n- If the fact was true BECAUSE of what changed (it followed from the old value, or assumed it), it must follow the new value.\n- If the fact is independent of the change (it would be written the same either way), leave it exactly as it is.\n- The new information is already recorded on its own — never add it to this fact just to mention it.\nDecide:\n- confirmed: it would still be written exactly as it is\n- revised: it would now be written differently — give it as one atomic sentence about the same subject, changing only what the new information changes\n- retracted: it would no longer be recorded at all, and nothing true is left to state\n- unsure: only if you genuinely cannot tell\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+          "result": "The fact says \"the princess wore a silk gown to the ball.\" The new information says \"the princess is actually a frog.\" A frog would not wear a silk gown to a ball in the same sense; the fact was based on the princess being a human-like figure who could wear a gown. With the change, the fact would no longer be written the same way.\n\nRESOLVE: {\"verdict\":\"retracted\",\"claim\":\"\",\"reason\":\"The fact assumes the princess is someone who can wear a silk gown; if she is actually a frog, the fact no longer holds and nothing true is left to state.\"}",
+          "cost": 0.000320452,
+          "peak": false
+        },
+        {
+          "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #3 (subject: princess#family): \"the princess's father is King Aldric\"\n\nWhy it is suspect:\n- a NEW fact about \"princess\" changes what everything about it means: \"the princess is actually a frog\"\n\nRe-read the fact in light of the change. Decide from what is given here; do not invent details.\nAsk: knowing the new information, would a careful record-keeper still write THIS fact exactly as it is?\n- If the fact was true BECAUSE of what changed (it followed from the old value, or assumed it), it must follow the new value.\n- If the fact is independent of the change (it would be written the same either way), leave it exactly as it is.\n- The new information is already recorded on its own — never add it to this fact just to mention it.\nDecide:\n- confirmed: it would still be written exactly as it is\n- revised: it would now be written differently — give it as one atomic sentence about the same subject, changing only what the new information changes\n- retracted: it would no longer be recorded at all, and nothing true is left to state\n- unsure: only if you genuinely cannot tell\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+          "result": "The fact \"the princess's father is King Aldric\" is about a familial relationship. The new information says \"the princess is actually a frog.\" A frog does not have a father who is a king in the same sense, so the fact as written would no longer be recorded.  \n\nRESOLVE: {\"verdict\":\"retracted\",\"claim\":\"\",\"reason\":\"The princess being a frog invalidates the father relationship as stated.\"}",
+          "cost": 0.000245872,
+          "peak": false
+        },
+        {
+          "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #4 (subject: princess): \"the princess has lived in the castle since birth\"\n\nWhy it is suspect:\n- a NEW fact about \"princess\" changes what everything about it means: \"the princess is actually a frog\"\n\nRe-read the fact in light of the change. Decide from what is given here; do not invent details.\nAsk: knowing the new information, would a careful record-keeper still write THIS fact exactly as it is?\n- If the fact was true BECAUSE of what changed (it followed from the old value, or assumed it), it must follow the new value.\n- If the fact is independent of the change (it would be written the same either way), leave it exactly as it is.\n- The new information is already recorded on its own — never add it to this fact just to mention it.\nDecide:\n- confirmed: it would still be written exactly as it is\n- revised: it would now be written differently — give it as one atomic sentence about the same subject, changing only what the new information changes\n- retracted: it would no longer be recorded at all, and nothing true is left to state\n- unsure: only if you genuinely cannot tell\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+          "result": "RESOLVE: {\"verdict\":\"revised\",\"claim\":\"the princess has lived in the castle since birth as a frog\",\"reason\":\"The original fact assumed the princess was a human; knowing she is actually a frog changes the subject's nature, so the fact must be updated to reflect that she lived in the castle since birth as a frog.\"}",
+          "cost": 0.00021155200000000002,
+          "peak": false
+        },
+        {
+          "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #5 (subject: ball): \"the princess danced with the prince until midnight\"\n\nWhy it is suspect:\n- a NEW fact about \"princess\" changes what everything about it means: \"the princess is actually a frog\"\n\nRe-read the fact in light of the change. Decide from what is given here; do not invent details.\nAsk: knowing the new information, would a careful record-keeper still write THIS fact exactly as it is?\n- If the fact was true BECAUSE of what changed (it followed from the old value, or assumed it), it must follow the new value.\n- If the fact is independent of the change (it would be written the same either way), leave it exactly as it is.\n- The new information is already recorded on its own — never add it to this fact just to mention it.\nDecide:\n- confirmed: it would still be written exactly as it is\n- revised: it would now be written differently — give it as one atomic sentence about the same subject, changing only what the new information changes\n- retracted: it would no longer be recorded at all, and nothing true is left to state\n- unsure: only if you genuinely cannot tell\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+          "result": "The fact says \"the princess danced with the prince until midnight.\" The new information says \"the princess is actually a frog.\" A frog could still dance with a prince until midnight in a fairy-tale context, but the fact as written doesn't depend on the princess being human — it just states an action. The new information doesn't necessarily change whether the dancing happened.\n\nRESOLVE: {\"verdict\":\"confirmed\",\"claim\":\"the princess danced with the prince until midnight\",\"reason\":\"The fact states an action that is independent of the princess being a frog; nothing in the new information contradicts or changes the dancing event.\"}",
+          "cost": 0.000317812,
+          "peak": false
+        },
+        {
+          "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #6 (subject: ball): \"the prince kissed her hand when they first met\"\n\nWhy it is suspect:\n- a NEW fact about \"princess\" changes what everything about it means: \"the princess is actually a frog\"\n\nRe-read the fact in light of the change. Decide from what is given here; do not invent details.\nAsk: knowing the new information, would a careful record-keeper still write THIS fact exactly as it is?\n- If the fact was true BECAUSE of what changed (it followed from the old value, or assumed it), it must follow the new value.\n- If the fact is independent of the change (it would be written the same either way), leave it exactly as it is.\n- The new information is already recorded on its own — never add it to this fact just to mention it.\nDecide:\n- confirmed: it would still be written exactly as it is\n- revised: it would now be written differently — give it as one atomic sentence about the same subject, changing only what the new information changes\n- retracted: it would no longer be recorded at all, and nothing true is left to state\n- unsure: only if you genuinely cannot tell\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+          "result": "The fact says \"the prince kissed her hand when they first met.\" The new information is that \"the princess is actually a frog.\" The fact is about the prince's action toward \"her\" — presumably the princess. If the princess is actually a frog, then \"her hand\" would not be a hand at all, so the fact as written would not be accurate. A careful record-keeper would revise it to reflect that the prince kissed her frog-hand or something similar, but since we must change only what the new information changes, the fact would now be written differently.\n\nRESOLVE: {\"verdict\":\"revised\",\"claim\":\"the prince kissed her frog hand when they first met\",\"reason\":\"the princess being a frog changes what 'her hand' refers to, so the fact must be revised to reflect the new reality\"}",
+          "cost": 0.00056694,
+          "peak": false
+        }
+      ]
+    },
+    {
+      "sid": "heist",
+      "set": "dev",
+      "swept": [
+        "s2c",
+        "s2g",
+        "s2a",
+        "s2b",
+        "s2e"
+      ],
+      "reach": [
+        {
+          "id": 8,
+          "picked": [
+            "s2d"
+          ],
+          "opened": [
+            "s2d"
+          ],
+          "cost": 0.000072116
+        }
+      ],
+      "final": {
+        "s2a": {
+          "status": "active",
+          "revised": true,
+          "claim": "Marco drove the van"
+        },
+        "s2b": {
+          "status": "active",
+          "revised": true,
+          "claim": "Marco is not loyal to the crew"
+        },
+        "s2c": {
+          "status": "active",
+          "revised": true,
+          "claim": "the crew does not trust Marco completely"
+        },
+        "s2d": {
+          "status": "active",
+          "revised": true,
+          "claim": "the heist did not go unnoticed by the police"
+        },
+        "s2e": {
+          "status": "active",
+          "revised": false,
+          "claim": "Marco has a long criminal record"
+        },
+        "s2f": {
+          "status": "active",
+          "revised": false,
+          "claim": "the vault was on the third floor"
+        },
+        "s2g": {
+          "status": "active",
+          "revised": false,
+          "claim": "Marco recruited the safecracker, Ines"
+        }
+      },
+      "calls": [
+        {
+          "prompt": "A new fact changes what everything about \"marco\" means:\n  \"Marco is an undercover police officer\"\n\nFacts that name \"marco\" are already being re-checked. Below are OTHER recorded facts.\nList the ones the new fact may make false or misleading — typically because they refer to \"marco\"\nINDIRECTLY (a pronoun like \"she\"/\"he\"/\"they\", a role or title, a nickname) or describe something that depended on what\nwas believed before. Do NOT list facts that are unrelated to \"marco\", or that stay true as written.\n\n#6 [vault] the vault was on the third floor\n#4 [heist] the heist went unnoticed by the police\n\nThe FINAL LINE of your output MUST be exactly (an empty list is fine):\nREACH: [ids]",
+          "result": "REACH: [4]",
+          "cost": 0.000072116,
+          "peak": false
+        },
+        {
+          "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #1 (subject: marco): \"Marco drove the getaway van\"\n\nWhy it is suspect:\n- a NEW fact about \"marco\" changes what everything about it means: \"Marco is an undercover police officer\"\n\nRe-read the fact in light of the change. Decide from what is given here; do not invent details.\nAsk: knowing the new information, would a careful record-keeper still write THIS fact exactly as it is?\n- If the fact was true BECAUSE of what changed (it followed from the old value, or assumed it), it must follow the new value.\n- If the fact is independent of the change (it would be written the same either way), leave it exactly as it is.\n- The new information is already recorded on its own — never add it to this fact just to mention it.\nDecide:\n- confirmed: it would still be written exactly as it is\n- revised: it would now be written differently — give it as one atomic sentence about the same subject, changing only what the new information changes\n- retracted: it would no longer be recorded at all, and nothing true is left to state\n- unsure: only if you genuinely cannot tell\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+          "result": "FACT #1 (subject: marco): \"Marco drove the getaway van\"\n\nThe new fact is that Marco is an undercover police officer. This changes the meaning of \"getaway van\" — if Marco is undercover police, the van may not be a getaway van in the criminal sense, or the fact may no longer be accurately described that way. The fact as written assumes Marco was participating in a crime as a driver. With the new information, a careful record-keeper would likely not write \"getaway van\" exactly as is.\n\nRESOLVE: {\"verdict\":\"revised\",\"claim\":\"Marco drove the van\",\"reason\":\"The term 'getaway van' assumes criminal involvement, which is undermined by Marco being an undercover police officer; the neutral fact that he drove the van remains.\"}",
+          "cost": 0.00039899200000000003,
+          "peak": false
+        },
+        {
+          "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #2 (subject: marco): \"Marco is loyal to the crew\"\n\nWhy it is suspect:\n- a NEW fact about \"marco\" changes what everything about it means: \"Marco is an undercover police officer\"\n\nRe-read the fact in light of the change. Decide from what is given here; do not invent details.\nAsk: knowing the new information, would a careful record-keeper still write THIS fact exactly as it is?\n- If the fact was true BECAUSE of what changed (it followed from the old value, or assumed it), it must follow the new value.\n- If the fact is independent of the change (it would be written the same either way), leave it exactly as it is.\n- The new information is already recorded on its own — never add it to this fact just to mention it.\nDecide:\n- confirmed: it would still be written exactly as it is\n- revised: it would now be written differently — give it as one atomic sentence about the same subject, changing only what the new information changes\n- retracted: it would no longer be recorded at all, and nothing true is left to state\n- unsure: only if you genuinely cannot tell\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+          "result": "RESOLVE: {\"verdict\":\"revised\",\"claim\":\"Marco is not loyal to the crew\",\"reason\":\"Marco being an undercover police officer means his apparent loyalty to the crew was based on a false premise; a careful record-keeper would no longer state it as true.\"}",
+          "cost": 0.000189772,
+          "peak": false
+        },
+        {
+          "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #3 (subject: crew): \"the crew trusts Marco completely\"\n\nWhy it is suspect:\n- a NEW fact about \"marco\" changes what everything about it means: \"Marco is an undercover police officer\"\n\nRe-read the fact in light of the change. Decide from what is given here; do not invent details.\nAsk: knowing the new information, would a careful record-keeper still write THIS fact exactly as it is?\n- If the fact was true BECAUSE of what changed (it followed from the old value, or assumed it), it must follow the new value.\n- If the fact is independent of the change (it would be written the same either way), leave it exactly as it is.\n- The new information is already recorded on its own — never add it to this fact just to mention it.\nDecide:\n- confirmed: it would still be written exactly as it is\n- revised: it would now be written differently — give it as one atomic sentence about the same subject, changing only what the new information changes\n- retracted: it would no longer be recorded at all, and nothing true is left to state\n- unsure: only if you genuinely cannot tell\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+          "result": "The fact says the crew trusts Marco completely. The new information says Marco is an undercover police officer. If the crew knew this, they likely would not trust him completely. The fact was based on the crew’s perception of Marco, which the new information changes. Therefore, it would now be written differently.\n\nRESOLVE: {\"verdict\":\"revised\",\"claim\":\"the crew does not trust Marco completely\",\"reason\":\"The crew's trust was based on their belief about Marco; knowing he is an undercover police officer changes that trust.\"}",
+          "cost": 0.000289432,
+          "peak": false
+        },
+        {
+          "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #5 (subject: marco#background): \"Marco has a long criminal record\"\n\nWhy it is suspect:\n- a NEW fact about \"marco\" changes what everything about it means: \"Marco is an undercover police officer\"\n\nRe-read the fact in light of the change. Decide from what is given here; do not invent details.\nAsk: knowing the new information, would a careful record-keeper still write THIS fact exactly as it is?\n- If the fact was true BECAUSE of what changed (it followed from the old value, or assumed it), it must follow the new value.\n- If the fact is independent of the change (it would be written the same either way), leave it exactly as it is.\n- The new information is already recorded on its own — never add it to this fact just to mention it.\nDecide:\n- confirmed: it would still be written exactly as it is\n- revised: it would now be written differently — give it as one atomic sentence about the same subject, changing only what the new information changes\n- retracted: it would no longer be recorded at all, and nothing true is left to state\n- unsure: only if you genuinely cannot tell\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+          "result": "The fact says Marco has a long criminal record. The new information says Marco is an undercover police officer. An undercover officer may have a fabricated criminal record as part of a cover identity, but the fact as written does not specify that. The new information does not necessarily negate the fact; it could still be true that Marco has a long criminal record, whether real or as part of his cover. The fact is independent of the change.\n\nRESOLVE: {\"verdict\":\"confirmed\",\"claim\":\"Marco has a long criminal record\",\"reason\":\"The new information that Marco is an undercover police officer does not necessarily contradict or change the fact that he has a long criminal record; it could still be true as written.\"}",
+          "cost": 0.000365332,
+          "peak": false
+        },
+        {
+          "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #7 (subject: crew): \"Marco recruited the safecracker, Ines\"\n\nWhy it is suspect:\n- a NEW fact about \"marco\" changes what everything about it means: \"Marco is an undercover police officer\"\n\nRe-read the fact in light of the change. Decide from what is given here; do not invent details.\nAsk: knowing the new information, would a careful record-keeper still write THIS fact exactly as it is?\n- If the fact was true BECAUSE of what changed (it followed from the old value, or assumed it), it must follow the new value.\n- If the fact is independent of the change (it would be written the same either way), leave it exactly as it is.\n- The new information is already recorded on its own — never add it to this fact just to mention it.\nDecide:\n- confirmed: it would still be written exactly as it is\n- revised: it would now be written differently — give it as one atomic sentence about the same subject, changing only what the new information changes\n- retracted: it would no longer be recorded at all, and nothing true is left to state\n- unsure: only if you genuinely cannot tell\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+          "result": "RESOLVE: {\"verdict\":\"confirmed\",\"claim\":\"\",\"reason\":\"The fact that Marco recruited Ines as a safecracker is not contradicted by Marco being an undercover police officer; an undercover officer could still recruit a safecracker as part of an operation.\"}",
+          "cost": 0.00018779200000000002,
+          "peak": false
+        },
+        {
+          "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #4 (subject: heist): \"the heist went unnoticed by the police\"\n\nWhy it is suspect:\n- a NEW fact about \"marco\" changes what everything about it means: \"Marco is an undercover police officer\"\n\nRe-read the fact in light of the change. Decide from what is given here; do not invent details.\nAsk: knowing the new information, would a careful record-keeper still write THIS fact exactly as it is?\n- If the fact was true BECAUSE of what changed (it followed from the old value, or assumed it), it must follow the new value.\n- If the fact is independent of the change (it would be written the same either way), leave it exactly as it is.\n- The new information is already recorded on its own — never add it to this fact just to mention it.\nDecide:\n- confirmed: it would still be written exactly as it is\n- revised: it would now be written differently — give it as one atomic sentence about the same subject, changing only what the new information changes\n- retracted: it would no longer be recorded at all, and nothing true is left to state\n- unsure: only if you genuinely cannot tell\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+          "result": "The fact says \"the heist went unnoticed by the police.\" The new information is that Marco is an undercover police officer. If Marco was involved in the heist, then the police—through Marco—would have known about it, so the heist did not go unnoticed by the police. The fact was true because it assumed Marco was not connected to the police; that assumption has changed. Therefore, the fact must be revised.\n\nRESOLVE: {\"verdict\":\"revised\",\"claim\":\"the heist did not go unnoticed by the police\",\"reason\":\"Marco is an undercover police officer, so the police would have known about the heist through him.\"}",
+          "cost": 0.000343552,
+          "peak": false
+        }
+      ]
+    },
+    {
+      "sid": "abroad",
+      "set": "heldout",
+      "swept": [
+        "a1"
+      ],
+      "reach": [
+        {
+          "id": 7,
+          "picked": [
+            "a2"
+          ],
+          "opened": [
+            "a2"
+          ],
+          "cost": 0.000097196
+        }
+      ],
+      "final": {
+        "a1": {
+          "status": "active",
+          "revised": true,
+          "claim": "Anna did not run the village shop last summer"
+        },
+        "a2": {
+          "status": "active",
+          "revised": true,
+          "claim": "she taught the village kids to swim in the lake every July before last summer"
+        },
+        "a3": {
+          "status": "active",
+          "revised": false,
+          "claim": "last summer the shopkeeper greeted every customer by name"
+        },
+        "a4": {
+          "status": "active",
+          "revised": false,
+          "claim": "the lake was unusually warm in July"
+        },
+        "a5": {
+          "status": "active",
+          "revised": false,
+          "claim": "the village shop sells rye bread"
+        },
+        "a6": {
+          "status": "active",
+          "revised": false,
+          "claim": "the village mayor is Tomas"
+        }
+      },
+      "calls": [
+        {
+          "prompt": "A new fact changes what everything about \"anna\" means:\n  \"Anna was abroad for all of last summer\"\n\nFacts that name \"anna\" are already being re-checked. Below are OTHER recorded facts.\nList the ones the new fact may make false or misleading — typically because they refer to \"anna\"\nINDIRECTLY (a pronoun like \"she\"/\"he\"/\"they\", a role or title, a nickname) or describe something that depended on what\nwas believed before. Do NOT list facts that are unrelated to \"anna\", or that stay true as written.\n\n#6 [village] the village mayor is Tomas\n#5 [shop] the village shop sells rye bread\n#4 [lake] the lake was unusually warm in July\n#3 [shop] last summer the shopkeeper greeted every customer by name\n#2 [lake] she taught the village kids to swim in the lake every July\n\nThe FINAL LINE of your output MUST be exactly (an empty list is fine):\nREACH: [ids]",
+          "result": "REACH: [2]",
+          "cost": 0.000097196,
+          "peak": false
+        },
+        {
+          "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #1 (subject: anna): \"Anna ran the village shop all through last summer\"\n\nWhy it is suspect:\n- a NEW fact about \"anna\" changes what everything about it means: \"Anna was abroad for all of last summer\"\n\nRe-read the fact in light of the change. Decide from what is given here; do not invent details.\nAsk: knowing the new information, would a careful record-keeper still write THIS fact exactly as it is?\n- If the fact was true BECAUSE of what changed (it followed from the old value, or assumed it), it must follow the new value.\n- If the fact is independent of the change (it would be written the same either way), leave it exactly as it is.\n- The new information is already recorded on its own — never add it to this fact just to mention it.\nDecide:\n- confirmed: it would still be written exactly as it is\n- revised: it would now be written differently — give it as one atomic sentence about the same subject, changing only what the new information changes\n- retracted: it would no longer be recorded at all, and nothing true is left to state\n- unsure: only if you genuinely cannot tell\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+          "result": "RESOLVE: {\"verdict\":\"revised\",\"claim\":\"Anna did not run the village shop last summer\",\"reason\":\"The new information that Anna was abroad all last summer directly contradicts the claim that she ran the village shop during that time.\"}",
+          "cost": 0.000171292,
+          "peak": false
+        },
+        {
+          "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #2 (subject: lake): \"she taught the village kids to swim in the lake every July\"\n\nWhy it is suspect:\n- a NEW fact about \"anna\" changes what everything about it means: \"Anna was abroad for all of last summer\"\n\nRe-read the fact in light of the change. Decide from what is given here; do not invent details.\nAsk: knowing the new information, would a careful record-keeper still write THIS fact exactly as it is?\n- If the fact was true BECAUSE of what changed (it followed from the old value, or assumed it), it must follow the new value.\n- If the fact is independent of the change (it would be written the same either way), leave it exactly as it is.\n- The new information is already recorded on its own — never add it to this fact just to mention it.\nDecide:\n- confirmed: it would still be written exactly as it is\n- revised: it would now be written differently — give it as one atomic sentence about the same subject, changing only what the new information changes\n- retracted: it would no longer be recorded at all, and nothing true is left to state\n- unsure: only if you genuinely cannot tell\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+          "result": "The fact says \"she taught the village kids to swim in the lake every July.\" The new information says Anna was abroad for all of last summer. If she was abroad for all of last summer, she could not have taught the village kids to swim in the lake every July — at least not last July. The fact as written claims an ongoing, recurring activity (\"every July\"), which is contradicted by the new information for the most recent July. A careful record-keeper would not still write \"every July\" knowing she was abroad all of last summer.\n\nRESOLVE: {\"verdict\":\"revised\",\"claim\":\"she taught the village kids to swim in the lake every July before last summer\",\"reason\":\"The new information that Anna was abroad for all of last summer contradicts the recurring 'every July' claim, so the fact must be adjusted to exclude last summer.\"}",
+          "cost": 0.00042209200000000005,
+          "peak": false
+        }
+      ]
+    },
+    {
+      "sid": "blind",
+      "set": "heldout",
+      "swept": [
+        "b1"
+      ],
+      "reach": [
+        {
+          "id": 7,
+          "picked": [
+            "b3",
+            "b2"
+          ],
+          "opened": [
+            "b3",
+            "b2"
+          ],
+          "cost": 0.00009341199999999999
+        }
+      ],
+      "final": {
+        "b1": {
+          "status": "active",
+          "revised": true,
+          "claim": "Captain Reyes no longer reads the sea charts every night"
+        },
+        "b2": {
+          "status": "active",
+          "revised": true,
+          "claim": "she steers the ship through the reef"
+        },
+        "b3": {
+          "status": "active",
+          "revised": true,
+          "claim": "each morning the captain inspects the rigging"
+        },
+        "b4": {
+          "status": "active",
+          "revised": false,
+          "claim": "the ship carries a crew of forty"
+        },
+        "b5": {
+          "status": "active",
+          "revised": false,
+          "claim": "the reef lies east of the island"
+        },
+        "b6": {
+          "status": "active",
+          "revised": false,
+          "claim": "the cook is called Bram"
+        }
+      },
+      "calls": [
+        {
+          "prompt": "A new fact changes what everything about \"captain reyes\" means:\n  \"Captain Reyes lost her sight in a storm last year\"\n\nFacts that name \"captain reyes\" are already being re-checked. Below are OTHER recorded facts.\nList the ones the new fact may make false or misleading — typically because they refer to \"captain reyes\"\nINDIRECTLY (a pronoun like \"she\"/\"he\"/\"they\", a role or title, a nickname) or describe something that depended on what\nwas believed before. Do NOT list facts that are unrelated to \"captain reyes\", or that stay true as written.\n\n#6 [galley] the cook is called Bram\n#5 [bridge] the reef lies east of the island\n#4 [crew] the ship carries a crew of forty\n#3 [crew] each morning the captain visually inspects the rigging\n#2 [bridge] she steers the ship through the reef by eye\n\nThe FINAL LINE of your output MUST be exactly (an empty list is fine):\nREACH: [ids]",
+          "result": "#3 [crew] each morning the captain visually inspects the rigging\n#2 [bridge] she steers the ship through the reef by eye\n\nREACH: [3, 2]",
+          "cost": 0.00009341199999999999,
+          "peak": false
+        },
+        {
+          "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #1 (subject: captain reyes): \"Captain Reyes reads the sea charts every night\"\n\nWhy it is suspect:\n- a NEW fact about \"captain reyes\" changes what everything about it means: \"Captain Reyes lost her sight in a storm last year\"\n\nRe-read the fact in light of the change. Decide from what is given here; do not invent details.\nAsk: knowing the new information, would a careful record-keeper still write THIS fact exactly as it is?\n- If the fact was true BECAUSE of what changed (it followed from the old value, or assumed it), it must follow the new value.\n- If the fact is independent of the change (it would be written the same either way), leave it exactly as it is.\n- The new information is already recorded on its own — never add it to this fact just to mention it.\nDecide:\n- confirmed: it would still be written exactly as it is\n- revised: it would now be written differently — give it as one atomic sentence about the same subject, changing only what the new information changes\n- retracted: it would no longer be recorded at all, and nothing true is left to state\n- unsure: only if you genuinely cannot tell\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+          "result": "RESOLVE: {\"verdict\":\"revised\",\"claim\":\"Captain Reyes no longer reads the sea charts every night\",\"reason\":\"The fact depended on Captain Reyes being able to read, but she lost her sight in a storm last year.\"}",
+          "cost": 0.00017261200000000002,
+          "peak": false
+        },
+        {
+          "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #2 (subject: bridge): \"she steers the ship through the reef by eye\"\n\nWhy it is suspect:\n- a NEW fact about \"captain reyes\" changes what everything about it means: \"Captain Reyes lost her sight in a storm last year\"\n\nRe-read the fact in light of the change. Decide from what is given here; do not invent details.\nAsk: knowing the new information, would a careful record-keeper still write THIS fact exactly as it is?\n- If the fact was true BECAUSE of what changed (it followed from the old value, or assumed it), it must follow the new value.\n- If the fact is independent of the change (it would be written the same either way), leave it exactly as it is.\n- The new information is already recorded on its own — never add it to this fact just to mention it.\nDecide:\n- confirmed: it would still be written exactly as it is\n- revised: it would now be written differently — give it as one atomic sentence about the same subject, changing only what the new information changes\n- retracted: it would no longer be recorded at all, and nothing true is left to state\n- unsure: only if you genuinely cannot tell\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+          "result": "The fact says \"she steers the ship through the reef by eye.\" The new information says Captain Reyes lost her sight in a storm last year. Steering by eye requires sight, so the fact as written would no longer be true. A careful record-keeper would revise it to reflect that she steers the ship through the reef without sight, or by some other means, but since we must not invent details, the only change the new information directly forces is removing \"by eye.\"\n\nRESOLVE: {\"verdict\":\"revised\",\"claim\":\"she steers the ship through the reef\",\"reason\":\"Steering by eye requires sight, which Captain Reyes lost last year, so the phrase 'by eye' is no longer accurate.\"}",
+          "cost": 0.0003686320000000001,
+          "peak": false
+        },
+        {
+          "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #3 (subject: crew): \"each morning the captain visually inspects the rigging\"\n\nWhy it is suspect:\n- a NEW fact about \"captain reyes\" changes what everything about it means: \"Captain Reyes lost her sight in a storm last year\"\n\nRe-read the fact in light of the change. Decide from what is given here; do not invent details.\nAsk: knowing the new information, would a careful record-keeper still write THIS fact exactly as it is?\n- If the fact was true BECAUSE of what changed (it followed from the old value, or assumed it), it must follow the new value.\n- If the fact is independent of the change (it would be written the same either way), leave it exactly as it is.\n- The new information is already recorded on its own — never add it to this fact just to mention it.\nDecide:\n- confirmed: it would still be written exactly as it is\n- revised: it would now be written differently — give it as one atomic sentence about the same subject, changing only what the new information changes\n- retracted: it would no longer be recorded at all, and nothing true is left to state\n- unsure: only if you genuinely cannot tell\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+          "result": "FACT #3 says: \"each morning the captain visually inspects the rigging\"\n\nNew information: \"Captain Reyes lost her sight in a storm last year\"\n\nA careful record-keeper would not still write that the captain *visually* inspects the rigging, because the captain can no longer see. The inspection itself may still happen, but not visually.\n\nRESOLVE: {\"verdict\":\"revised\",\"claim\":\"each morning the captain inspects the rigging\",\"reason\":\"The captain can no longer perform a visual inspection due to lost sight, so 'visually' is no longer accurate.\"}",
+          "cost": 0.000321112,
+          "peak": false
+        }
+      ]
+    },
+    {
+      "sid": "moved",
+      "set": "heldout",
+      "swept": [
+        "m1"
+      ],
+      "reach": [
+        {
+          "id": 7,
+          "picked": [
+            "m2",
+            "m3"
+          ],
+          "opened": [
+            "m2",
+            "m3"
+          ],
+          "cost": 0.000083512
+        }
+      ],
+      "final": {
+        "m1": {
+          "status": "active",
+          "revised": true,
+          "claim": "Dr Patel does not see patients at the town clinic on Mondays"
+        },
+        "m2": {
+          "status": "retracted",
+          "revised": false,
+          "claim": "she gives the school first-aid talk every spring"
+        },
+        "m3": {
+          "status": "active",
+          "revised": true,
+          "claim": "the town doctor no longer makes house calls on Fridays"
+        },
+        "m4": {
+          "status": "active",
+          "revised": false,
+          "claim": "the school has 300 pupils"
+        },
+        "m5": {
+          "status": "active",
+          "revised": false,
+          "claim": "the pharmacy is on Main Street"
+        },
+        "m6": {
+          "status": "active",
+          "revised": false,
+          "claim": "the clinic opens at 8am"
+        }
+      },
+      "calls": [
+        {
+          "prompt": "A new fact changes what everything about \"dr patel\" means:\n  \"Dr Patel moved to Canada in January\"\n\nFacts that name \"dr patel\" are already being re-checked. Below are OTHER recorded facts.\nList the ones the new fact may make false or misleading — typically because they refer to \"dr patel\"\nINDIRECTLY (a pronoun like \"she\"/\"he\"/\"they\", a role or title, a nickname) or describe something that depended on what\nwas believed before. Do NOT list facts that are unrelated to \"dr patel\", or that stay true as written.\n\n#6 [clinic] the clinic opens at 8am\n#5 [town] the pharmacy is on Main Street\n#4 [school] the school has 300 pupils\n#3 [town] the town doctor makes house calls on Fridays\n#2 [school] she gives the school first-aid talk every spring\n\nThe FINAL LINE of your output MUST be exactly (an empty list is fine):\nREACH: [ids]",
+          "result": "#2 [school] she gives the school first-aid talk every spring  \n#3 [town] the town doctor makes house calls on Fridays\n\nREACH: [#2, #3]",
+          "cost": 0.000083512,
+          "peak": false
+        },
+        {
+          "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #1 (subject: dr patel): \"Dr Patel sees patients at the town clinic on Mondays\"\n\nWhy it is suspect:\n- a NEW fact about \"dr patel\" changes what everything about it means: \"Dr Patel moved to Canada in January\"\n\nRe-read the fact in light of the change. Decide from what is given here; do not invent details.\nAsk: knowing the new information, would a careful record-keeper still write THIS fact exactly as it is?\n- If the fact was true BECAUSE of what changed (it followed from the old value, or assumed it), it must follow the new value.\n- If the fact is independent of the change (it would be written the same either way), leave it exactly as it is.\n- The new information is already recorded on its own — never add it to this fact just to mention it.\nDecide:\n- confirmed: it would still be written exactly as it is\n- revised: it would now be written differently — give it as one atomic sentence about the same subject, changing only what the new information changes\n- retracted: it would no longer be recorded at all, and nothing true is left to state\n- unsure: only if you genuinely cannot tell\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+          "result": "RESOLVE: {\"verdict\":\"revised\",\"claim\":\"Dr Patel does not see patients at the town clinic on Mondays\",\"reason\":\"The fact assumed Dr Patel was still local to the town clinic; moving to Canada in January changes that, so the original statement would now be written differently.\"}",
+          "cost": 0.00019571199999999999,
+          "peak": false
+        },
+        {
+          "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #2 (subject: school): \"she gives the school first-aid talk every spring\"\n\nWhy it is suspect:\n- a NEW fact about \"dr patel\" changes what everything about it means: \"Dr Patel moved to Canada in January\"\n\nRe-read the fact in light of the change. Decide from what is given here; do not invent details.\nAsk: knowing the new information, would a careful record-keeper still write THIS fact exactly as it is?\n- If the fact was true BECAUSE of what changed (it followed from the old value, or assumed it), it must follow the new value.\n- If the fact is independent of the change (it would be written the same either way), leave it exactly as it is.\n- The new information is already recorded on its own — never add it to this fact just to mention it.\nDecide:\n- confirmed: it would still be written exactly as it is\n- revised: it would now be written differently — give it as one atomic sentence about the same subject, changing only what the new information changes\n- retracted: it would no longer be recorded at all, and nothing true is left to state\n- unsure: only if you genuinely cannot tell\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+          "result": "The fact says \"she gives the school first-aid talk every spring.\" The new information is that Dr Patel moved to Canada in January. If Dr Patel is the \"she\" in the fact, then after moving to Canada in January, she would no longer be giving the school first-aid talk every spring. The fact would no longer be true as written. It would be retracted, since nothing true is left to state about her giving the talk.\n\nRESOLVE: {\"verdict\":\"retracted\",\"claim\":\"\",\"reason\":\"Dr Patel moved to Canada in January, so she would no longer give the school first-aid talk every spring.\"}",
+          "cost": 0.000334312,
+          "peak": false
+        },
+        {
+          "prompt": "A recorded fact may no longer be true, because something it was based on changed.\n\nFACT #3 (subject: town): \"the town doctor makes house calls on Fridays\"\n\nWhy it is suspect:\n- a NEW fact about \"dr patel\" changes what everything about it means: \"Dr Patel moved to Canada in January\"\n\nRe-read the fact in light of the change. Decide from what is given here; do not invent details.\nAsk: knowing the new information, would a careful record-keeper still write THIS fact exactly as it is?\n- If the fact was true BECAUSE of what changed (it followed from the old value, or assumed it), it must follow the new value.\n- If the fact is independent of the change (it would be written the same either way), leave it exactly as it is.\n- The new information is already recorded on its own — never add it to this fact just to mention it.\nDecide:\n- confirmed: it would still be written exactly as it is\n- revised: it would now be written differently — give it as one atomic sentence about the same subject, changing only what the new information changes\n- retracted: it would no longer be recorded at all, and nothing true is left to state\n- unsure: only if you genuinely cannot tell\n\nThe FINAL LINE of your output MUST be exactly:\nRESOLVE: {\"verdict\":\"confirmed|revised|retracted|unsure\",\"claim\":\"the corrected fact (revised only)\",\"reason\":\"what you checked, briefly\"}",
+          "result": "The fact says \"the town doctor makes house calls on Fridays.\" The new information says Dr Patel moved to Canada in January. If Dr Patel was the town doctor, then the town doctor no longer makes house calls on Fridays because Dr Patel is gone. The fact was based on Dr Patel being the town doctor, so it must follow the new value. The corrected fact would be that the town doctor no longer makes house calls on Fridays, or that Dr Patel no longer makes house calls on Fridays. Since the fact is about the town doctor, and the town doctor is no longer Dr Patel, the fact would now be written differently.\n\nRESOLVE: {\"verdict\":\"revised\",\"claim\":\"the town doctor no longer makes house calls on Fridays\",\"reason\":\"Dr Patel moved to Canada in January, so the town doctor no longer makes house calls on Fridays.\"}",
+          "cost": 0.0005775,
+          "peak": false
+        }
+      ]
+    }
+  ],
+  "cost": 0.006711671999999999
+}

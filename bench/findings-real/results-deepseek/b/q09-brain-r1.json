@@ -1,0 +1,20 @@
+{
+  "phase": "b",
+  "tag": "q09-brain-r1",
+  "model": "deepseek-v4-pro",
+  "is_error": false,
+  "subtype": "success",
+  "result": "ANSWER: 8",
+  "cost": 0.0022322080000000003,
+  "turns": 3,
+  "tin": 3598,
+  "tout": 148,
+  "cache_hit": 2432,
+  "cache_miss": 1166,
+  "tool_calls": 2,
+  "peak": true,
+  "exit": 0,
+  "stderr": "",
+  "duration_ms": 4489,
+  "prompt": "Answer this question about the codebase in the current directory (plan-ledger, a Node.js app).\nYou may read files. Do not modify anything.\n\nQuestion: What is the default `limit` parameter of Store.recall?\n\nWhat the project already knows (recorded findings — check any marked CONFLICT before relying on it):\n- [fact] src/db.mjs#currentprojectid: project scoping defaults to the settings key 'current_project' (or 1 if unset), and NULL project_id is treated as project 1 in both recall and getLessons\n- [fact] src/db.mjs#recall: recall builds a single ranked index of plan, step, attempt, and active finding docs (each with a concatenated text field) and ranks them with the same idfRank\n- [fact] src/db.mjs#recall: recall only includes findings with status 'active', and surfaces a finding with non-empty conflicts_with as status 'conflict'\n- [fact] src/db.mjs#recall: recall builds candidate docs from plans, steps, attempts, and active findings, scoped to the current project unless all=true, and ranks them with the shared idfRank\n- [fact] src/db.mjs#recall: recall returns {query, hits:[]} immediately when the tokenized query is empty, and scores are rounded to 2 decimals\n\nBe precise. The FINAL LINE of your output MUST be exactly:\nANSWER: <your answer>"
+}

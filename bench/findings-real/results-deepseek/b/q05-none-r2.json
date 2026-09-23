@@ -1,0 +1,20 @@
+{
+  "phase": "b",
+  "tag": "q05-none-r2",
+  "model": "deepseek-v4-pro",
+  "is_error": false,
+  "subtype": "success",
+  "result": "ANSWER: 3000",
+  "cost": 0.0008640719999999999,
+  "turns": 3,
+  "tin": 2863,
+  "tout": 130,
+  "cache_hit": 2688,
+  "cache_miss": 175,
+  "tool_calls": 2,
+  "peak": true,
+  "exit": 0,
+  "stderr": "",
+  "duration_ms": 4216,
+  "prompt": "Answer this question about the codebase in the current directory (plan-ledger, a Node.js app).\nYou may read files. Do not modify anything.\n\nQuestion: What PRAGMA busy_timeout value, in milliseconds, does the Store set on its SQLite connection?\n\nBe precise. The FINAL LINE of your output MUST be exactly:\nANSWER: <your answer>"
+}
