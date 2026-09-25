@@ -366,6 +366,26 @@ try {
     && mismatch.body.error.details.found_db_identity === 'different-db-identity');
   mismatchedBoard.close();
 
+  // the brain over the bridge: a Cursor agent can read what the brain holds and write back what it verified
+  {
+    const bp = runCli('create_plan', { title: 'Brain bridge plan' }).body.result.id;
+    const bs = runCli('add_step', { plan_id: bp, title: 'wire the export button', context: 'src/export.js' }).body.result.id;
+    const put = runCli('absorb_findings', { step_id: bs, source: 'cursor', findings: [
+      { kind: 'fact', subject: 'module:export', claim: 'Export writes CSV through src/export.js writeCsv()', evidence: ['src/export.js:12'] }] });
+    check('absorb_findings over the bridge records a fact', put.status === 0 && put.body?.ok === true);
+    const q = runCli('query_findings', { query: 'export csv' });
+    const list = (r) => Array.isArray(r) ? r : (r?.findings ?? []);
+    const hit = list(q.body?.result).find((f) => /writeCsv/.test(f.claim));
+    check('query_findings finds it', q.status === 0 && !!hit);
+    const r = runCli('recall', { query: 'export csv' });
+    check('recall runs over the bridge', r.status === 0 && r.body?.ok === true);
+    const s = runCli('suspect_findings', {});
+    check('suspect_findings runs over the bridge', s.status === 0 && s.body?.ok === true);
+    const gone = runCli('retract_finding', { finding_id: hit.id, reason: 'bridge test' });
+    const after = runCli('query_findings', { query: 'export csv' });
+    check('retract_finding removes it from the live brain', gone.status === 0 && !list(after.body?.result).some((f) => f.id === hit.id));
+  }
+
   const bad = runCli('unknown_operation', {});
   check('unknown operation exits nonzero with stderr', bad.status !== 0 && /\[plan-ledger-cli\]/.test(bad.stderr));
   check('unknown operation emits JSON error payload', bad.body?.ok === false && /unknown operation/i.test(bad.body.error.message));

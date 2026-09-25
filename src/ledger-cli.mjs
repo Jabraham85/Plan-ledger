@@ -359,6 +359,15 @@ const handlers = {
   set_step_status: (store, args) => store.setStepStatus(Number(args.step_id), args.status),
 
   record_attempt: (store, args) => store.recordAttempt(Number(args.step_id), args),
+
+  // The brain (findings) — the same calls as the MCP tools, so a client on the bridge (Cursor)
+  // can read what the brain holds, write back what it verified, and settle doubtful facts.
+  recall: (store, args) => store.recall(args.query, args.limit ?? 8, args.all),
+  query_findings: (store, args) => store.queryFindings(args ?? {}),
+  absorb_findings: (store, { findings, ...opts }) => store.absorbFindings(findings, opts),
+  suspect_findings: (store, args) => store.suspectQueue(args ?? {}),
+  resolve_finding: (store, { finding_id, ...opts }) => store.resolveFinding(Number(finding_id), opts),
+  retract_finding: (store, { finding_id, reason }) => store.retractFinding(Number(finding_id), reason),
   write_carry_forward: (store, args) => store.writeCarryForward(Number(args.step_id), args.note, { append: args.append }),
   add_note: (store, args) => store.addNote(Number(args.step_id), args),
   set_layman: (store, args) => store.setLayman(Number(args.step_id), String(args.text ?? '')),

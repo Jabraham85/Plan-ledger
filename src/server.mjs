@@ -78,9 +78,9 @@ tool('list_projects', {
 
 tool('create_project', {
   title: 'Create a project',
-  description: 'Create a new top-level project. Plans created while it is current belong to it.',
-  inputSchema: { name: z.string(), description: z.string().optional() },
-}, ({ name, description }) => store.createProject({ name, description }));
+  description: 'Create a project. Plans created while it is current belong to it. parent_id files it under a category project (e.g. "Storytelling" → one project per story).',
+  inputSchema: { name: z.string(), description: z.string().optional(), parent_id: z.number().int().optional() },
+}, ({ name, description, parent_id }) => store.createProject({ name, description, parent_id }));
 
 tool('set_current_project', {
   title: 'Switch the current project',

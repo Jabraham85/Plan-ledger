@@ -349,6 +349,19 @@
   #gvSvg .e.in_dir { stroke-dasharray: 1 3; }
   #gvSvg .e.superseded_by { stroke: var(--faint); stroke-dasharray: 6 3; }
   #gvSvg .e.inferred { opacity: .55; }
+  /* flow around the selection: cyan = what it comes from / is based on, orange = what it affects */
+  #gvSvg .e.up { stroke: #22d3ee !important; stroke-width: 2.4px; stroke-dasharray: none; opacity: 1; }
+  #gvSvg .e.down { stroke: #fb923c !important; stroke-width: 2.4px; stroke-dasharray: none; opacity: 1; }
+  #gvSvg .e.hop2 { stroke-width: 1.8px; opacity: .8; }
+  #gvSvg .e.hop3 { stroke-width: 1.4px; opacity: .6; }
+  #gvSvg .n.up .shape { stroke: #22d3ee; stroke-width: 2.5px; }
+  #gvSvg .n.down .shape { stroke: #fb923c; stroke-width: 2.5px; }
+  #gvSvg .n.up text, #gvSvg .n.down text { display: inline !important; fill: var(--txt); }
+  #gvFlowKey { position: absolute; left: 10px; top: 10px; background: rgba(23,26,33,.95); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; font-size: 12px; color: var(--muted); z-index: 2; line-height: 1.8; }
+  #gvFlowKey .sw { display: inline-block; width: 18px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+  #gvFlowKey label { cursor: pointer; user-select: none; }
+  .gv-detail .lbl.up { color: #22d3ee; }
+  .gv-detail .lbl.down { color: #fb923c; }
   .gv-legend { position: absolute; left: 10px; bottom: 10px; background: rgba(23,26,33,.92); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; font-size: 11px; color: var(--muted); line-height: 1.7; }
   .gv-legend span { margin-right: 10px; white-space: nowrap; }
   .gv-help { position: absolute; right: 222px; bottom: 10px; font-size: 11px; color: var(--faint); text-align: right; line-height: 1.6; }
@@ -523,11 +536,14 @@
         <defs>
           <marker id="gvArrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6ea8fe"/></marker>
           <marker id="gvArrowGray" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5b6474"/></marker>
+          <marker id="gvArrowUp" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#22d3ee"/></marker>
+          <marker id="gvArrowDown" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#fb923c"/></marker>
         </defs>
         <g id="gvViewport"><g id="gvGroups"></g><g id="gvEdges"></g><g id="gvNodes"></g></g>
       </svg>
       <div class="gv-zoom"><button id="gvZoomIn" title="zoom in ( + )">+</button><button id="gvZoomOut" title="zoom out ( - )">−</button></div>
       <div class="gv-legend" id="gvLegend"></div>
+      <div id="gvFlowKey" hidden></div>
       <div class="gv-help">arrows walk neighbours · shift-click a 2nd node for the path · ? all keys</div>
       <canvas id="gvMini" width="200" height="140" title="overview — click or drag to move the view"></canvas>
       <div id="gvPathBar" hidden></div>
@@ -538,12 +554,14 @@
           <tr><td>Enter</td><td>centre on the selection</td></tr>
           <tr><td>shift-click</td><td>path: how the selection connects to that node (shortest chain of links)</td></tr>
           <tr><td>n / N</td><td>next / previous fact needing attention (suspect or conflicting)</td></tr>
+          <tr><td>click</td><td>select: <b style="color:#22d3ee">cyan</b> = what it comes from / is based on, <b style="color:#fb923c">orange</b> = what it affects (whole chain; arrows show the flow)</td></tr>
+          <tr><td>c</td><td>chain only: hide everything outside the selection's chain</td></tr>
           <tr><td>e · 1 2 3</td><td>focus on the selection · focus depth in hops</td></tr>
           <tr><td>/ · Enter</td><td>search · next match</td></tr>
           <tr><td>[ ]</td><td>back / forward through what you selected</td></tr>
           <tr><td>f · + −</td><td>fit · zoom</td></tr>
           <tr><td>double-click</td><td>focus on a node · drag a node to pin it</td></tr>
-          <tr><td>Esc</td><td>clear path → leave focus → deselect → close</td></tr>
+          <tr><td>Esc</td><td>clear path → chain only → leave focus → deselect → close</td></tr>
         </table>
         <div style="color:var(--faint);margin-top:6px">The overview (bottom right) shows the whole graph; click or drag it to move there.</div>
       </div>
@@ -1657,7 +1675,7 @@ const GV = {
   kind: 'brain', planId: null, data: null, nodes: [], edges: [], byId: new Map(), adj: new Map(), pos: new Map(),
   sel: null, focus: false, search: '', matches: [], matchIdx: -1,
   hidden: new Set(['superseded', 'retracted', 'dir']), history: [], hpos: -1,
-  groupBy: 'step', anchors: new Map(), depth: 2, path: null, edgeType: new Map(), attnIdx: -1, mini: null, anim: 0,
+  groupBy: 'step', anchors: new Map(), depth: 2, path: null, edgeType: new Map(), attnIdx: -1, mini: null, anim: 0, edgesOf: new Map(), flow: null, chainOnly: false,
   view: { x: 0, y: 0, k: 1 }, alpha: 0, raf: 0, visible: null, els: new Map(), edgeEls: [],
 };
 const gvColor = (n) => n.type === 'code' ? GV_COMMUNITY[(Number(n.community) || 0) % GV_COMMUNITY.length]
@@ -1705,8 +1723,9 @@ async function gvLoad() {
   { const cnt = {}; for (const n of d.nodes) if (n.type === 'file') cnt[gvArea(n)] = (cnt[gvArea(n)] || 0) + 1;
     GV.areas = Object.entries(cnt).sort((a, b) => b[1] - a[1]).map(([a]) => a); }
   GV.adj = new Map(d.nodes.map((n) => [n.id, new Set()]));
-  GV.edgeType = new Map();
+  GV.edgeType = new Map(); GV.edgesOf = new Map();
   for (const e of d.edges) {
+    for (const x of [e.from, e.to]) { if (!GV.edgesOf.has(x)) GV.edgesOf.set(x, []); GV.edgesOf.get(x).push(e); }
     GV.adj.get(e.from)?.add(e.to); GV.adj.get(e.to)?.add(e.from);
     GV.edgeType.set(`${e.from}|${e.to}`, e.type); if (!GV.edgeType.has(`${e.to}|${e.from}`)) GV.edgeType.set(`${e.to}|${e.from}`, '~' + e.type);
   }
@@ -1798,6 +1817,10 @@ function gvComputeVisible() {
     }
     vis = keep;
   }
+  if (GV.chainOnly && GV.sel && GV.byId.has(GV.sel)) { // just the selection's chain: what it comes from and what it affects
+    const f = gvFlow(GV.sel), keep = new Set([GV.sel, ...f.up.keys(), ...f.down.keys()]);
+    vis = new Set([...vis].filter((id) => keep.has(id))); vis.add(GV.sel);
+  }
   if (GV.path) for (const id of GV.path) vis.add(id); // a shown path is never hidden by filters or focus
   return vis;
 }
@@ -1811,7 +1834,7 @@ function gvRebuild() {
     const l = document.createElementNS(GV_NS, 'line');
     l.setAttribute('class', `e ${e.type}${e.inferred ? ' inferred' : ''}`);
     if (GV_ARROWED.has(e.type)) l.setAttribute('marker-end', e.type === 'depends_on' || e.type === 'builds_on' ? 'url(#gvArrow)' : 'url(#gvArrowGray)');
-    edgesG.appendChild(l); GV.edgeEls.push({ e, l });
+    edgesG.appendChild(l); GV.edgeEls.push({ e, l, m: l.getAttribute('marker-end') });
   }
   for (const n of GV.nodes) {
     if (!GV.visible.has(n.id)) continue;
@@ -1878,7 +1901,7 @@ function gvGroupOf(n) {
 function gvComputeAnchors() {
   GV.anchors = new Map();
   const g = $('gvGroups'); if (g) g.innerHTML = '';
-  if (GV.kind !== 'brain' || GV.groupBy === 'none' || !GV.visible) return;
+  if (GV.kind !== 'brain' || GV.groupBy === 'none' || !GV.visible || GV.chainOnly) return;
   const size = {};
   for (const id of GV.visible) { const n = GV.byId.get(id); n.group = gvGroupOf(n); if (n.group) size[n.group] = (size[n.group] || 0) + 1; }
   const groups = Object.keys(size).sort((a, b) => size[b] - size[a]);
@@ -1938,8 +1961,9 @@ function gvDraw() {
   for (const [id, g] of GV.els) { const n = GV.byId.get(id); g.setAttribute('transform', `translate(${n.x.toFixed(1)},${n.y.toFixed(1)})`); GV.pos.set(id, { x: n.x, y: n.y }); }
   for (const { e, l } of GV.edgeEls) {
     const s = GV.byId.get(e.from), t = GV.byId.get(e.to);
-    const dx = t.x - s.x, dy = t.y - s.y, d = Math.sqrt(dx * dx + dy * dy) || 1, rt = gvRadius(t) + (GV_ARROWED.has(e.type) ? 3 : 0);
-    l.setAttribute('x1', s.x.toFixed(1)); l.setAttribute('y1', s.y.toFixed(1));
+    const dx = t.x - s.x, dy = t.y - s.y, d = Math.sqrt(dx * dx + dy * dy) || 1;
+    const rt = l.hasAttribute('marker-end') ? gvRadius(t) + 3 : gvRadius(t), rs = l.hasAttribute('marker-start') ? gvRadius(s) + 3 : 0;
+    l.setAttribute('x1', (s.x + (dx / d) * rs).toFixed(1)); l.setAttribute('y1', (s.y + (dy / d) * rs).toFixed(1));
     l.setAttribute('x2', (t.x - (dx / d) * rt).toFixed(1)); l.setAttribute('y2', (t.y - (dy / d) * rt).toFixed(1));
   }
   const v = GV.view;
@@ -2011,7 +2035,8 @@ function gvSelect(id, { push = true, center = false, keepPath = false } = {}) {
     const cur = GV.history[GV.hpos];
     if (!cur || cur.id !== id || cur.kind !== GV.kind) { GV.history.push({ kind: GV.kind, planId: GV.planId, id }); GV.hpos = GV.history.length - 1; }
   }
-  if (GV.focus && id && !GV.visible?.has(id)) gvRebuild();
+  if (!id) GV.chainOnly = false;
+  if (GV.chainOnly || (GV.focus && id && !GV.visible?.has(id))) { gvRebuild(); if (GV.chainOnly) setTimeout(gvFit, 450); }
   gvHighlight();
   gvList();
   gvDetail(id);
@@ -2019,16 +2044,97 @@ function gvSelect(id, { push = true, center = false, keepPath = false } = {}) {
   gvHash();
   $('gvBack').disabled = GV.hpos <= 0; $('gvFwd').disabled = GV.hpos >= GV.history.length - 1;
 }
+// ---- flow: which end of a link is the SOURCE (what the other is based on / comes from) ------
+// Brain links point from the dependent to its source (fact → what it is built on, the file it
+// rests on, the step it was learned in); a revision comes from the old version; in a plan, a
+// blocking step and the previous step come first.
+const GV_SOURCE_IS_FROM = new Set(['superseded_by', 'blocks', 'next']);
+const gvSource = (e) => e.type === 'conflict' ? null : GV_SOURCE_IS_FROM.has(e.type) ? e.from : e.to;
+const GV_FLOW_HOPS = 8;
+// → { up: Map(id → hops) what the node comes from, down: Map(id → hops) what it affects }.
+// Steps, plans and folders are hubs: they join the chain but are not walked through
+// (otherwise "learned in the same step" would link everything to everything).
+function gvFlow(sel) {
+  const hub = (id) => GV.kind === 'brain' && id !== sel && /^(s|p|dir):/.test(id);
+  const walk = (up) => {
+    const seen = new Map([[sel, 0]]);
+    let frontier = [sel];
+    for (let hop = 1; hop <= GV_FLOW_HOPS && frontier.length; hop++) {
+      const next = [];
+      for (const u of frontier) {
+        if (hub(u)) continue;
+        for (const e of GV.edgesOf.get(u) || []) {
+          const src = gvSource(e); if (!src) continue;
+          const other = e.from === u ? e.to : e.from;
+          if ((src === other) !== up || seen.has(other)) continue;
+          seen.set(other, hop); next.push(other);
+        }
+      }
+      frontier = next;
+    }
+    seen.delete(sel);
+    return seen;
+  };
+  const up = walk(true), down = walk(false);
+  for (const id of up.keys()) down.delete(id); // (a cycle) — show it as a source
+  return { up, down };
+}
+function gvFlowKey() {
+  const box = $('gvFlowKey');
+  const f = GV.flow;
+  if (!f || GV.path) { box.hidden = true; return; }
+  const vis = (m) => [...m.keys()].filter((id) => GV.visible?.has(id)).length;
+  const words = GV.kind === 'steps' ? ['comes after / builds on', 'unblocks / comes before'] : GV.kind === 'code' ? ['uses', 'used by'] : ['comes from · based on', 'affects · built on it'];
+  box.innerHTML = `<div><span class="sw" style="background:#22d3ee"></span><b style="color:#22d3ee">${f.up.size}</b> ${words[0]}${vis(f.up) < f.up.size ? ` <span style="color:var(--faint)">(${f.up.size - vis(f.up)} hidden)</span>` : ''}</div>` +
+    `<div><span class="sw" style="background:#fb923c"></span><b style="color:#fb923c">${f.down.size}</b> ${words[1]}${vis(f.down) < f.down.size ? ` <span style="color:var(--faint)">(${f.down.size - vis(f.down)} hidden)</span>` : ''}</div>` +
+    `<label title="hide everything else ( c )"><input type="checkbox" id="gvChainOnly" ${GV.chainOnly ? 'checked' : ''}> chain only</label>`;
+  box.hidden = false;
+  $('gvChainOnly').onchange = () => gvToggleChain();
+}
+function gvToggleChain() {
+  if (!GV.sel) { toast('Select a node first'); return; }
+  GV.chainOnly = !GV.chainOnly;
+  gvRebuild(); gvHeat(0.5); setTimeout(gvFit, 500);
+}
 function gvHighlight() {
   const path = GV.path ? new Set(GV.path) : null;
   const onPath = (e) => !!GV.path && GV.path.some((id, i) => i > 0 && ((GV.path[i - 1] === e.from && id === e.to) || (GV.path[i - 1] === e.to && id === e.from)));
-  const nb = path || (GV.sel ? new Set([GV.sel, ...(GV.adj.get(GV.sel) || [])]) : null);
-  for (const [id, g] of GV.els) { g.classList.toggle('sel', id === GV.sel); g.classList.toggle('path', !!path && path.has(id)); g.classList.toggle('dim', !!nb && !nb.has(id)); }
-  for (const { e, l } of GV.edgeEls) {
-    const p = onPath(e);
-    l.classList.toggle('path', p);
-    l.classList.toggle('dim', path ? !p : !!nb && !(e.from === GV.sel || e.to === GV.sel));
+  const flow = GV.flow = !path && GV.sel && GV.byId.has(GV.sel) ? gvFlow(GV.sel) : null;
+  const nb = path || (GV.sel ? new Set([GV.sel, ...(GV.adj.get(GV.sel) || []), ...(flow ? [...flow.up.keys(), ...flow.down.keys()] : [])]) : null);
+  for (const [id, g] of GV.els) {
+    g.classList.toggle('sel', id === GV.sel); g.classList.toggle('path', !!path && path.has(id));
+    g.classList.toggle('up', !!flow && flow.up.has(id)); g.classList.toggle('down', !!flow && flow.down.has(id));
+    g.classList.toggle('dim', !!nb && !nb.has(id));
   }
+  const hops = (m, id) => id === GV.sel ? 0 : m.get(id);
+  for (const { e, l, m } of GV.edgeEls) {
+    const p = onPath(e);
+    // a flow edge joins two consecutive links of the chain: its source is one hop further up
+    // (for "comes from") or its dependent one hop further down (for "affects")
+    let dir = null, hop = 0;
+    const src = flow && gvSource(e), dep = src && (src === e.from ? e.to : e.from);
+    if (src) {
+      const su = hops(flow.up, src), du = hops(flow.up, dep), sd = hops(flow.down, src), dd = hops(flow.down, dep);
+      if (su != null && du != null && su === du + 1) { dir = 'up'; hop = su; }
+      else if (sd != null && dd != null && dd === sd + 1) { dir = 'down'; hop = dd; }
+    }
+    l.classList.toggle('path', p);
+    l.classList.toggle('up', dir === 'up'); l.classList.toggle('down', dir === 'down');
+    l.classList.toggle('hop2', hop === 2); l.classList.toggle('hop3', hop >= 3);
+    // arrows show the flow: from the source to what it affects
+    if (dir) {
+      const mk = `url(#gvArrow${dir === 'up' ? 'Up' : 'Down'})`;
+      if (dep === e.to) { l.setAttribute('marker-end', mk); l.removeAttribute('marker-start'); }
+      else { l.setAttribute('marker-start', mk); l.removeAttribute('marker-end'); }
+    } else {
+      l.removeAttribute('marker-start');
+      if (m) l.setAttribute('marker-end', m); else l.removeAttribute('marker-end');
+    }
+    const touchesSel = e.from === GV.sel || e.to === GV.sel;
+    l.classList.toggle('dim', path ? !p : !!nb && !dir && !(touchesSel && e.type === 'conflict'));
+  }
+  gvFlowKey();
+  gvDraw();
 }
 
 // ---- path: how two nodes connect (cheapest chain; step/folder hubs cost more, so the
@@ -2204,8 +2310,8 @@ async function gvDetail(id) {
       <div class="claim" id="gvClaim">${esc(f.claim)}</div>
       ${f.evidence?.length ? `<div class="lbl">Evidence</div>${f.evidence.map((e) => `<div class="ev">${esc(e)}</div>`).join('')}` : ''}
       <div class="lbl">Provenance</div><div style="font-size:12.5px;color:var(--muted)">${esc(f.source || 'unknown source')}${stepNode ? ` · learned in ${gvRef(stepNode.id, esc(stepNode.label), gvColor(stepNode))}` : f.step_id ? ` · step #${f.step_id}` : ''}</div>
-      ${deps ? `<div class="lbl">Built on (${f.depends_on.length})</div>${deps}` : ''}
-      ${dependents ? `<div class="lbl">Built on this (${f.dependents.length})</div>${dependents}` : ''}
+      ${deps ? `<div class="lbl up">↑ Comes from · built on (${f.depends_on.length})</div>${deps}` : ''}
+      ${dependents ? `<div class="lbl down">↓ Affects · built on this (${f.dependents.length})</div>${dependents}` : ''}
       ${f.conflicts_with?.length ? `<div class="lbl" style="color:#f87171">Conflicts with</div>${f.conflicts_with.map((x) => gvRef(`f:${x}`, `#${x} ${esc(GV.byId.get(`f:${x}`)?.claim.slice(0, 80) || '')}`, '#f87171')).join('')}` : ''}
       ${chain ? `<div class="lbl">Revisions</div>${chain}` : ''}
       ${hist ? `<div class="lbl">History</div><div class="gv-tl">${hist}</div>` : ''}
@@ -2238,7 +2344,7 @@ async function gvDetail(id) {
   const listF = nbF.map((x) => gvRef(x.id, `#${x.fid} ${esc(x.claim.slice(0, 90))}`, gvColor(x))).join('');
   if (n.type === 'file' || n.type === 'dir') {
     box.innerHTML = `<div class="gv-crumbs">brain › ${n.type}</div><h3>${esc(n.label)}</h3><div class="ev">${esc(n.path)}</div>
-      <div class="lbl">${n.type === 'dir' ? 'Facts about what this folder contains' : 'Facts resting on this file'} (${nbF.length})</div>${listF || '<div class="empty">none visible</div>'}
+      <div class="lbl down">↓ Affects · ${n.type === 'dir' ? 'facts about what this folder contains' : 'facts resting on this file'} (${nbF.length})</div>${listF || '<div class="empty">none visible</div>'}
       <div style="color:var(--faint);font-size:11.5px;margin-top:10px">When this ${n.type === 'dir' ? 'folder gains or loses a file' : 'file changes'}, these facts turn suspect until re-checked.</div>`;
   } else if (n.type === 'step') {
     const nbS = gvNeighbours(id, 'step');
@@ -2246,7 +2352,7 @@ async function gvDetail(id) {
       <div class="row"><span class="gv-pill" style="background:${gvColor(n)}">${esc(n.status)}</span><span class="meta">step #${n.sid} · plan #${n.plan_id}${n.role ? ' · ' + esc(n.role) : ''}</span></div>
       <h3>${esc(n.label)}</h3>
       <div class="gv-actions"><button id="gvOpenStep">Open in board</button>${GV.kind === 'brain' ? `<button id="gvStepGraph">Plan step graph</button>` : `<button id="gvStepBrain">Its brain</button>`}</div>
-      ${GV.kind === 'brain' ? `<div class="lbl">Facts learned in this step (${nbF.length})</div>${listF || '<div class="empty">none</div>'}` :
+      ${GV.kind === 'brain' ? `<div class="lbl down">↓ Facts learned in this step (${nbF.length})</div>${listF || '<div class="empty">none</div>'}` :
         `<div class="lbl">Linked steps</div>${nbS.map((x) => gvRef(x.id, esc(x.label), gvColor(x))).join('') || '<div class="empty">none</div>'}`}`;
     $('gvOpenStep').onclick = () => gvOpenInBoard(n.plan_id, n.sid);
     if ($('gvStepGraph')) $('gvStepGraph').onclick = () => openGraph('steps', { planId: n.plan_id, select: id });
@@ -2328,6 +2434,7 @@ function gvInit() {
     if (e.key === 'Escape' && !typing) {
       if (!$('gvKeys').hidden) $('gvKeys').hidden = true;
       else if (gvClearPath()) {}
+      else if (GV.chainOnly) { GV.chainOnly = false; gvRebuild(); gvHeat(0.4); }
       else if (GV.focus) { GV.focus = false; gvRebuild(); gvHeat(0.4); }
       else if (GV.sel) gvSelect(null, { push: false }); else $('gvClose').onclick();
       return;
@@ -2338,6 +2445,7 @@ function gvInit() {
     if (e.key === '/') { e.preventDefault(); $('gvSearch').focus(); }
     else if (e.key === '?') $('gvKeys').hidden = !$('gvKeys').hidden;
     else if (e.key === 'Enter' && GV.sel) gvCenterOn(GV.sel);
+    else if (e.key === 'c') gvToggleChain();
     else if (e.key === 'n') gvNextAttention(1);
     else if (e.key === 'N') gvNextAttention(-1);
     else if (e.key === '1' || e.key === '2' || e.key === '3') {

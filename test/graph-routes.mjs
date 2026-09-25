@@ -115,6 +115,26 @@ check('index.html has the navigation aids (overview map, path finder, arrow walk
   check('path finder: unconnected nodes → null', findPath('f:1', 'f:7') === null);
 }
 
+// flow around a selection: cyan "comes from" vs orange "affects", walking the whole chain
+{
+  const src = script.slice(script.indexOf('const GV_SOURCE_IS_FROM'), script.indexOf('function gvFlowKey'));
+  const edges = [
+    { from: 'f:2', to: 'f:1', type: 'depends_on' }, { from: 'f:3', to: 'f:2', type: 'depends_on' }, // 3 built on 2 built on 1
+    { from: 'f:1', to: 'file:a', type: 'rests_on' }, { from: 'f:9', to: 'file:a', type: 'rests_on' },
+    { from: 'f:1', to: 's:5', type: 'learned_in' }, { from: 'f:8', to: 's:5', type: 'learned_in' },
+    { from: 'f:3', to: 'f:4', type: 'superseded_by' }, { from: 'f:2', to: 'f:7', type: 'conflict' },
+  ];
+  const GV = { kind: 'brain', edgesOf: new Map() };
+  for (const e of edges) for (const x of [e.from, e.to]) { if (!GV.edgesOf.has(x)) GV.edgesOf.set(x, []); GV.edgesOf.get(x).push(e); }
+  const flow = new Function('GV', `${src}; return gvFlow;`)(GV);
+  const f2 = flow('f:2'), fa = flow('file:a');
+  check('flow: comes from = what it is built on, the file and step under that (by hop); a step hub is not walked through',
+    f2.up.get('f:1') === 1 && f2.up.get('file:a') === 2 && f2.up.get('s:5') === 2 && !f2.up.has('f:8') && !f2.up.has('f:9'));
+  check('flow: affects = what is built on it and onward, incl. the revision that replaced a dependent; conflicts are neither',
+    f2.down.get('f:3') === 1 && f2.down.get('f:4') === 2 && !f2.down.has('f:7') && !f2.up.has('f:7'));
+  check('flow: a file affects the facts resting on it and what is built on those', fa.down.get('f:1') === 1 && fa.down.get('f:9') === 1 && fa.down.get('f:3') === 3 && fa.up.size === 0);
+}
+
 await new Promise((resolve) => server.close(resolve));
 store.close();
 for (const suf of ['', '-wal', '-shm']) rmSync(dbPath + suf, { force: true });

@@ -348,6 +348,26 @@ const status = (s, id) => s.getFinding(id).status;
   const dry = await learnSteps(s, [s.getStep(st.id)], { root, call, dryRun: true });
   check('dry run absorbs nothing but reports what it would', dry.steps[0].kept === 2 && dry.steps[0].facts.length === 2 &&
     s.queryFindings({ plan_id: plan.id, status: 'live', limit: 20 }).length === 2);
+  // a LATER step: its learner is briefed with what the brain knows (#ids) and can build on it
+  const retries = live.find((f) => /48/.test(f.claim));
+  const st2 = s.addStep(plan.id, { title: 'Retries backoff', context: 'Add backoff between the retries.' });
+  let learnSeen = '';
+  const call2 = async (prompt) => {
+    if (prompt.includes('You are about to start this step')) {
+      learnSeen = prompt;
+      return { is_error: false, cost: 0.01, result:
+        `FINDINGS: [{"subject":"src/cfg.cpp#Backoff","claim":"there is no backoff between the 48 retries","evidence":"src/cfg.cpp:2","depends_on":["#${retries.id}", 999]}]\nVERDICT: pass — looked` };
+    }
+    return { is_error: false, cost: 0.001, result: 'RESOLVE: {"verdict":"confirmed"}' };
+  };
+  const r2 = await learnSteps(s, [s.getStep(st2.id)], { root, call: call2 });
+  const built = s.queryFindings({ plan_id: plan.id, status: 'live', limit: 20 }).find((f) => /backoff/.test(f.claim));
+  check('learner is briefed with known facts by #id and asked for depends_on', learnSeen.includes(`#${retries.id} `) && learnSeen.includes('"depends_on"'));
+  check('its depends_on survives verification: the new fact is BUILT ON the known one (an invented #999 is dropped)',
+    !!built && s.getFinding(built.id).depends_on.some((d) => d.type === 'finding' && Number(d.ref) === retries.id) &&
+    !s.getFinding(built.id).depends_on.some((d) => d.type === 'finding' && Number(d.ref) === 999) && r2.steps[0].linked === 1);
+  s.resolveFinding(retries.id, { verdict: 'revised', claim: 'retries default to 5', reason: 'changed' });
+  check('so revising the known fact re-opens the one built on it', s.getFinding(built.id).status === 'suspect');
   s.close();
   rmSync(root, { recursive: true, force: true });
 }

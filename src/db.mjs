@@ -698,7 +698,9 @@ export class Store {
     this.db = new DatabaseSync(dbPath);
     this.db.exec('PRAGMA journal_mode = WAL;');
     this.db.exec('PRAGMA foreign_keys = ON;');
-    this.db.exec('PRAGMA busy_timeout = 3000;'); // board + MCP + CLI share the file
+    // board + MCP + CLI + background story learners share the file; a long ingest write must
+    // not fail a concurrent writer (3s did: 'database is locked' mid-ingest, 2026-09-23)
+    this.db.exec(`PRAGMA busy_timeout = ${Number(process.env.PLAN_LEDGER_BUSY_MS) || 30000};`);
     this.db.exec('PRAGMA journal_size_limit = 4194304;'); // cap the -wal file at ~4MB after checkpoints
     this._stmts = new Map();
     this.db.exec(SCHEMA);
@@ -770,7 +772,7 @@ export class Store {
   // Version 14 (brain branch, 2026-09) adds the findings brain: findings (+impact,
   // suspect_since), finding_deps, finding_events — tables via SCHEMA, columns
   // guarded by hasCol (the brain branch had stamped its own v4/v5; see _migrate).
-  static USER_VERSION = 14;
+  static USER_VERSION = 15;
 
   _migrate() {
     const v = this.db.prepare('PRAGMA user_version').get().user_version;
@@ -795,6 +797,8 @@ export class Store {
     if (!hasCol('attempts', 'model_source')) this.db.exec("ALTER TABLE attempts ADD COLUMN model_source TEXT NOT NULL DEFAULT ''");
     if (!hasCol('attempts', 'session_ref')) this.db.exec("ALTER TABLE attempts ADD COLUMN session_ref TEXT NOT NULL DEFAULT ''");
     this.db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('current_project', '1')").run();
+    // Project hierarchy (v15): a category project holds child projects ("Storytelling" → each story).
+    if (!hasCol('projects', 'parent_id')) this.db.exec('ALTER TABLE projects ADD COLUMN parent_id INTEGER');
 
     // Layman box: plain-English per-step field, distinct from what_tried (added 2026-07).
     if (!hasCol('steps', 'layman')) this.db.exec("ALTER TABLE steps ADD COLUMN layman TEXT NOT NULL DEFAULT ''");
@@ -973,18 +977,36 @@ export class Store {
     this.db.prepare("INSERT INTO settings (key, value) VALUES ('current_project', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(String(id));
     return this.getProject(id);
   }
-  createProject({ name, description } = {}) {
+  createProject({ name, description, parent_id = null } = {}) {
     if (!name || !String(name).trim()) throw new Error('project name is required');
+    if (parent_id != null) this.getProject(Number(parent_id)); // must exist
     const ts = now();
-    const info = this.db.prepare('INSERT INTO projects (name, description, status, created_at, updated_at) VALUES (?,?,?,?,?)')
-      .run(String(name).trim(), String(description ?? ''), 'active', ts, ts);
+    const info = this.db.prepare('INSERT INTO projects (name, description, status, created_at, updated_at, parent_id) VALUES (?,?,?,?,?,?)')
+      .run(String(name).trim(), String(description ?? ''), 'active', ts, ts, parent_id == null ? null : Number(parent_id));
     return this.getProject(Number(info.lastInsertRowid));
   }
+  // A project by name under a parent (null = top level), created if missing — for
+  // ingesters that file things into a category ("Storytelling" → "Mira").
+  ensureProject(name, { parent_id = null, description = '' } = {}) {
+    const row = this.db.prepare('SELECT id FROM projects WHERE name = ? AND parent_id IS ?').get(String(name).trim(), parent_id == null ? null : Number(parent_id));
+    return row ? this.getProject(row.id) : this.createProject({ name, description, parent_id });
+  }
+  // "Storytelling › Mira"
+  projectPath(id) {
+    const names = [];
+    for (let p = this.db.prepare('SELECT id, name, parent_id FROM projects WHERE id = ?').get(id), n = 0; p && n < 20; n++) {
+      names.unshift(p.name);
+      p = p.parent_id != null ? this.db.prepare('SELECT id, name, parent_id FROM projects WHERE id = ?').get(p.parent_id) : null;
+    }
+    return names.join(' › ');
+  }
+  childProjects(id) { return this.db.prepare('SELECT id FROM projects WHERE parent_id = ? ORDER BY id').all(id).map((r) => r.id); }
   // Common project shape (identity + plan counts); callers add their extras
   // (getProject: timestamps, listProjects: the `current` flag).
   _projectRow(p) {
     const c = this.db.prepare("SELECT COUNT(*) n, SUM(status='done') done FROM plans WHERE project_id=?").get(p.id);
-    return { id: p.id, name: p.name, description: p.description, status: p.status, plans: c.n ?? 0, plans_done: c.done ?? 0 };
+    return { id: p.id, name: p.name, description: p.description, status: p.status, plans: c.n ?? 0, plans_done: c.done ?? 0,
+      parent_id: p.parent_id ?? null, ...(p.parent_id != null ? { path: this.projectPath(p.id) } : {}) };
   }
   getProject(id) {
     const p = this.db.prepare('SELECT * FROM projects WHERE id=?').get(id);
@@ -3356,6 +3378,30 @@ export class Store {
     return { pair: [A, B], suspected };
   }
 
+  // Undo a supersession: the finding that replaced this one was withdrawn (e.g. its chat
+  // was rewound), so this one is current again.
+  reinstateFinding(id, reason = '') {
+    const row = this.db.prepare('SELECT status FROM findings WHERE id = ?').get(Number(id));
+    if (!row) throw new Error(`no finding with id ${id}`);
+    if (row.status !== 'superseded') return false;
+    const ts = now();
+    this.db.prepare("UPDATE findings SET status = 'active', superseded_by = NULL, suspect_since = '', updated_at = ? WHERE id = ?").run(ts, Number(id));
+    this._event(Number(id), 'reinstated', { detail: String(reason).slice(0, 300) }, ts);
+    return true;
+  }
+
+  // Record, after the fact, that finding `id` rests on other findings (same project;
+  // explicit, not inferred). For links between findings absorbed in one batch, which
+  // could not cite each other's ids up front. Returns the ids newly linked.
+  linkFinding(id, dependsOn = []) {
+    const P = this.db.prepare('SELECT project_id FROM findings WHERE id = ?').get(Number(id))?.project_id;
+    if (P == null) throw new Error(`no finding with id ${id}`);
+    const deps = () => this.db.prepare("SELECT dep_ref FROM finding_deps WHERE finding_id = ? AND dep_type = 'finding'").all(Number(id)).map((r) => Number(r.dep_ref));
+    const before = new Set(deps());
+    this._linkDeps(Number(id), { depends_on: dependsOn, P });
+    return deps().filter((d) => !before.has(d));
+  }
+
   // An audit pair re-opens both sides, and re-evaluation is told "at most one can be
   // right". If BOTH come back confirmed, the pair was a false alarm: unlink it, or the
   // two would keep showing as CONFLICT forever. (Only audit-made links — a conflict
@@ -3674,7 +3720,7 @@ export class Store {
   // file staleness). briefed: ids of findings the reporter was shown — a new
   // finding that shares their subject or wording is linked as built on them.
   absorbFindings(list, { plan_id = null, step_id = null, source = '', dry_run = false,
-    route = DEFAULT_FINDING_ROUTE, threshold = DEFAULT_NEAR_THRESHOLD, root = null, briefed = [] } = {}) {
+    route = DEFAULT_FINDING_ROUTE, threshold = DEFAULT_NEAR_THRESHOLD, root = null, briefed = [], sweep = true } = {}) {
     if (!Array.isArray(list)) throw new Error('findings must be an array');
     if (list.length > 200) throw new Error('at most 200 findings per call');
     const R = FINDING_ROUTES[route];
@@ -3690,7 +3736,7 @@ export class Store {
     try {
       this._tx(() => {
         const r0 = root ?? this.getProjectRoot(scope.project_id); // the project's source root by default
-        const ctx = { root: r0 ? resolve(String(r0)) : null, briefed: (Array.isArray(briefed) ? briefed : []).map(Number).filter(Number.isInteger) };
+        const ctx = { root: r0 ? resolve(String(r0)) : null, briefed: (Array.isArray(briefed) ? briefed : []).map(Number).filter(Number.isInteger), sweep };
         results = list.map((raw, i) => this._absorbOne(raw, i, scope, String(source ?? '').slice(0, 120), R, t, ctx));
         if (dry_run) throw DRY; // roll everything back, keep the computed outcomes
       });
@@ -3747,7 +3793,9 @@ export class Store {
     };
     const done = (outcome, id, extra = {}) => {
       // the frog rule runs last, so the rows this finding just replaced are already settled
-      if (impact === 'high' && id != null) for (const s of this._impactSweep(id, subject, P, ts)) suspected.add(s);
+      // sweep:false (stories — a central character is named by nearly every fact): no blanket
+      // re-open; reach (reevaluate) lets a model pick the facts the revelation really changes
+      if (impact === 'high' && id != null && ctx.sweep !== false) for (const s of this._impactSweep(id, subject, P, ts)) suspected.add(s);
       return { index, outcome, id, ...extra, ...(suspected.size ? { suspected: [...suspected] } : {}), ...(warn.length ? { warnings: warn } : {}) };
     };
 

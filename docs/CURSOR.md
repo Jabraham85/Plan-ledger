@@ -201,6 +201,23 @@ MediaWiki). The RAG index lives at its own disposable DB (default
 `PLAN_LEDGER_RAG_DB`), so re-ingesting a corpus never risks the plan ledger. Full agent guide:
 [`docs/RAG.md`](RAG.md).
 
+## 3b. The brain skill (`/plan-ledger-brain`)
+
+[`.cursor/skills/plan-ledger-brain/SKILL.md`](../.cursor/skills/plan-ledger-brain/SKILL.md) teaches
+Cursor's agent to use plan-ledger's **brain** (the truth-maintained findings store) while coding:
+
+- **read** what the brain knows before touching code (`next_step`'s `brain` facts, `query_findings`,
+  `recall`), never building on SUSPECT/CONFLICT facts;
+- **write back** only what it verified, with `path:line` evidence and `depends_on` (`absorb_findings`);
+- **correct** facts the code contradicts (`resolve_finding` confirmed/revised/refuted, `retract_finding`);
+- **ingest a past conversation**: pull durable project truths out of a chat transcript, verify each
+  against the current code, and absorb only what the code confirms.
+
+The bridge carries these operations (`recall`, `query_findings`, `absorb_findings`,
+`suspect_findings`, `resolve_finding`, `retract_finding`) — the same calls as the MCP tools.
+`npm run sync:global-skill` installs this skill to `~/.cursor/skills/plan-ledger-brain/` next to
+`/plan-ledger`, with the absolute Node/CLI paths filled in.
+
 ## Approval-first plan lifecycle (draft plans)
 
 In Cursor, plan-ledger’s approval boundary is explicit and consistent:

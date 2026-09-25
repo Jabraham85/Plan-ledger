@@ -83,7 +83,20 @@ function main() {
     canonical_skill: CANONICAL_SKILL,
     synced_at: new Date().toISOString(),
   }, null, 2)}\n`, 'utf8');
-  process.stdout.write(`sync-global-skill OK\n  canonical: ${CANONICAL_SKILL}\n  global:    ${GLOBAL_SKILL}\n  manifest:  ${BRIDGE_MANIFEST}\n`);
+  // the brain skill (read what the brain knows, write back what was verified, ingest chats) —
+  // installed whole, with the same absolute paths
+  const brainSrc = join(REPO_ROOT, '.cursor', 'skills', 'plan-ledger-brain', 'SKILL.md');
+  const brainDir = join(homedir(), '.cursor', 'skills', 'plan-ledger-brain');
+  let brainNote = '';
+  try {
+    const brain = substitute(readFileSync(brainSrc, 'utf8'));
+    mkdirSync(brainDir, { recursive: true });
+    writeFileSync(join(brainDir, 'SKILL.md'), brain, 'utf8');
+    brainNote = `  brain:     ${join(brainDir, 'SKILL.md')}\n`;
+  } catch (e) {
+    if (e.code !== 'ENOENT') throw e;
+  }
+  process.stdout.write(`sync-global-skill OK\n  canonical: ${CANONICAL_SKILL}\n  global:    ${GLOBAL_SKILL}\n${brainNote}  manifest:  ${BRIDGE_MANIFEST}\n`);
 }
 
 try {
