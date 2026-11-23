@@ -15,6 +15,7 @@ import { join } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { Store, defaultDbPath } from './db.mjs';
+import { ledgerRuntimeInfo } from './runtime-info.mjs';
 import { reapLoop } from './supervisor.mjs';
 import { resolveRole } from './roles.mjs';
 import { evaluateDispatchPolicy } from './dispatch-policy.mjs';
@@ -67,6 +68,13 @@ const tool = (name, cfg, fn) =>
     try { return ok(fn(args ?? {})); }
     catch (e) { return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true }; }
   });
+
+tool('ledger_runtime', {
+  title: 'Read loaded ledger runtime identity',
+  description: 'Read-only startup fingerprint, process identity, loaded schema code version and capabilities. No credentials or configuration values.',
+  inputSchema: {},
+  annotations: { readOnlyHint: true },
+}, () => ledgerRuntimeInfo(store));
 
 // ---- projects (top level: project → plan → step) --------------------------
 
@@ -342,6 +350,7 @@ tool('add_step', {
     tools: z.array(z.string()).optional().describe('tool/MCP names this step uses'),
     role: z.string().max(64).optional().describe('subagent role that executes this step (e.g. implementer, ui-designer, test-engineer); empty = orchestrator decides at dispatch'),
     acceptance_criteria: z.string().optional().describe('concrete pass condition'),
+    acceptance_contract: z.object({ version: z.literal(1), criteria: z.array(z.object({ id: z.string(), description: z.string(), mandatory: z.boolean().optional() })) }).optional(),
     carry_forward: z.string().optional().describe('seed note carried in from a prior step'),
     idx: z.number().int().optional().describe('1-based position; appends to end if omitted'),
   },
@@ -360,6 +369,7 @@ tool('update_step', {
     tools: z.array(z.string()).optional(),
     role: z.string().max(64).optional().describe('subagent role that executes this step; empty string clears it'),
     acceptance_criteria: z.string().optional(),
+    acceptance_contract: z.object({ version: z.literal(1), criteria: z.array(z.object({ id: z.string(), description: z.string(), mandatory: z.boolean().optional() })) }).optional(),
     carry_forward: z.string().optional(),
     idx: z.number().int().optional(),
     reason: z.string().optional().describe('required when changing `role` on a step with a prior assignment revision'),
@@ -716,10 +726,16 @@ tool('assess_activity_backfill', {
 
 // ---- the working loop -----------------------------------------------------
 
+tool('submit_completion', {
+  title: 'Submit criterion evidence for orchestrator review',
+  description: 'Contracted work remains pending review. Worker claims and reviewer strings do not grant acceptance.',
+  inputSchema: { step_id: z.number().int(), completion_payload: z.any(), executor: z.string().optional(), session_ref: z.string().optional() },
+}, ({ step_id, ...rest }) => store.submitCompletion(step_id, rest));
+
 tool('record_attempt', {
   title: 'Record an attempt on a step',
   description:
-    'Log what you tried and how it went. verdict=pass marks the step done; fail/partial marks it failed (still ' +
+    'Log what you tried. Contracted work must use submit_completion; pass requires orchestrator acceptance. Legacy pass marks done; fail/partial marks failed (still ' +
     'retryable) and is preserved in the failure log so the approach is not repeated. ALWAYS record failures. ' +
     'Optional provenance fields (agent/model/model_source/session_ref) capture WHAT actually served the call, ' +
     'separate from the step\'s PLANNED assignment — leave blank when unknown (never fabricate a model).',

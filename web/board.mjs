@@ -6,6 +6,7 @@
 import { createServer } from 'node:http';
 import { buildPlanContext, buildProjectContext, buildRefsBlock, groundSlice, stepTerms } from '../src/context.mjs';
 import { canonicalDbIdentity } from '../src/db.mjs';
+import { buildPlannerHandoff, describePlannerStepReview } from '../src/planner-handoff.mjs';
 import { applyRecommendedStaff, listProjectStaff, setProjectStaffRole } from '../src/roles.mjs';
 
 const readBody = (req) => new Promise((resolve, reject) => {
@@ -38,6 +39,7 @@ export function createBoardServer({ store, html, dbPath }) {
     })],
     ['GET', /^\/api\/plans$/,               () => store.listPlans()],
     ['GET', /^\/api\/plans\/(\d+)\/context$/, (m) => ({ text: buildPlanContext(store, Number(m[1])) })],
+    ['GET', /^\/api\/plans\/(\d+)\/handoff$/, (m) => buildPlannerHandoff(store, Number(m[1]))],
     ['GET', /^\/api\/plans\/(\d+)$/,         (m) => store.openPlan(Number(m[1]))],
     ['GET', /^\/api\/steps\/(\d+)\/ground$/, (m) => {
       const s = store.getStep(Number(m[1]));
@@ -45,7 +47,10 @@ export function createBoardServer({ store, html, dbPath }) {
       return { terms, markdown: groundSlice(store, s.plan_id, terms, 10), subgraph: store.queryGraph(s.plan_id, terms, 10) };
     }],
     ['GET', /^\/api\/steps\/(\d+)\/lessons$/, (m) => store.getLessons({ step_id: Number(m[1]), limit: 5 })],
-    ['GET', /^\/api\/steps\/(\d+)$/,         (m) => store.getStep(Number(m[1]))],
+    ['GET', /^\/api\/steps\/(\d+)$/,         (m) => {
+      const step = store.getStep(Number(m[1]));
+      return { ...step, planner_review: describePlannerStepReview(store, step) };
+    }],
     ['GET', /^\/api\/plans\/(\d+)\/graph$/,  (m) => ({ ...store.graphStats(Number(m[1])), god_nodes: store.godNodes(Number(m[1]), 10) })],
     ['GET', /^\/api\/context$/,              () => ({ text: buildRefsBlock(store, {}) || '(no rules or tools enabled)' })],
     ['GET', /^\/api\/refs$/, (m, b, q) => store.listRefs({

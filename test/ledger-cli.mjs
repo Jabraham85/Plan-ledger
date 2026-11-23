@@ -97,6 +97,11 @@ try {
   check('defaultDbPath honors PLAN_LEDGER_DB override', project.body.db_path === dbPath);
   const projectId = project.body.result.id;
   check('create_project returns a numeric id', Number.isInteger(projectId) && projectId > 0);
+  check('an unregistered project root is null', runCli('get_project_root', { project_id: projectId }).body?.result?.root === null);
+  check('project root writes require an explicit project', runCli('set_project_root', { root }).body?.ok === false);
+  check('JSON CLI registers the explicit project root', runCli('set_project_root', { project_id: projectId, root }).body?.ok === true);
+  check('project root is readable across CLI invocations',
+    canonicalDbIdentity(runCli('get_project_root', { project_id: projectId }).body.result.root) === canonicalDbIdentity(root));
   const flaggedInput = await runCliWithOpenStdin('list_projects', {});
   check('--input does not wait for an open stdin pipe', flaggedInput.timedOut === false
     && flaggedInput.status === 0 && flaggedInput.body?.ok === true);
@@ -111,6 +116,19 @@ try {
   });
   check('create_plan succeeds', plan.status === 0 && plan.body.ok === true && plan.body.result.status === 'draft');
   const planId = plan.body.result.id;
+
+  const learned = runCli('absorb_findings', { plan_id: planId, findings: [{
+    kind: 'lesson', subject: 'fixture memory', claim: 'Preserve zirconium receipts for retries.',
+  }] }).body.result.results[0];
+  const recallPlan = runCli('create_plan', { title: 'Review subsequent workflow' }).body.result;
+  const recallStep = runCli('add_step', {
+    plan_id: recallPlan.id, title: 'Review subsequent workflow',
+    acceptance_contract: { version: 1, criteria: [{ id: 'check', description: 'Validate zirconium receipts.' }] },
+  }).body.result;
+  const nextPacket = runCli('planner_packet', { step_id: recallStep.id, authorization: {
+    source_ref: 'test:fixture', user_instruction: 'Verify the fixture workflow', granted_actions: ['read fixture'],
+  } }).body.result;
+  check('a later packet recalls findings via strict criterion text', nextPacket.findings.some(f => f.id === learned.id));
 
   const priorDone = runCli('create_plan', { title: 'Diagon audit hardening', keywords: ['diagon', 'audit', 'reassignment'] });
   const priorActive = runCli('create_plan', { title: 'Diagon active escalation', keywords: ['diagon', 'stalled', 'architect'] });

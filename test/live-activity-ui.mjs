@@ -353,4 +353,33 @@ function loadLiveActivityModule({ seedLocalStorage = {} } = {}) {
   check('the in-flight guard clears once the poll settles', hooks.getActivityPollInFlight() === false);
 }
 
+{
+  const { hooks } = loadLiveActivityModule();
+  const reviewMarkup = hooks.plannerReviewMarkup({ state: 'revision_requested', revision: { submission_id: 18, reason: 'Missing observation' }, evidence_errors: [],
+    criteria: [{ description: 'Verify the receipt', mandatory: true, status: 'revision_requested', evidence: [],
+      feedback: { observation: 'The fixture read was missing', next_action: '<script>collect actual output</script>' } }] });
+  check('strict review shows its submission and actionable criterion feedback', reviewMarkup.includes('Revision requested') && reviewMarkup.includes('Submission #18') && reviewMarkup.includes('Next action'));
+  check('QA text is escaped before it reaches the board', reviewMarkup.includes('&lt;script&gt;') && !reviewMarkup.includes('<script>'));
+
+  const held = hooks.plannerHandoffMarkup({ strict_step_count: 1, ready: false, blockers: [{ code: 'awaiting_independent_review', step_ids: [9], submission_id: 18 }] });
+  check('a held handoff links the open step and withholds the evidence link', held.includes('Awaiting independent review') && held.includes('Step #9') && !held.includes('View evidence JSON'));
+  const ready = hooks.plannerHandoffMarkup({ plan_id: 7, strict_step_count: 1, ready: true, steps: [
+    { title: 'Fixture review', review: { reviewer: 'Nova', reason: 'Observed matching output' }, artifacts: [{ path: 'receipt.json' }], limitations: ['Fixture only'] },
+  ] });
+  check('an accepted handoff shows the decision, artifact, limitations and evidence link', ready.includes('Observed matching output') && ready.includes('receipt.json') && ready.includes('Fixture only') && ready.includes('href="/api/plans/7/handoff"'));
+}
+
+{
+  const { hooks, documentShim, routerRef } = loadLiveActivityModule();
+  hooks.setState({ planId: 7, stepId: 9 });
+  routerRef.current = async path => {
+    if (path === '/api/plans') return jsonResponse(200, []);
+    if (path === '/api/plans/7') return jsonResponse(200, { id: 7, steps: [] });
+    if (path === '/api/steps/9') return jsonResponse(200, { id: 9, title: 'Selected QA step', attempts: [] });
+    return jsonResponse(404, {});
+  };
+  await hooks.refreshSelectedPlan();
+  check('refresh preserves the selected QA step', hooks.getState().stepId === 9 && documentShim.getElementById('step').innerHTML.includes('Selected QA step'));
+}
+
 console.log(`\n${pass} live-activity-ui checks passed.`);

@@ -20,7 +20,9 @@ import {
   normalizeDispatchPolicyInput,
   normalizeLeasePolicyInput,
 } from './dispatch-policy.mjs';
+import { normalizeAcceptanceContract, localEvidenceChecker } from './acceptance-contract.mjs';
 import { validateCompletionPayload } from './completion-validator.mjs';
+import { normalizeRevisionFeedback, REVISION_ATTEMPT, reviewText } from './planner-review.mjs';
 
 // The ONE default DB location, shared by every entry point (MCP server, board,
 // packaged exe, runner, scripts). $PLAN_LEDGER_DB overrides; otherwise the
@@ -407,6 +409,21 @@ CREATE TABLE IF NOT EXISTS finding_events (
 );
 CREATE INDEX IF NOT EXISTS idx_fevents_finding ON finding_events(finding_id);
 CREATE INDEX IF NOT EXISTS idx_tsteps_tpl ON template_steps(template_id, idx);
+CREATE TABLE IF NOT EXISTS cloud_dispatch_requests (
+ id TEXT NOT NULL PRIMARY KEY, client_key TEXT NOT NULL UNIQUE,
+ plan_id INTEGER NOT NULL REFERENCES plans(id), step_id INTEGER NOT NULL REFERENCES steps(id),
+ phase TEXT NOT NULL DEFAULT 'prepared' CHECK(phase IN ('prepared','requested','started','reconciling','completed')),
+ packet_json TEXT NOT NULL DEFAULT '{}', identity_json TEXT NOT NULL DEFAULT '{}',
+ work_epoch INTEGER NOT NULL DEFAULT 0, lease_id INTEGER REFERENCES execution_leases(id),
+ cancellation_requested INTEGER NOT NULL DEFAULT 0, remote_outcome TEXT NOT NULL DEFAULT '',
+ created_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT ''
+);
+CREATE UNIQUE INDEX IF NOT EXISTS cloud_dispatch_step_owner ON cloud_dispatch_requests(step_id) WHERE phase<>'completed';
+CREATE TABLE IF NOT EXISTS cloud_dispatch_events (
+ seq INTEGER PRIMARY KEY AUTOINCREMENT, request_id TEXT NOT NULL REFERENCES cloud_dispatch_requests(id),
+ event_json TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL DEFAULT ''
+);
+
 `;
 
 const PLAN_STATUS = new Set(['draft', 'active', 'done', 'abandoned', 'blocked']);
@@ -691,7 +708,14 @@ export const DEFAULT_FINDING_ROUTE = 'strict_full';
 export const DEFAULT_NEAR_THRESHOLD = 0.7;
 
 export class Store {
-  constructor(dbPath) {
+  #acceptanceAuthority;
+  #cloudOwnershipAuthority;
+  #completionWrite = Object.freeze({});
+  constructor(dbPath, { acceptanceAuthority = null, cloudOwnershipAuthority = null } = {}) {
+    if (acceptanceAuthority !== null && (typeof acceptanceAuthority !== 'object' || !acceptanceAuthority)) throw new Error('acceptance_authority_invalid');
+    this.#acceptanceAuthority = acceptanceAuthority;
+    if (cloudOwnershipAuthority !== null && (typeof cloudOwnershipAuthority !== 'object' || !cloudOwnershipAuthority)) throw new Error('cloud_ownership_authority_invalid');
+    this.#cloudOwnershipAuthority = cloudOwnershipAuthority;
     if (dbPath !== ':memory:') mkdirSync(dirname(dbPath), { recursive: true });
     this.db_path = dbPath;
     this.db_identity = canonicalDbIdentity(dbPath);
@@ -772,7 +796,7 @@ export class Store {
   // Version 14 (brain branch, 2026-09) adds the findings brain: findings (+impact,
   // suspect_since), finding_deps, finding_events — tables via SCHEMA, columns
   // guarded by hasCol (the brain branch had stamped its own v4/v5; see _migrate).
-  static USER_VERSION = 15;
+  static USER_VERSION = 19;
 
   _migrate() {
     const v = this.db.prepare('PRAGMA user_version').get().user_version;
@@ -834,6 +858,9 @@ export class Store {
     });
 
     // v8: verification disposition + plan completion lock + execution leases + reconciliation.
+    if (!hasCol('steps', 'acceptance_epoch')) this.db.exec("ALTER TABLE steps ADD COLUMN acceptance_epoch INTEGER NOT NULL DEFAULT 0");
+    if (!hasCol('steps', 'acceptance_decision_json')) this.db.exec("ALTER TABLE steps ADD COLUMN acceptance_decision_json TEXT NOT NULL DEFAULT ''");
+    if (!hasCol('steps', 'acceptance_contract_json')) this.db.exec("ALTER TABLE steps ADD COLUMN acceptance_contract_json TEXT NOT NULL DEFAULT ''");
     if (!hasCol('steps', 'verification_disposition')) this.db.exec("ALTER TABLE steps ADD COLUMN verification_disposition TEXT NOT NULL DEFAULT ''");
     if (!hasCol('steps', 'disposition_reason'))       this.db.exec("ALTER TABLE steps ADD COLUMN disposition_reason TEXT NOT NULL DEFAULT ''");
     if (!hasCol('steps', 'disposition_at'))           this.db.exec("ALTER TABLE steps ADD COLUMN disposition_at TEXT NOT NULL DEFAULT ''");
@@ -1142,7 +1169,7 @@ export class Store {
   openPlan(id) {
     const p = this._mustPlan(id, '*');
     const steps = this.db
-      .prepare('SELECT id, idx, title, status FROM steps WHERE plan_id=? ORDER BY idx, id')
+      .prepare("SELECT id, idx, title, status, acceptance_contract_json <> '' AS strict_acceptance FROM steps WHERE plan_id=? ORDER BY idx, id")
       .all(id);
     return {
       id: p.id,
@@ -1174,7 +1201,9 @@ export class Store {
     if (!PLAN_STATUS.has(status)) throw new Error(`bad plan status: ${status}`);
     const prev = this._mustPlan(id, 'status');
     if (status === 'done') {
-      const guard = this._assessPlanTerminalization(id);
+      const assessed = this.assessPlanReconciliation(id);
+      const guard = { ok: assessed.blockers.length === 0, blockers: assessed.blockers, summary: assessed.blockers.map(b => b.code + ': ' + b.detail).join('; ') };
+      if (guard.blockers.some(b => ['deferred_manual_gate', 'blocked_steps', 'criterion_evidence_invalid'].includes(b.code))) throw new Error(`plan #${id} mandatory acceptance gate unresolved: ${guard.summary}`);
       if (!guard.ok && !force) {
         const err = new Error(`plan #${id} cannot be marked done: ${guard.summary}`);
         err.details = guard;
@@ -1213,9 +1242,15 @@ export class Store {
 
   _assessPlanTerminalization(planId) {
     const steps = this.db.prepare(
-      'SELECT id, idx, title, status, verification_disposition FROM steps WHERE plan_id=? ORDER BY idx, id'
+      'SELECT id, idx, title, status, verification_disposition, acceptance_contract_json, completion_payload_json FROM steps WHERE plan_id=? ORDER BY idx, id'
     ).all(planId);
     const blockers = [];
+    const blocked = steps.filter(s => s.status === 'blocked');
+    if (blocked.length) blockers.push({ code: 'blocked_steps', detail: 'blocked steps require resolution', step_ids: blocked.map(s => s.id) });
+    for (const step of steps.filter(s => s.acceptance_contract_json)) {
+      const validation = this._validateStepCompletion(step.id, step.completion_payload_json);
+      if (!validation.ok || !this.#hasAcceptedCompletion(step.id) || step.status !== 'done' || step.verification_disposition !== 'verified') blockers.push({ code: 'criterion_evidence_invalid', detail: validation.errors.map(e => e.code).join(',') || 'mandatory criterion work not accepted', step_ids: [step.id] });
+    }
     const activeSteps = steps.filter((s) => ['pending', 'in_progress', 'failed'].includes(s.status));
     if (activeSteps.length) {
       blockers.push({
@@ -1273,7 +1308,8 @@ export class Store {
     const blockers = [...guard.blockers];
     if (!guard.ok) {
       // Keep existing strict blockers as the canonical done-gate source.
-    } else if (deferredGateStepIds.length) {
+    }
+    if (deferredGateStepIds.length) {
       blockers.push({
         code: 'deferred_manual_gate',
         detail: `${deferredGateStepIds.length} step(s) require deferred/manual verification before done`,
@@ -1439,8 +1475,9 @@ export class Store {
 
   // ---- steps -------------------------------------------------------------
 
-  addStep(planId, { title, context, tools, role, acceptance_criteria, carry_forward, idx }) {
+  addStep(planId, { title, context, tools, role, acceptance_criteria, acceptance_contract, carry_forward, idx }) {
     const plan = this._mustPlan(planId, 'status');
+    if (acceptance_contract != null) normalizeAcceptanceContract(acceptance_contract);
     if (!title || !String(title).trim()) throw new Error('step title is required');
     const ts = now();
     const newId = this._tx(() => { // shift + insert must be one atomic unit
@@ -1470,6 +1507,7 @@ export class Store {
       if (plan.status && plan.status !== 'draft' && plan.status !== 'abandoned') {
         this._appendAssignment(id, { reason: '', assigned_by: 'add-step' });
       }
+      if (acceptance_contract != null) this.db.prepare('UPDATE steps SET acceptance_contract_json=? WHERE id=?').run(JSON.stringify(normalizeAcceptanceContract(acceptance_contract)), id);
       return id;
     });
     this.touchPlan(planId);
@@ -1521,6 +1559,10 @@ export class Store {
     const links = this._prep('step_links_from', 'SELECT id, to_plan_id, to_step_id, relation, note FROM links WHERE from_step_id=?').all(id);
     const assignments = this._listAssignments(id);
     const activeLease = known_open_lease ?? this._openLeaseForStep(id);
+    const revision = s.acceptance_contract_json ? this._prep('latest_completion_revision', `
+      SELECT a.id, a.result FROM attempts a WHERE a.step_id=? AND a.what_tried=? AND NOT EXISTS (
+        SELECT 1 FROM attempts passed WHERE passed.step_id=a.step_id AND passed.id>a.id AND passed.verdict='pass'
+      ) ORDER BY a.id DESC LIMIT 1`).get(id, REVISION_ATTEMPT) : null;
     return {
       id: s.id,
       plan_id: s.plan_id,
@@ -1531,6 +1573,10 @@ export class Store {
       tools: parseArr(s.tools),
       role: s.role ?? '',
       acceptance_criteria: s.acceptance_criteria,
+      acceptance_epoch: s.acceptance_epoch ?? 0,
+      acceptance_decision: s.acceptance_decision_json ? parseObj(s.acceptance_decision_json) : null,
+      last_completion_revision: revision ? { ...parseObj(revision.result), attempt_id: revision.id } : null,
+      acceptance_contract: parseObj(s.acceptance_contract_json || '')?.version ? parseObj(s.acceptance_contract_json) : null,
       carry_forward: s.carry_forward,
       layman: s.layman ?? '',
       verification_disposition: s.verification_disposition ?? '',
@@ -1581,6 +1627,7 @@ export class Store {
     if (fields.context != null) allowed.context = String(fields.context);
     if (fields.tools != null) allowed.tools = jsonArr(fields.tools);
     if (fields.role != null) allowed.role = String(fields.role).trim();
+    if (Object.hasOwn(fields, 'acceptance_contract')) throw new Error('acceptance_contract_revision_required');
     if (fields.acceptance_criteria != null) allowed.acceptance_criteria = String(fields.acceptance_criteria);
     if (fields.carry_forward != null) allowed.carry_forward = String(fields.carry_forward);
     // idx is validated + moved separately: contiguous 1..N per plan (UNIQUE index)
@@ -1850,6 +1897,7 @@ export class Store {
     if (!reason || !String(reason).trim()) throw new Error('reason is required for redo');
     return this._tx(() => {
       const s = this._mustStep(stepId, '*');
+      this.#invalidateAcceptance(stepId, 'redo_step: ' + reason);
       this.db.prepare("UPDATE steps SET status='pending', updated_at=? WHERE id=?").run(now(), stepId);
       this.db.prepare("UPDATE steps SET verification_disposition='', disposition_reason='', disposition_at='' WHERE id=?").run(stepId);
       this.db.prepare('INSERT INTO notes (step_id, author, body, created_at) VALUES (?,?,?,?)')
@@ -1876,6 +1924,10 @@ export class Store {
     };
   }
 
+  _unresolvedCloudDispatch(stepId) {
+    return this.db.prepare("SELECT * FROM cloud_dispatch_requests WHERE step_id=? AND phase NOT IN ('prepared','completed') LIMIT 1").get(stepId) ?? null;
+  }
+
   _openLeaseForStep(stepId) {
     return this._prep('open_lease_for_step', "SELECT * FROM execution_leases WHERE step_id=? AND status='open' LIMIT 1").get(stepId) ?? null;
   }
@@ -1899,13 +1951,15 @@ export class Store {
     dispatch_policy = null, lease_policy = null, override_reason = '',
     phase = 'preflight', action_summary = 'claimed via execution lease',
     progress_total = 0, progress_completed = 0, metadata = {},
-  } = {}) {
+  } = {}, { cloudOwnershipAuthority } = {}) {
     const pid = Number(plan_id);
     const sid = Number(step_id);
     if (!Number.isInteger(pid) || pid < 1) throw new Error('plan_id must be a positive integer');
     if (!Number.isInteger(sid) || sid < 1) throw new Error('step_id must be a positive integer');
     const step = this._mustStep(sid, '*');
     if (step.plan_id !== pid) throw new Error(`step ${sid} does not belong to plan ${pid}`);
+    const cloudOwner = this._unresolvedCloudDispatch(sid);
+    if (cloudOwner && !(this.#cloudOwnershipAuthority && cloudOwnershipAuthority === this.#cloudOwnershipAuthority && executor === 'cloud-parent' && metadata?.cloud_dispatch_request_id === cloudOwner.id)) throw new Error('cloud_ownership_unresolved:' + cloudOwner.id);
     const generatedRunId = run_id == null;
     const generatedSessionRef = session_ref == null;
     const rid = String(run_id ?? `run-${sid}-${Date.now().toString(36)}`).slice(0, 96);
@@ -1970,6 +2024,7 @@ export class Store {
         }
         // adopted — the step is already in_progress and there is no open lease
       }
+      this.#invalidateAcceptance(sid, 'open_execution_lease');
       const existingActivityRow = canAssumeNewActivity
         ? null
         : this._prep(
@@ -2206,6 +2261,9 @@ export class Store {
       this.db.prepare(
         "UPDATE execution_leases SET status='closed', outcome=?, close_reason=?, stale_reason=?, closed_at=?, last_heartbeat_at=? WHERE id=?"
       ).run(String(outcome ?? ''), String(close_reason ?? '').slice(0, 200), String(stale_reason ?? '').slice(0, 80), nowTs, nowTs, lease.id);
+      const pendingReviewOnly = outcome === 'partial' && verification_state === 'pending' && terminal_metadata?.awaiting_acceptance === true && !attempt && !step_verdict
+        && !this._mustStep(lease.step_id, 'acceptance_decision_json').acceptance_decision_json;
+      if (outcome !== 'success' && !pendingReviewOnly) this.#invalidateAcceptance(lease.step_id, 'execution lease closed:' + outcome);
       // Optional attempt in-tx so telemetry and evidence land together.
       if (step_verdict && attempt) {
         this.recordAttempt(lease.step_id, {
@@ -2237,7 +2295,7 @@ export class Store {
         // without needing to see a fabricated failure. `failed` / other
         // outcomes flip it to `failed` so the retry budget still applies.
         const resetTo = (outcome === 'abandoned' || outcome === 'cancelled') ? 'pending' : 'failed';
-        this.db.prepare("UPDATE steps SET status=?, updated_at=? WHERE id=? AND status='in_progress'").run(resetTo, nowTs, lease.step_id);
+        this.db.prepare("UPDATE steps SET status=?, updated_at=? WHERE id=? AND (status='in_progress' OR (acceptance_contract_json<>'' AND status IN ('done','skipped')))").run(resetTo, nowTs, lease.step_id);
       }
       this.touchPlan(lease.plan_id);
       const stepTerminalized = !!(step_verdict && attempt) || !!dispositionCandidate;
@@ -2399,7 +2457,7 @@ export class Store {
         ? "SELECT * FROM execution_leases WHERE status='open' AND plan_id=?"
         : "SELECT * FROM execution_leases WHERE status='open'"
     ).all(...(filterPlan != null ? [filterPlan] : []));
-    const reaped = [];
+    const reaped = [], held = [];
     const mode = resolveAutoReassignMode();
     for (const lease of openLeases) {
       const hbTs = Date.parse(lease.last_heartbeat_at || '');
@@ -2413,6 +2471,18 @@ export class Store {
         && now_ms > faTs + grace_ms
         && !this._leaseHasArtifactEvidence(lease);
       if (!staleBreach && !overallDeadlineBreach && !firstArtifactDeadlineBreach) continue;
+      const cloudOwner = this._unresolvedCloudDispatch(lease.step_id);
+      if (cloudOwner && cloudOwner.lease_id === lease.id) {
+        const cause = firstArtifactDeadlineBreach ? 'first_artifact_observation_stale' : overallDeadlineBreach ? 'deadline_requires_remote_reconciliation' : 'parent_observation_stale';
+        this._tx(() => {
+          this.db.prepare("UPDATE cloud_dispatch_requests SET phase='reconciling',updated_at=? WHERE id=?").run(nowIso, cloudOwner.id);
+          const last = this.db.prepare('SELECT event_json FROM cloud_dispatch_events WHERE request_id=? ORDER BY seq DESC LIMIT 1').get(cloudOwner.id);
+          const prior = last ? parseObj(last.event_json) : null;
+          if (prior?.event !== 'ownership_hold' || prior?.cause !== cause) this.db.prepare('INSERT INTO cloud_dispatch_events(request_id,event_json,created_at) VALUES(?,?,?)').run(cloudOwner.id, JSON.stringify({event:'ownership_hold',cause,lease_id:lease.id,checked_at:nowIso,remote_liveness:'unobserved_since_last_parent_response',last_local_heartbeat_at:lease.last_heartbeat_at,remote_terminal_confirmed:false,relaunch_allowed:false}), nowIso);
+        });
+        held.push({lease_id:lease.id,request_id:cloudOwner.id,cause,ownership:'held_pending_remote_reconciliation'});
+        continue;
+      }
       const reason = firstArtifactDeadlineBreach
         ? 'reap:first_artifact_deadline_miss'
         : overallDeadlineBreach
@@ -2475,7 +2545,7 @@ export class Store {
         reaped.push({ lease_id: lease.id, plan_id: lease.plan_id, step_id: lease.step_id, reason, stale_reason: staleReason, error: e.message });
       }
     }
-    return { reaped_count: reaped.length, reaped };
+    return { reaped_count: reaped.length, reaped, held_count: held.length, held };
   }
 
   getExecutionLease(leaseId) { return this._leaseRow(this._getLeaseOrThrow(Number(leaseId))); }
@@ -2540,9 +2610,16 @@ export class Store {
     };
   }
 
-  setStepStatus(id, status, { reconcile = true, reconcile_source = 'set_step_status' } = {}) {
+  setStepStatus(id, status, { reconcile = true, reconcile_source = 'set_step_status', validated_completion = null } = {}) {
+    return this._tx(() => {
     if (!STEP_STATUS.has(status)) throw new Error(`bad step status: ${status}`);
-    const s = this._mustStep(id, 'plan_id, verification_disposition');
+    const s = this._mustStep(id, 'plan_id, verification_disposition, acceptance_contract_json, completion_payload_json');
+    if (s.acceptance_contract_json && ['done','skipped'].includes(status) && validated_completion !== this.#completionWrite) {
+      const check = this._validateStepCompletion(id, s.completion_payload_json);
+      if (!check.ok) throw new Error('completion_gate_rejected:' + check.errors.map(e => e.code).join(','));
+      if (!this.#hasAcceptedCompletion(id)) throw new Error('orchestrator_acceptance_required');
+    }
+    if (s.acceptance_contract_json && !['done','skipped'].includes(status)) this.#invalidateAcceptance(id, 'set_step_status:' + status);
     this.db.prepare('UPDATE steps SET status=?, updated_at=? WHERE id=?').run(status, now(), id);
     // Auto-disposition for skipped: skipping a step is a deliberate "not
     // applicable" outcome; recording that here (instead of leaving
@@ -2564,6 +2641,7 @@ export class Store {
     this.touchPlan(s.plan_id);
     if (reconcile) this.reconcilePlanTerminalState(s.plan_id, { source: reconcile_source, strict: true });
     return this.getStep(id);
+    });
   }
 
   // Write a note FORWARD to a step (typically the next one) — the explicit
@@ -2584,18 +2662,153 @@ export class Store {
   // Actual-execution provenance (agent/model/model_source/session_ref) is optional and
   // stored verbatim — an empty string is treated as "unknown" downstream so we never
   // invent a concrete model we did not observe.
+  #digest(value) { return createHash('sha256').update(JSON.stringify(value)).digest('hex'); }
+  #requireAuthority(authority) {
+    if (!this.#acceptanceAuthority || authority !== this.#acceptanceAuthority) throw new Error('orchestrator_authority_required');
+  }
+  #invalidateAcceptance(stepId, reason) {
+    const row = this._mustStep(stepId, 'plan_id, acceptance_contract_json, acceptance_epoch, acceptance_decision_json');
+    if (!row.acceptance_contract_json) return;
+    const prior = row.acceptance_decision_json ? parseObj(row.acceptance_decision_json) : null;
+    this.addNote(stepId, { author: 'ledger-lifecycle', body: JSON.stringify({
+      event: 'acceptance_invalidated', reason, epoch: Number(row.acceptance_epoch) + 1, prior_decision: prior,
+    }) });
+    this.db.prepare("UPDATE steps SET acceptance_epoch=acceptance_epoch+1, acceptance_decision_json='', completion_payload_json='', completion_validated_at='', verification_disposition='', disposition_reason='', disposition_at='', updated_at=? WHERE id=?").run(now(), stepId);
+    this.db.prepare("UPDATE plans SET status='active', updated_at=? WHERE id=? AND status='done'").run(now(), row.plan_id);
+  }
+
+  #hasAcceptedCompletion(stepId) {
+    const row = this._mustStep(stepId, 'status, acceptance_contract_json, completion_payload_json, acceptance_decision_json, acceptance_epoch');
+    const decision = parseObj(row.acceptance_decision_json || '');
+    return row.status === 'done' && !!decision && decision.epoch === row.acceptance_epoch && decision.contract_digest === this.#digest(parseObj(row.acceptance_contract_json))
+      && decision.payload_digest === this.#digest(parseObj(row.completion_payload_json));
+  }
+
+  // Worker-facing: submission is evidence, never acceptance. No pass attempt is fabricated.
+  submitCompletion(stepId, { completion_payload, executor = '', session_ref = '' } = {}) {
+    return this._tx(() => {
+    const row = this._mustStep(stepId, 'plan_id, acceptance_contract_json, acceptance_epoch');
+    if (!row.acceptance_contract_json) throw new Error('acceptance_contract_required');
+    const checked = this._validateStepCompletion(stepId, completion_payload);
+    if (!checked.ok) throw new Error('completion_gate_rejected:' + checked.errors.map(e => e.code).join(','));
+    const submission = { event: 'completion_submission', epoch: Number(row.acceptance_epoch) + 1, contract_digest: this.#digest(parseObj(row.acceptance_contract_json)),
+      completion_payload: checked.normalizedPayload, executor, session_ref };
+    return this._tx(() => {
+      this.#invalidateAcceptance(stepId, 'fresh evidence submission supersedes prior work');
+      this.addNote(stepId, { author: String(executor || 'worker'), body: JSON.stringify(submission) });
+      const note = this.listNotes(stepId).at(-1);
+      this.db.prepare("UPDATE steps SET status='pending', verification_disposition='', completion_payload_json='', completion_validated_at='', acceptance_decision_json='', updated_at=? WHERE id=?").run(now(), stepId);
+      this.touchPlan(row.plan_id);
+      return { submission_id: note.id, contract_digest: submission.contract_digest, payload_digest: this.#digest(submission.completion_payload), status: 'pending_review' };
+    });
+    });
+  }
+
+  #currentCompletionSubmission(stepId, { submission_id, reviewer, contract_digest, payload_digest }) {
+    const notes = this.listNotes(stepId);
+    const latest = notes.filter(n => parseObj(n.body)?.event === 'completion_submission').at(-1);
+    const note = latest?.id === Number(submission_id) ? latest : null;
+    const submission = parseObj(note?.body || '');
+    const row = this._mustStep(stepId, 'acceptance_contract_json, acceptance_epoch');
+    if (submission?.event !== 'completion_submission' || submission.epoch !== row.acceptance_epoch || submission.contract_digest !== contract_digest
+      || contract_digest !== this.#digest(parseObj(row.acceptance_contract_json))
+      || payload_digest !== this.#digest(submission.completion_payload)) throw new Error('acceptance_submission_stale');
+    if (String(reviewer) === String(submission.executor)) throw new Error('independent_reviewer_required');
+    return { row, submission };
+  }
+
+  // Application capability boundary, not protection against local code/SQL access.
+  acceptCompletion(stepId, { submission_id, reviewer, decision_ref, reason, contract_digest, payload_digest } = {}, { authority } = {}) {
+    this.#requireAuthority(authority);
+    return this._tx(() => {
+    if (![reviewer, decision_ref, reason].every(x => String(x || '').trim())) throw new Error('acceptance_decision_required');
+    const { row, submission } = this.#currentCompletionSubmission(stepId, { submission_id, reviewer, contract_digest, payload_digest });
+    const payload = { ...submission.completion_payload, criteria: submission.completion_payload.criteria.map(c => ({ ...c, reviewer: String(reviewer) })) };
+    const checked = this._validateStepCompletion(stepId, payload);
+    if (!checked.ok) throw new Error('completion_gate_rejected:' + checked.errors.map(e => e.code).join(','));
+    const decision = { event: 'orchestrator_acceptance', epoch: row.acceptance_epoch, submission_id, reviewer, decision_ref, reason,
+      contract_digest, payload_digest: this.#digest(checked.normalizedPayload), accepted_at: now() };
+    return this._tx(() => {
+      this.db.prepare('UPDATE steps SET acceptance_decision_json=? WHERE id=?').run(JSON.stringify(decision), stepId);
+      this.addNote(stepId, { author: String(reviewer), body: JSON.stringify(decision) });
+      return this.recordAttempt(stepId, { what_tried: 'Orchestrator accepted submitted evidence', verdict: 'pass',
+        result: reason, completion_payload: payload, executor: submission.executor, session_ref: submission.session_ref },
+        { acceptance_authority: this.#completionWrite, reconcile: false });
+    });
+    });
+  }
+
+  requestCompletionRevision(stepId, { submission_id, reviewer, decision_ref, reason, contract_digest, payload_digest, feedback } = {}, { authority, lease_id } = {}) {
+    this.#requireAuthority(authority);
+    const details = {
+      decision: 'revise', submission_id: Number(submission_id), contract_digest, payload_digest,
+      reviewer: reviewText(reviewer, 'reviewer'), decision_ref: reviewText(decision_ref, 'decision_ref'), reason: reviewText(reason, 'reason'),
+    };
+    return this._tx(() => {
+      const { row, submission } = this.#currentCompletionSubmission(stepId, details);
+      const step = this._mustStep(stepId, 'status, acceptance_decision_json');
+      const lease = this._openLeaseForStep(stepId);
+      if (step.status !== 'pending' || step.acceptance_decision_json) throw new Error('planner_revision_not_pending');
+      if (this._unresolvedCloudDispatch(stepId) || (lease ? lease.id !== lease_id || lease.session_ref !== submission.session_ref : lease_id != null)) {
+        throw new Error('planner_revision_execution_owned');
+      }
+      details.feedback = normalizeRevisionFeedback(feedback, parseObj(row.acceptance_contract_json));
+      const revised = this.recordAttempt(stepId, {
+        what_tried: REVISION_ATTEMPT, result: JSON.stringify(details), verdict: 'partial',
+        executor: details.reviewer, session_ref: submission.session_ref,
+      }, { acceptance_authority: this.#completionWrite, reconcile: !lease, emit_lifecycle_events: !lease });
+      return { ...details, attempt_id: revised.attempts.at(-1).id };
+    });
+  }
+
+  reviseAcceptanceContract(stepId, { acceptance_contract, expected_contract_digest, reviewer, decision_ref, reason, evidence } = {}, { authority } = {}) {
+    this.#requireAuthority(authority);
+    return this._tx(() => {
+    const step = this._mustStep(stepId, 'plan_id, acceptance_contract_json');
+    const previous = parseObj(step.acceptance_contract_json || '');
+    if (![reviewer, decision_ref, reason].every(x => String(x || '').trim()) || !Array.isArray(evidence) || !evidence.length) throw new Error('contract_revision_decision_required');
+    if (expected_contract_digest !== this.#digest(previous)) throw new Error('contract_revision_stale');
+    const project = this._mustPlan(step.plan_id, 'project_id');
+    const check = localEvidenceChecker(this.getProjectRoot(project.project_id));
+    for (const item of evidence) { const error = check(item); if (error) throw new Error('contract_revision_evidence_invalid:' + error); }
+    const next = normalizeAcceptanceContract(acceptance_contract);
+    if (!next) throw new Error('acceptance_contract_required');
+    next.revision = (previous?.revision || 1) + 1;
+    return this._tx(() => {
+      this.#invalidateAcceptance(stepId, 'acceptance contract revised: ' + reason);
+      this.addNote(stepId, { author: reviewer, body: JSON.stringify({ event: 'acceptance_contract_revision', revision: next.revision,
+        previous, next, reviewer, decision_ref, reason, evidence }) });
+      this.db.prepare("UPDATE steps SET acceptance_contract_json=?, acceptance_decision_json='', completion_payload_json='', completion_validated_at='', verification_disposition='', status='pending', updated_at=? WHERE id=?").run(JSON.stringify(next), now(), stepId);
+      this.db.prepare("UPDATE plans SET status='active', updated_at=? WHERE id=? AND status='done'").run(now(), step.plan_id);
+      this.touchPlan(step.plan_id);
+      return this.getStep(stepId);
+    });
+    });
+  }
+
+  _validateStepCompletion(stepId, payload, claimed_pass = true) {
+    const row = this._mustStep(stepId, 'plan_id, acceptance_contract_json');
+    const project = this._mustPlan(row.plan_id, 'project_id');
+    return validateCompletionPayload(payload, {
+      claimed_pass,
+      acceptance_contract: row.acceptance_contract_json || null,
+      checkEvidence: localEvidenceChecker(this.getProjectRoot(project.project_id)),
+    });
+  }
+
   recordAttempt(stepId, { what_tried, result, verdict, role, review_rounds, executor,
                           agent, model, model_source, session_ref, layman,
                           completion_payload, disposition, disposition_reason } = {},
-  { reconcile = true, reconcile_source = 'record_attempt', emit_lifecycle_events = true } = {}) {
-    const stepRow = this._mustStep(stepId, 'plan_id, completion_payload_json, completion_validated_at');
+  { reconcile = true, reconcile_source = 'record_attempt', emit_lifecycle_events = true, acceptance_authority = null } = {}) {
+    const stepRow = this._mustStep(stepId, 'plan_id, completion_payload_json, completion_validated_at, acceptance_contract_json');
     if (!what_tried || !String(what_tried).trim()) throw new Error('what_tried is required');
+    if (String(what_tried) === REVISION_ATTEMPT && acceptance_authority !== this.#completionWrite) throw new Error('orchestrator_authority_required');
     const v = verdict ?? 'fail';
     if (!VERDICTS.has(v)) throw new Error(`bad verdict: ${v} (pass|fail|partial)`);
     const gateMode = resolveCompletionGateMode();
     const hasCompletionPayload = completion_payload != null && completion_payload !== '';
     const validation = hasCompletionPayload || v === 'pass'
-      ? validateCompletionPayload(completion_payload, { claimed_pass: v === 'pass' })
+      ? this._validateStepCompletion(stepId, completion_payload, v === 'pass')
       : { ok: false, errors: [], normalizedPayload: null };
     const isMissingPayload = validation.errors.some((e) => e.code === 'completion_json_missing');
     const validationStatus = validation.ok
@@ -2604,10 +2817,11 @@ export class Store {
     const validationErrorsJson = (!validation.ok && gateMode !== 'off')
       ? JSON.stringify(validation.errors)
       : '';
-    if (v === 'pass' && gateMode === 'enforce' && !validation.ok) {
+    if (v === 'pass' && (gateMode === 'enforce' || !!stepRow.acceptance_contract_json) && !validation.ok) {
       const codes = validation.errors.map((e) => e.code).join(',');
       throw new Error(`completion_gate_rejected:${codes}`);
     }
+    if (v === 'pass' && stepRow.acceptance_contract_json && acceptance_authority !== this.#completionWrite) throw new Error('orchestrator_acceptance_required');
     // Verification disposition on a passing attempt is now first-class. Default
     // to `verified` so existing callers keep working; explicit `disposition`
     // overrides. `deferred`/`blocked`/`legacy_unknown` are NOT valid pass
@@ -2637,7 +2851,7 @@ export class Store {
              validationErrorsJson, ts);
       // a passing attempt advances the step to done; a fail marks it failed (not blocked — still retryable)
       // (setStepStatus also touches the plan, so no extra touchPlan here)
-      if (v === 'pass') this.setStepStatus(stepId, 'done', { reconcile: false, reconcile_source });
+      if (v === 'pass') this.setStepStatus(stepId, 'done', { reconcile: false, reconcile_source, validated_completion: this.#completionWrite });
       else this.setStepStatus(stepId, 'failed', { reconcile: false, reconcile_source });
       if (v === 'pass' && validation.ok && validation.normalizedPayload) {
         this.db.prepare('UPDATE steps SET completion_payload_json=?, completion_validated_at=?, updated_at=? WHERE id=?')
@@ -2701,16 +2915,22 @@ export class Store {
   // that were closed outside the recordAttempt path (raw setStepStatus,
   // orphan cleanup, deferred/blocked audit reconciliation).
   setStepDisposition(stepId, { disposition, reason } = {}, { reconcile = true, reconcile_source = 'set_step_disposition' } = {}) {
+    return this._tx(() => {
     const s = this._mustStep(stepId, 'plan_id, status');
     if (!STEP_DISPOSITION.has(disposition)) throw new Error(`bad disposition: ${disposition} (verified|not_applicable|deferred|blocked|legacy_unknown)`);
     if (!disposition) throw new Error('disposition is required');
     if (['deferred', 'blocked', 'not_applicable'].includes(disposition) && !String(reason ?? '').trim()) {
       throw new Error(`disposition "${disposition}" requires a reason`);
     }
+    const contract = this._mustStep(stepId, 'acceptance_contract_json, completion_payload_json');
+    if (disposition === 'verified' && contract.acceptance_contract_json && !this._validateStepCompletion(stepId, contract.completion_payload_json).ok) throw new Error('completion_gate_rejected:criterion_unverified');
+    if (disposition === 'verified' && contract.acceptance_contract_json && !this.#hasAcceptedCompletion(stepId)) throw new Error('orchestrator_acceptance_required');
+    if (contract.acceptance_contract_json && disposition !== 'verified') this.#invalidateAcceptance(stepId, 'set_step_disposition:' + disposition);
     this._setStepDispositionRow(stepId, disposition, String(reason ?? '').trim());
     this.touchPlan(s.plan_id);
     if (reconcile) this.reconcilePlanTerminalState(s.plan_id, { source: reconcile_source, strict: true });
     return this.getStep(stepId);
+    });
   }
 
   _setStepDispositionRow(stepId, disposition, reason) {
@@ -2741,7 +2961,7 @@ export class Store {
       WHERE l.from_step_id=? AND l.relation IN ('builds_on','blocks') AND d.status NOT IN ('done','skipped')`)
       .all(stepId).map((r) => r.to_step_id);
   }
-  _depsSatisfied(step) { return this._unmetDeps(step.id).length === 0; }
+  _depsSatisfied(step) { return !this._unresolvedCloudDispatch(step.id) && this._unmetDeps(step.id).length === 0; }
 
   //
   // With { claim: true } the selection and the pending→in_progress status
@@ -2809,6 +3029,7 @@ export class Store {
           "UPDATE steps SET status='in_progress', updated_at=? WHERE id=? AND status IN ('pending','failed')"
         ).run(now(), workable.id);
         if (info.changes === 0) return CLAIM_RACE;
+        this.#invalidateAcceptance(workable.id, 'next_step claim');
         this.touchPlan(planId);
       }
       const step = this.getStep(workable.id);
@@ -2840,11 +3061,14 @@ export class Store {
   // success, { claimed: false, current_status } if someone else got there first.
   claimStep(stepId, { executor = '' } = {}) {
     const s = this._mustStep(stepId, 'status, plan_id');
+    const cloudOwner = this._unresolvedCloudDispatch(stepId);
+    if (cloudOwner) return {claimed:false,step_id:stepId,current_status:s.status,reason:'cloud_ownership_unresolved',request_id:cloudOwner.id};
     return this._tx(() => {
       const info = this.db.prepare(
         "UPDATE steps SET status='in_progress', updated_at=? WHERE id=? AND status IN ('pending','failed')"
       ).run(now(), stepId);
       if (info.changes === 0) return { claimed: false, step_id: stepId, current_status: s.status };
+      this.#invalidateAcceptance(stepId, 'claim_step');
       this.touchPlan(s.plan_id);
       return { claimed: true, step_id: stepId, ...(executor ? { claimed_by: String(executor) } : {}) };
     });
@@ -2876,7 +3100,7 @@ export class Store {
         const claimed = [];
         for (const r of ready) {
           if (claimed.length >= claimLimit) break;
-          if (claimOne.run(now(), r.id).changes === 1) claimed.push(r);
+          if (claimOne.run(now(), r.id).changes === 1) { this.#invalidateAcceptance(r.id, 'ready_steps claim'); claimed.push(r); }
         }
         ready = claimed;
         if (ready.length) this.touchPlan(planId);
@@ -2904,11 +3128,14 @@ export class Store {
   // a brief is a bonus, not a gate.
   stepBrief(stepId, { limit = 5 } = {}) {
     try {
-      const s = this.db.prepare('SELECT s.title, s.context, s.acceptance_criteria, s.plan_id, p.project_id FROM steps s JOIN plans p ON p.id = s.plan_id WHERE s.id = ?').get(stepId);
+      const s = this.db.prepare(`
+        SELECT s.title, s.context, s.acceptance_criteria, s.acceptance_contract_json, s.plan_id, p.project_id
+        FROM steps s JOIN plans p ON p.id = s.plan_id WHERE s.id = ?`).get(stepId);
       if (!s) return [];
       if (!this.db.prepare("SELECT 1 FROM findings WHERE project_id = ? AND status IN ('active','suspect') LIMIT 1").get(s.project_id ?? 1)) return [];
       this.checkStale({ project_id: s.project_id ?? 1 });
-      const text = `${s.title}\n${s.context || ''}\n${s.acceptance_criteria || ''}`;
+      const criteria = parseObj(s.acceptance_contract_json)?.criteria ?? [];
+      const text = [s.title, ...criteria.map(criterion => criterion.description), s.context, s.acceptance_criteria].join('\n');
       return pickBrief((q, k) => this.queryFindings({ plan_id: s.plan_id, query: q, limit: k, status: 'live' }), text, { limit })
         .map((f) => ({ id: f.id, kind: f.kind, subject: f.subject, claim: f.claim, evidence: f.evidence, status: f.status,
           ...(f.conflicts_with.length ? { conflicts_with: f.conflicts_with } : {}) }));

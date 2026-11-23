@@ -2,8 +2,8 @@
 // destructively rewriting live Cursor config. Run: node test/global-skill.mjs
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
-import { homedir, tmpdir } from 'node:os';
+import { existsSync, mkdirSync, readFileSync, rmSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -11,9 +11,10 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 const cliPath = join(root, 'src', 'ledger-cli.mjs');
 const canonicalSkill = join(root, '.cursor', 'skills', 'plan-ledger', 'SKILL.md');
 const pluginSkill = join(root, 'plugin', 'skills', 'plan-ledger', 'SKILL.md');
-const globalSkill = join(homedir(), '.cursor', 'skills', 'plan-ledger', 'SKILL.md');
-const bridgeManifest = join(homedir(), '.cursor', 'plan-ledger-bridge.json');
-const userMcp = join(homedir(), '.cursor', 'mcp.json');
+const fakeHome = mkdtempSync(join(tmpdir(), 'ledger-skill-fixture-'));
+const globalSkill = join(fakeHome, '.cursor', 'skills', 'plan-ledger', 'SKILL.md');
+const bridgeManifest = join(fakeHome, '.cursor', 'plan-ledger-bridge.json');
+const userMcp = join(fakeHome, '.cursor', 'mcp.json');
 const dbPath = join(tmpdir(), `plan-ledger-global-skill-db-${process.pid}.db`);
 const outsideCwd = join(tmpdir(), `plan-ledger-outside-${process.pid}`);
 const testPort = 45000 + (process.pid % 10000);
@@ -72,6 +73,12 @@ const runCli = (operation, args, extraEnv = {}, cwd = outsideCwd) => {
 };
 
 try {
+  mkdirSync(join(fakeHome, '.cursor'), { recursive: true });
+  const fixtureMcp = JSON.stringify({ mcpServers: { 'atlassian-mcp-server': { command: 'fixture-only' }, 'marauders-ledger-rag': { command: 'fixture-only' } } });
+  writeFileSync(userMcp, fixtureMcp);
+  const synced = spawnSync(process.execPath, [join(root, 'scripts', 'sync-global-skill.mjs')], { encoding: 'utf8', env: { ...process.env, HOME: fakeHome, USERPROFILE: fakeHome } });
+  check('skill sync installs into isolated fixture home', synced.status === 0);
+  check('skill sync leaves unrelated fixture MCP config byte-for-byte intact', readFileSync(userMcp, 'utf8') === fixtureMcp);
   check('canonical skill exists', existsSync(canonicalSkill));
   const canonical = readFileSync(canonicalSkill, 'utf8');
   check('canonical skill keeps path placeholders', canonical.includes('{{PLAN_LEDGER_NODE}}')
@@ -172,4 +179,5 @@ try {
   rmSync(dbPath + '-wal', { force: true });
   rmSync(dbPath + '-shm', { force: true });
   rmSync(outsideCwd, { recursive: true, force: true });
+  rmSync(fakeHome, { recursive: true, force: true });
 }
