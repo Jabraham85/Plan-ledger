@@ -5,8 +5,12 @@
 import { readFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { dirname, isAbsolute, join } from 'node:path';
 import { Store, canonicalDbIdentity, defaultDbPath } from './db.mjs';
+import { buildPlannerHandoff, compileWorkerPacket, describePlannerStepReview, routeWorkerBlocker, resolveWorkerBlocker } from './planner-handoff.mjs';
+import { recoverCloudDispatch, prepareCloudDispatch, requestCloudDispatch, bindCloudDispatch, reconcileCloudDispatch, cancelCloudDispatch, submitCloudDispatch, readCloudDispatch } from './cloud-dispatch.mjs';
+import { captureCloudResultEvidence, verifyCloudResultEvidence } from './result-evidence.mjs';
+import { ledgerRuntimeInfo } from './runtime-info.mjs';
 import { listProjectStaff } from './roles.mjs';
 
 const STATUS_ICON = {
@@ -292,10 +296,25 @@ async function boardOpen(args) {
 }
 
 const handlers = {
+  planner_packet: (store, args) => compileWorkerPacket(store, args),
+  planner_handoff: (store, args) => buildPlannerHandoff(store, Number(args.plan_id)),
+  planner_step_review: (store, args) => describePlannerStepReview(store, store.getStep(Number(args.step_id))),
+  planner_resolve_blocker: (store, args) => resolveWorkerBlocker(store, args),
+  planner_blocker_route: (_store, args) => routeWorkerBlocker(args),
   list_projects: (store) => store.listProjects(),
   create_project: (store, args) => store.createProject({ name: args.name, description: args.description }),
   set_current_project: (store, args) => store.setCurrentProject(Number(args.project_id)),
   set_project_status: (store, args) => store.setProjectStatus(Number(args.project_id), args.status),
+  get_project_root: (store, { project_id }) => {
+    if (!Number.isSafeInteger(project_id) || project_id < 1) fail('project_id must be a positive integer');
+    store.getProject(project_id);
+    return { project_id, root: store.getProjectRoot(project_id) };
+  },
+  set_project_root: (store, { project_id, root }) => {
+    if (!Number.isSafeInteger(project_id) || project_id < 1) fail('project_id must be a positive integer');
+    if (typeof root !== 'string' || (root !== '' && !isAbsolute(root))) fail('root must be an absolute path or an empty string');
+    return store.setProjectRoot(project_id, root);
+  },
 
   list_plans: (store, args) => store.listPlans(args ?? {}),
   open_plan: (store, args) => store.openPlan(Number(args.plan_id)),
@@ -358,6 +377,19 @@ const handlers = {
   }),
   set_step_status: (store, args) => store.setStepStatus(Number(args.step_id), args.status),
 
+  ledger_runtime: (store) => ledgerRuntimeInfo(store),
+  cloud_dispatch_capture_result: captureCloudResultEvidence,
+  cloud_dispatch_verify_result: verifyCloudResultEvidence,
+  cloud_dispatch_recover: (store, args, trusted) => recoverCloudDispatch(store, args, trusted),
+  cloud_dispatch_prepare: prepareCloudDispatch,
+  cloud_dispatch_request: requestCloudDispatch,
+  cloud_dispatch_bind: bindCloudDispatch,
+  cloud_dispatch_reconcile: reconcileCloudDispatch,
+  cloud_dispatch_heartbeat: reconcileCloudDispatch,
+  cloud_dispatch_cancel: cancelCloudDispatch,
+  cloud_dispatch_submit: submitCloudDispatch,
+  cloud_dispatch_status: readCloudDispatch,
+  submit_completion: (store, args) => store.submitCompletion(Number(args.step_id), args),
   record_attempt: (store, args) => store.recordAttempt(Number(args.step_id), args),
 
   // The brain (findings) — the same calls as the MCP tools, so a client on the bridge (Cursor)
@@ -452,9 +484,10 @@ async function main() {
     return;
   }
 
-  const store = new Store(dbPath);
+  const cloudOwnershipAuthority = Object.freeze({});
+  const store = new Store(dbPath, {cloudOwnershipAuthority});
   try {
-    const result = await handlers[operation](store, args);
+    const result = await handlers[operation](store, args, {cloudOwnershipAuthority});
     process.stdout.write(`${JSON.stringify({ ok: true, operation, db_path: dbPath, result }, null, 2)}\n`);
   } finally {
     store.close();

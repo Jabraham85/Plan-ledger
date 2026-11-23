@@ -55,6 +55,13 @@ check('new update_plan tool is exposed', tools.some((t) => t.name === 'update_pl
 const ragTools = ['rag_ingest', 'rag_status', 'rag_query', 'rag_expand', 'rag_cite', 'rag_forget'];
 check('all six rag_* tools exposed', ragTools.every((n) => tools.some((t) => t.name === n)));
 
+const runtime = parse(await client.callTool({ name: 'ledger_runtime', arguments: {} }));
+check('new MCP process reports supported result capabilities and startup fingerprint',
+  runtime.build_id === 'nova-ledger-supported-results-v1' && runtime.loaded_code_schema_version >= 19
+  && runtime.capabilities.includes('supported_task_result_evidence')
+  && /^[a-f0-9]{64}$/.test(runtime.startup_source_fingerprint)
+  && runtime.process_id !== process.pid);
+
 const plan = parse(await client.callTool({ name: 'create_plan', arguments: { title: 'E2E plan', keywords: ['e2e'] } }));
 console.log('created plan', plan.id);
 const priorDone = parse(await client.callTool({ name: 'create_plan', arguments: { title: 'Diagon audit done', keywords: ['diagon', 'audit', 'handoff'] } }));

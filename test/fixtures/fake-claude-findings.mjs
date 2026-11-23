@@ -13,7 +13,7 @@ const findings = [{ kind: 'fact', subject: 'fixture/zebra.cfg', slot: 'capacity'
   claim: 'the zebra cache holds 42 entries', evidence: 'fixture/zebra.cfg:3' }];
 process.stdout.write(JSON.stringify({
   is_error: false,
-  result: `did the step (stub agent)\nFINDINGS: ${JSON.stringify(findings)}\nVERDICT: pass — stub reports one finding`,
+  result: `did the step (stub agent)\nFINDINGS: ${JSON.stringify(findings)}\nCOMPLETION_JSON: ${JSON.stringify({ contract_version: 1, verdict: "pass", summary: "offline fixture reports one finding", outputs: ["fixture finding"], artifacts: [{path: "test/fixtures/fake-claude-findings.mjs",kind: "file"}], commands: [{command: "node test/fixtures/fake-claude-findings.mjs",exit_code: 0}], unresolved_gaps: [] })}`,
   total_cost_usd: 0.001,
   num_turns: 1,
   usage: { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },

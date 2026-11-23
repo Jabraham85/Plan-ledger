@@ -655,9 +655,11 @@ async function loadPlans() {
 async function openPlan(id) {
   state.planId = id; state.stepId = null;
   await loadPlans();
+  if (state.planId !== id) return;
   $('step').innerHTML = `<div class="empty">Select a step</div>`;
   try {
     const p = await api('/api/plans/'+id);
+    if (state.planId !== id) return;
     const total = p.steps.length, done = p.steps.filter(s => s.status === 'done').length;
     const pct = total ? Math.round(100 * done / total) : 0;
     $('plan').innerHTML = `
@@ -672,12 +674,45 @@ async function openPlan(id) {
         <span class="nm">${esc(s.title)}</span>${badge(s.status)}</div>`).join('') || '<div class="empty">No steps yet</div>'}
       <div class="steplbl" style="margin-top:18px">Summary · what it is</div>
       <div class="summary md ${(p.summary||'').length>380?'clamp':''}">${mdLite(p.summary)||'<i>no summary</i>'}</div>
-      ${(p.summary||'').length>380?'<button class="moreBtn" onclick="toggleClamp(this)">▾ Show more</button>':''}`;
+      ${(p.summary||'').length>380?'<button class="moreBtn" onclick="toggleClamp(this)">▾ Show more</button>':''}
+      <div id="plannerHandoff"></div>`;
     renderPlanControls(p);
+    if (p.steps.some(step => step.strict_acceptance)) renderPlanHandoff(p.id);
     renderPlanRoster(p.id);
     renderPlanGraph(p.id);
     scheduleActivityPoll(0);
   } catch (e) { $('plan').innerHTML = `<div class="empty err">${esc(e.message)}</div>`; }
+}
+
+function plannerHandoffMarkup(handoff) {
+  if (!handoff.strict_step_count) return '';
+  if (!handoff.ready) {
+    const statuses = {
+      awaiting_independent_review: 'Awaiting independent review',
+      revision_requested: 'Revision requested',
+      criterion_evidence_invalid: 'Current acceptance or evidence is missing',
+      steps_active: 'Work is still open',
+    };
+    const reviewedSteps = new Set(handoff.blockers.filter(item => ['awaiting_independent_review', 'revision_requested'].includes(item.code)).flatMap(item => item.step_ids));
+    const issues = handoff.blockers.filter(item => !['criterion_evidence_invalid', 'steps_active'].includes(item.code) ||
+      !item.step_ids?.every(id => reviewedSteps.has(id)));
+    return `<div class="section"><div class="lbl">Handoff pending</div>${issues.map(item => `<div class="body">${esc(statuses[item.code] || item.detail)}${item.submission_id ? ` · submission #${Number(item.submission_id)}` : ''}${(item.step_ids || []).map(id => ` <button class="copybtn" onclick="openStep(${Number(id)})">Step #${Number(id)}</button>`).join('')}</div>`).join('')}</div>`;
+  }
+  return `<div class="section"><div class="row"><div class="lbl">Verified handoff</div><a class="copybtn" href="/api/plans/${Number(handoff.plan_id)}/handoff" target="_blank" rel="noopener">View evidence JSON</a></div>
+    ${handoff.steps.map(step => `<div class="attempt"><div class="what">${esc(step.title)}</div><div class="meta">Reviewed by ${esc(step.review.reviewer)}</div>
+      <div class="body">${esc(step.review.reason)}</div>
+      ${step.artifacts.map(item => `<div class="body"><code>${esc(item.path)}</code></div>`).join('')}
+      ${step.limitations.map(item => `<div class="body">${esc(item)}</div>`).join('')}</div>`).join('')}</div>`;
+}
+
+async function renderPlanHandoff(planId) {
+  const panel = $('plannerHandoff');
+  try {
+    const handoff = await api(`/api/plans/${planId}/handoff`);
+    if (panel && $('plannerHandoff') === panel && state.planId === planId) panel.innerHTML = plannerHandoffMarkup(handoff);
+  } catch (error) {
+    if (panel && $('plannerHandoff') === panel && state.planId === planId) panel.innerHTML = `<div class="empty err">${esc(error.message)}</div>`;
+  }
 }
 
 // Execution roster (v5): plan-level transparency. Shows per-step planned
@@ -806,6 +841,7 @@ async function openStep(id) {
   document.querySelectorAll('#plan .step').forEach(el => el.classList.remove('sel'));
   try {
     const s = await api('/api/steps/'+id);
+    if (state.stepId !== id) return;
     const sec = (lbl, html) => `<div class="section"><div class="lbl">${lbl}</div>${html}</div>`;
     const attempts = s.attempts.length ? s.attempts.map(a => {
       // Actual-execution provenance: show what we recorded, mark blanks as "unknown"
@@ -831,9 +867,9 @@ async function openStep(id) {
       <div class="detail"><h3>${esc(s.title)}</h3></div>
       ${sec('Context', `<div class="body md">${mdLite(s.context)||'<i>—</i>'}</div>`)}
       ${s.tools?.length ? sec('Tools', `<div class="chips">${s.tools.map(t=>`<span class="chip">${esc(t)}</span>`).join('')}</div>`) : ''}
-      ${sec('Acceptance criteria', `<div class="body md">${mdLite(s.acceptance_criteria)||'<i>—</i>'}</div>`)}
+      ${s.planner_review ? sec('Acceptance and QA', plannerReviewMarkup(s.planner_review)) : sec('Acceptance criteria', `<div class="body md">${mdLite(s.acceptance_criteria)||'<i>—</i>'}</div>`)}
       ${s.carry_forward ? sec('Carry-forward ↦', `<div class="body cf md">${mdLite(s.carry_forward)}</div>`) : ''}
-      ${sec(`Failure log (${s.attempts.length})`, attempts)}
+      ${sec(`Attempts (${s.attempts.length})`, attempts)}
       ${s.links?.length ? sec('Links', s.links.map(l=>`<div class="link">${esc(l.relation)} → ${l.to_step_id?'step #'+l.to_step_id:'plan #'+l.to_plan_id}${l.note?' · '+esc(l.note):''}</div>`).join('')) : ''}`;
     renderStepControls(s);
     renderStepFiles(s);
@@ -842,6 +878,25 @@ async function openStep(id) {
     renderStepBrain(s.id);
     scheduleActivityPoll(0);
   } catch (e) { $('step').innerHTML = `<div class="empty err">${esc(e.message)}</div>`; }
+}
+
+function plannerReviewMarkup(qa) {
+  const states = {
+    needs_evidence: 'Needs evidence', awaiting_review: 'Awaiting independent review', revision_requested: 'Revision requested',
+    accepted: 'Accepted', evidence_changed: 'Evidence needs rechecking', blocked: 'Blocked',
+  };
+  const criteria = { verified: 'Verified', submitted: 'Submitted', needs_recheck: 'Needs rechecking', revision_requested: 'Revise', unverified: 'Unverified' };
+  const submission = qa.submission || qa.revision || qa.review;
+  const reason = qa.revision?.reason || qa.review?.reason;
+  return `<div class="row"><span class="chip">${esc(states[qa.state] || qa.state)}</span>${submission ? `<span class="meta">Submission #${Number(submission.submission_id)}</span>` : ''}</div>
+    ${reason ? `<div class="body">${esc(reason)}</div>` : ''}
+    ${qa.criteria.map(criterion => `<div class="attempt">
+      <div class="what">${esc(criterion.description)}</div>
+      <div class="meta">${esc(criteria[criterion.status] || criterion.status)}${criterion.mandatory ? ' · required' : ' · optional'}</div>
+      ${criterion.feedback ? `<div class="body">${esc(criterion.feedback.observation)}</div><div class="body"><strong>Next action</strong> ${esc(criterion.feedback.next_action)}</div>` : ''}
+      ${criterion.evidence.map(item => `<div class="body"><code title="${esc(item.sha256)}">${esc(item.path)}</code></div>`).join('')}
+    </div>`).join('')}
+    ${qa.evidence_errors.length ? `<div class="meta">${qa.evidence_errors.map(item => esc(item.code.replaceAll('_', ' '))).join(' · ')}</div>` : ''}`;
 }
 
 function renderStepFiles(s) {
@@ -917,10 +972,15 @@ async function renderStepGround(id) {
   } catch {}
 }
 
+async function refreshSelectedPlan() {
+  const { planId, stepId } = state;
+  if (!planId) return loadPlans();
+  await openPlan(planId);
+  if (stepId && state.planId === planId && !state.stepId) await openStep(stepId);
+}
+
 async function refresh() {
-  await loadPlans();
-  if (state.planId) await openPlan(state.planId);
-  if (state.stepId) await openStep(state.stepId);
+  await refreshSelectedPlan();
   scheduleActivityPoll(0);
 }
 $('refresh').onclick = refresh;
@@ -1212,8 +1272,7 @@ async function runActivityPoll() {
         liveActiveStep = activeId;
         liveRev = liveSnapshot.rev;
         await loadPlans();
-        if (revChanged && state.planId) await openPlan(state.planId);
-        if (revChanged && state.stepId) await openStep(state.stepId);
+        if (revChanged && state.planId) await refreshSelectedPlan();
       }
     } else if (!liveMode && livePlans.size) {
       livePlans = new Set();
@@ -1369,7 +1428,7 @@ function renderStepControls(s) {
   // has a locked history — the store enforces "reason required" server-side.
   const hasSnapshot = Array.isArray(s.assignments) && s.assignments.length > 0;
   $('step').insertAdjacentHTML('beforeend', `<div class="section"><div class="lbl">Step actions</div>
-    <div class="ctl">Status: ${statusSelect('step', s.id, s.status)}
+    <div class="ctl">${s.acceptance_contract ? '' : `Status: ${statusSelect('step', s.id, s.status)}`}
       <button onclick="toggleForm('editStepForm')">✎ Edit</button>
       <button onclick="toggleForm('logForm')">＋ Log attempt</button>
       <button onclick="openReassign(${s.id})" title="append an audited reassignment revision">⇄ Reassign</button>
@@ -1378,7 +1437,7 @@ function renderStepControls(s) {
     <div id="editStepForm" class="miniform hidden">
       <input class="f" id="esTitle" value="${esc(s.title)}" />
       <textarea class="f" id="esContext" placeholder="context">${esc(s.context)}</textarea>
-      <input class="f" id="esAccept" value="${esc(s.acceptance_criteria)}" placeholder="acceptance" />
+      ${s.acceptance_contract ? '' : `<input class="f" id="esAccept" value="${esc(s.acceptance_criteria)}" placeholder="acceptance" />`}
       <input class="f" id="esTools" value="${esc((s.tools || []).join(', '))}" placeholder="tools" />
       <input class="f" id="esRole" value="${esc(s.role || '')}" placeholder="role (e.g. implementer)" />
       <input class="f" id="esReason" placeholder="reason for role change (required when history exists)" />
@@ -1389,7 +1448,7 @@ function renderStepControls(s) {
     <div id="logForm" class="miniform hidden">
       <input class="f" id="laTried" placeholder="what did you try?" />
       <input class="f" id="laResult" placeholder="result / output" />
-      <div class="row2"><select class="f" id="laVerdict" style="max-width:130px"><option value="pass">pass</option><option value="fail">fail</option><option value="partial">partial</option></select>
+      <div class="row2"><select class="f" id="laVerdict" style="max-width:130px">${s.acceptance_contract ? '' : '<option value="pass">pass</option>'}<option value="fail">fail</option><option value="partial">partial</option></select>
       <button class="primary" onclick="logAttempt(${s.id})" style="white-space:nowrap">Record</button></div>
       <div class="row2"><input class="f" id="laAgent" placeholder="agent that actually ran (e.g. general-purpose)" />
       <input class="f" id="laModel" placeholder="model (e.g. claude-sonnet-4-5) — leave blank if unknown" /></div>
@@ -1408,11 +1467,11 @@ async function saveStep(id) {
   const payload = {
     title: $('esTitle').value,
     context: $('esContext').value,
-    acceptance_criteria: $('esAccept').value,
     tools: $('esTools').value.split(',').map(t => t.trim()).filter(Boolean),
     role: $('esRole').value,
     carry_forward: $('esCarry').value,
   };
+  if ($('esAccept')) payload.acceptance_criteria = $('esAccept').value;
   const reason = $('esReason').value.trim();
   if (reason) { payload.reason = reason; payload.assigned_by = 'board-user'; }
   try { await apiSend('PATCH', `/api/steps/${id}`, payload); toast('step saved'); refresh(); }
@@ -2516,6 +2575,9 @@ if (typeof window !== 'undefined' && window.__PLAN_LEDGER_TEST__) {
     runActivityPoll,
     scopeQuery,
     initializeBoard,
+    plannerReviewMarkup,
+    plannerHandoffMarkup,
+    refreshSelectedPlan,
     getState: () => state,
     setState: (patch) => Object.assign(state, patch),
     getActivitySnapshot: () => activitySnapshot,

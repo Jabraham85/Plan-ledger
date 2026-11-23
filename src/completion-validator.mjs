@@ -1,3 +1,4 @@
+import { validateCriterionEvidence } from './acceptance-contract.mjs';
 // completion-validator.mjs — deterministic local validator for completion payload v2.
 // No network/model/process calls; pure normalization + checks.
 
@@ -31,7 +32,7 @@ function parsePayload(payload) {
   return { ok: false, code: 'completion_json_invalid', detail: 'completion payload must be an object or JSON string' };
 }
 
-export function validateCompletionPayload(payload, { claimed_pass = false } = {}) {
+export function validateCompletionPayload(payload, { claimed_pass = false, acceptance_contract = null, checkEvidence } = {}) {
   const parsed = parsePayload(payload);
   if (!parsed.ok) {
     return {
@@ -108,6 +109,8 @@ export function validateCompletionPayload(payload, { claimed_pass = false } = {}
     }
   }
 
+  if (claimed_pass && acceptance_contract) errors.push(...validateCriterionEvidence(acceptance_contract, raw.criteria, checkEvidence));
+
   return {
     ok: errors.length === 0,
     errors,
@@ -117,6 +120,7 @@ export function validateCompletionPayload(payload, { claimed_pass = false } = {}
       artifacts,
       commands,
       limitations,
+      ...(Array.isArray(raw.criteria) ? { criteria: raw.criteria } : {}),
     },
   };
 }

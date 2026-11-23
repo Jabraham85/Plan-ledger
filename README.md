@@ -392,3 +392,7 @@ those tools like a shell:
 - [docs/RAG_DESIGN.md](docs/RAG_DESIGN.md) — RAG design and evaluation
 - [docs/CURSOR.md](docs/CURSOR.md) — Cursor integration setup
 - [docs/BENCHMARK_DESIGN.md](docs/BENCHMARK_DESIGN.md) — measurement plan
+
+## Nova / Codex planner
+
+Provider-neutral versioned handoffs, opt-in strict criterion evidence and binding platform boundaries are documented in [docs/CODEX-PLANNER.md](docs/CODEX-PLANNER.md). Native Codex dispatch remains disabled; the isolated pilot uses a local fixture adapter.
