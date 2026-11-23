@@ -48,6 +48,13 @@ try {
  });
  check('unsupported original trace contract cannot be captured or retroactively passed',()=>{const old=fresh(false);assert.throws(()=>captureCloudResultEvidence(store,captureArgs(old)),/supported_result_contract_required/);assert.equal(store.getStep(old.step.id).acceptance_decision,null);});
  check('contract claiming full trace or unseen side-effect proof rejects',()=>assert.throws(()=>compileWorkerPacket(store,{...f.args,result_evidence_contract:{...evidenceContract,raw_trace_required:true}}),/supported_result_contract_required/));
+ check('an existing file outside the workspace remains rejected',()=>{
+  const outside = root + '-outside.txt';
+  writeFileSync(outside, source, { flag: 'wx' });
+  try {
+   assert.throws(()=>captureCloudResultEvidence(store,{...captureArgs(f),result_data:{...result,source_path:outside}}),/result_path_outside_workspace/);
+  } finally { rmSync(outside); }
+ });
  for(const field of ['sha256','byte_count','content_marker'])check('wrong '+field+' independently rejects',()=>assert.throws(()=>captureCloudResultEvidence(store,{...captureArgs(f),result_data:{...result,[field]:field==='byte_count'?99:'wrong'}}),/independent_comparison_failed/));
  check('capture needs actual bound identity, result reference and visibility limits',()=>{
   assert.throws(()=>captureCloudResultEvidence(store,{...captureArgs(f),result_message_id:''}),/message_id_required/);

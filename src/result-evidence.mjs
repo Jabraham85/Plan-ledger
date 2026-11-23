@@ -23,7 +23,7 @@ const required = (v, name) => {
   return v;
 };
 const inside = (root, path) => {
-  const base = realpathSync(root), actual = realpathSync(path), rel = relative(base, actual);
+  const base = realpathSync.native(root), actual = realpathSync.native(path), rel = relative(base, actual);
   if (rel === '..' || rel.startsWith('..\\') || rel.startsWith('../') || isAbsolute(rel)) throw new Error('result_path_outside_workspace');
   return actual;
 };
